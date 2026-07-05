@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Components" name="Primary CTA" subtitle="Filled gradient + gradient-stroke variants" viewport="700x160" -->
+<html lang="en"><head><meta charset="UTF-8"><title>Buttons — Primary CTA</title><link rel="stylesheet" href="_base.css">
+<style>
+  .row { flex-wrap: wrap; gap: 14px; align-items: center; }
+  .btn-spark {
+    background: var(--spark-gradient);
+    color: #14213D;
+    font-family: Inter, sans-serif;
+    font-weight: 900;
+    font-size: 14px;
+    padding: 16px 28px;
+    border: none;
+    border-radius: 16px;
+    box-shadow: 0 6px 22px rgba(255, 95, 78, 0.24);
+    cursor: pointer;
+    letter-spacing: -0.005em;
+  }
+  .btn-spark.lg { font-size: 16px; padding: 18px 32px; border-radius: 20px; }
+  .btn-gradient-stroke {
+    padding: 1px;
+    background: var(--spark-gradient);
+    border-radius: 18px;
+    box-shadow: 0 6px 22px rgba(255, 95, 78, 0.24);
+  }
+  .btn-gradient-stroke > button {
+    background: var(--bg-color);
+    color: var(--text-color);
+    font-weight: 900;
+    font-size: 14px;
+    padding: 15px 26px;
+    border: none;
+    border-radius: 17px;
+    cursor: pointer;
+  }
+</style></head>
+<body><div class="card">
+  <div class="row">
+    <button class="btn-spark lg">List Your First Event</button>
+    <button class="btn-spark">List an Event</button>
+    <div class="btn-gradient-stroke"><button>Send magic link</button></div>
+  </div>
+  <div class="label" style="margin-top: 18px">Filled gradient · Gradient-stroke (auth) · Both with coral haze shadow</div>
+</div></body></html>

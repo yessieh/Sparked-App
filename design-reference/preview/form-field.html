@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Components" name="Form Field" subtitle="Eyebrow label + 16px input + helper" viewport="700x210" -->
+<html lang="en"><head><meta charset="UTF-8"><title>Form Field</title><link rel="stylesheet" href="_base.css">
+<style>
+  .field { display: flex; flex-direction: column; gap: 12px; max-width: 460px; }
+  .field label { font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.25em; color: #FCA311; }
+  .field input {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: #eef0ff;
+    padding: 16px 20px; border-radius: 16px;
+    font-family: Inter; font-size: 16px;
+    outline: none;
+  }
+  .field input::placeholder { color: rgba(238,240,255,0.40); }
+  .field input:focus { border-color: #F7B731; box-shadow: 0 0 0 2px rgba(247,183,49,0.30); }
+</style></head>
+<body><div class="card">
+  <div class="field">
+    <label for="email">Email Address</label>
+    <input id="email" type="email" placeholder="you@domain.com">
+    <span class="label" style="text-transform:none;letter-spacing:.04em;font-weight:600;color:rgba(238,240,255,0.50);font-size:11px;line-height:1.5">Sentence-case helper text never gets ALL CAPS — labels do.</span>
+  </div>
+</div></body></html>

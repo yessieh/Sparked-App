@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Spacing" name="Spacing &amp; Radii" subtitle="8 → 40px + pill" viewport="700x190" -->
+<html lang="en"><head><meta charset="UTF-8"><title>Spacing &amp; Radii</title><link rel="stylesheet" href="_base.css">
+<style>
+  .row { flex-direction: column; gap: 14px; }
+  .stack { display: flex; align-items: flex-end; gap: 16px; }
+  .box {
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10);
+    width: 84px; height: 84px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: rgba(238,240,255,0.6);
+  }
+  .grp { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .grp .name { font-size: 9px; color: var(--muted-text); font-weight: 900; text-transform: uppercase; letter-spacing: 0.18em; }
+</style></head>
+<body><div class="card">
+  <div class="stack">
+    <div class="grp"><div class="box" style="border-radius:8px">8</div><div class="name">SM</div></div>
+    <div class="grp"><div class="box" style="border-radius:12px">12</div><div class="name">MD</div></div>
+    <div class="grp"><div class="box" style="border-radius:16px">16</div><div class="name">LG</div></div>
+    <div class="grp"><div class="box" style="border-radius:24px">24</div><div class="name">XL</div></div>
+    <div class="grp"><div class="box" style="border-radius:32px">32</div><div class="name">3XL</div></div>
+    <div class="grp"><div class="box" style="border-radius:40px">40</div><div class="name">4XL</div></div>
+    <div class="grp"><div class="box" style="border-radius:9999px;width:84px;height:84px">∞</div><div class="name">PILL</div></div>
+  </div>
+  <div class="label" style="margin-top:20px">Sparked is one of the more rounded systems — reach for the larger end of the scale.</div>
+</div></body></html>

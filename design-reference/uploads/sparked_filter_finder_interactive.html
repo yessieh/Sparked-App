@@ -1,0 +1,229 @@
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Inter:wght@400;500;600;700&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  .ff { font-family: 'Inter', sans-serif; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .hint { font-size: 11px; color: var(--color-text-secondary); text-align: center; }
+  .hint b { color: var(--color-text-primary); font-weight: 600; }
+  .phone { background: #0d1525; border-radius: 26px; border: 1px solid rgba(255,255,255,0.08); overflow: hidden; width: 320px; height: 600px; position: relative; user-select: none; }
+
+  .hdr { display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 10px; }
+  .logo { font-family: 'Montserrat', sans-serif; font-size: 16px; font-weight: 900; background: linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a); -webkit-background-clip: text; -webkit-text-fill-color: transparent; display: flex; align-items: center; gap: 5px; }
+  .logo-flame { font-size: 13px; }
+  .search-ic { width: 30px; height: 30px; border-radius: 9px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; font-size: 13px; cursor: pointer; transition: all .2s; }
+  .search-ic:active { transform: scale(0.92); }
+
+  .search-bar { padding: 0 14px; max-height: 0; opacity: 0; overflow: hidden; transition: max-height .3s ease, opacity .25s, padding .3s; }
+  .search-bar.open { max-height: 60px; opacity: 1; padding: 0 14px 10px; }
+  .search-field { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,140,56,0.4); border-radius: 11px; padding: 10px 12px; }
+  .sf-ic { font-size: 12px; color: rgba(238,240,255,0.5); }
+  .sf-input { flex: 1; font-size: 13px; color: #eef0ff; outline: none; background: none; border: none; font-family: 'Inter', sans-serif; }
+  .sf-input::placeholder { color: rgba(238,240,255,0.35); }
+  .sf-cancel { font-size: 11px; font-weight: 600; color: #ffca3a; cursor: pointer; }
+
+  .panel { padding: 0 14px; overflow-y: auto; height: calc(100% - 56px); }
+  .panel.has-search { height: calc(100% - 112px); }
+
+  .grp-label { font-size: 8px; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; color: #ffca3a; margin: 12px 2px 8px; }
+  .grp-label.dim { color: rgba(238,240,255,0.35); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { display: flex; align-items: center; gap: 5px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 6px 11px; font-size: 10px; color: rgba(238,240,255,0.7); cursor: pointer; }
+
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .tile { display: flex; align-items: center; gap: 9px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 12px; cursor: pointer; transition: all .15s; }
+  .tile:active { transform: scale(0.97); }
+  .tile-ic { width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(135deg,rgba(255,95,78,0.18),rgba(255,202,58,0.12)); border: 1px solid rgba(255,140,56,0.25); display: flex; align-items: center; justify-content: center; font-size: 13px; }
+  .tile-name { font-size: 12px; font-weight: 600; color: #eef0ff; }
+
+  .match { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 10px 12px; margin-bottom: 7px; cursor: pointer; transition: all .15s; }
+  .match:active { transform: scale(0.98); }
+  .match:hover { border-color: rgba(255,140,56,0.35); }
+  .match-ic { width: 28px; height: 28px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; background: linear-gradient(135deg,rgba(255,95,78,0.18),rgba(255,202,58,0.12)); border: 1px solid rgba(255,140,56,0.25); }
+  .match-ic.green { background: rgba(74,222,128,0.12); border-color: rgba(74,222,128,0.3); }
+  .match-body { flex: 1; min-width: 0; }
+  .match-name { font-size: 12px; font-weight: 600; color: #eef0ff; }
+  .match-name .hl { color: #ff8c38; }
+  .match-type { font-size: 9px; color: rgba(238,240,255,0.4); margin-top: 1px; }
+  .match-apply { font-size: 9px; font-weight: 700; color: #ffca3a; border: 1px solid rgba(255,202,58,0.3); border-radius: 9px; padding: 4px 11px; flex-shrink: 0; }
+  .no-match { text-align: center; font-size: 11px; color: rgba(238,240,255,0.4); padding: 30px 20px; }
+
+  .applied-pills { display: flex; gap: 6px; flex-wrap: wrap; padding: 4px 0 10px; }
+  .ap-pill { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 700; padding: 5px 10px; border-radius: 14px; background: linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a); color: #fff; }
+  .ap-pill.green { background: rgba(74,222,128,0.18); border: 1px solid rgba(74,222,128,0.4); color: #4ade80; }
+  .ap-x { font-size: 11px; opacity: 0.8; }
+  .feed-meta { font-size: 11px; color: rgba(238,240,255,0.5); font-weight: 600; margin-bottom: 10px; }
+  .stub { display: flex; background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.09); border-radius: 13px; overflow: hidden; margin-bottom: 9px; }
+  .stub-stripe { width: 4px; flex-shrink: 0; }
+  .ss-green { background: linear-gradient(180deg,#4ade80,#22c55e); }
+  .ss-amber { background: linear-gradient(180deg,#ff8c38,#ffca3a); }
+  .stub-body { flex: 1; padding: 10px 12px; }
+  .stub-badge { display: inline-block; font-size: 7px; font-weight: 800; letter-spacing: .08em; color: #4ade80; border: 1px solid rgba(74,222,128,0.4); border-radius: 7px; padding: 1.5px 7px; margin-bottom: 5px; }
+  .stub-badge.amber { color: #ff8c38; border-color: rgba(255,140,56,0.4); }
+  .stub-title { font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 800; color: #eef0ff; margin-bottom: 4px; }
+  .stub-meta { font-size: 9px; color: rgba(238,240,255,0.5); }
+  .stub-perf { width: 0; border-left: 1.5px dashed rgba(238,240,255,0.22); margin: 8px 2px; }
+  .stub-util { width: 50px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .stub-free { font-size: 9px; font-weight: 800; color: #4ade80; }
+  .stub-price { font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 900; color: #ffca3a; }
+
+  .reset-btn { font-size: 10px; color: var(--color-text-secondary); background: var(--color-background-secondary); border: 0.5px solid var(--color-border-tertiary); border-radius: 14px; padding: 5px 14px; cursor: pointer; font-family: 'Inter', sans-serif; }
+</style>
+
+<div class="ff">
+  <div class="hint">Tap the <b>🔍 search icon</b> → type <b>"fr"</b>, <b>"music"</b>, or <b>"weekend"</b> → tap a match to apply</div>
+
+  <div class="phone">
+    <div class="hdr">
+      <div class="logo"><span class="logo-flame">🔥</span>Sparked</div>
+      <div class="search-ic" id="searchToggle" onclick="toggleSearch()">🔍</div>
+    </div>
+
+    <div class="search-bar" id="searchBar">
+      <div class="search-field">
+        <span class="sf-ic">🔍</span>
+        <input class="sf-input" id="searchInput" placeholder="Find a filter..." oninput="onType()" autocomplete="off" />
+        <span class="sf-cancel" onclick="closeSearch()">Cancel</span>
+      </div>
+    </div>
+
+    <div class="panel" id="panel"></div>
+  </div>
+
+  <button class="reset-btn" onclick="resetDemo()">↺ Reset demo</button>
+</div>
+
+<script>
+  var filters = [
+    { id:'free',    label:'Free events',   type:'Price filter', count:12, icon:'🎉', green:true },
+    { id:'food',    label:'Food & Drink',  type:'Interest',     count:8,  icon:'🍔' },
+    { id:'music',   label:'Live Music',    type:'Interest',     count:6,  icon:'🎵' },
+    { id:'markets', label:'Markets',       type:'Interest',     count:9,  icon:'🛍' },
+    { id:'art',     label:'Art Walks',     type:'Interest',     count:4,  icon:'🎨' },
+    { id:'friday',  label:'This Friday',   type:'When',         count:5,  icon:'📅' },
+    { id:'weekend', label:'This Weekend',  type:'When',         count:11, icon:'📆' },
+    { id:'under20', label:'Under $20',     type:'Price filter', count:8,  icon:'💵' },
+    { id:'nearby',  label:'Within 5 miles',type:'Distance',     count:14, icon:'📍' }
+  ];
+
+  var recents = ['Art Walk','Farmers market','Live music'];
+  var interests = [
+    { label:'Markets', icon:'🛍' },
+    { label:'Music',   icon:'🎵' },
+    { label:'Art',     icon:'🎨' },
+    { label:'Outdoors',icon:'⛰' }
+  ];
+
+  var searchOpen = false;
+  var applied = null;
+
+  function toggleSearch(){ searchOpen ? closeSearch() : openSearch(); }
+  function openSearch(){
+    searchOpen = true;
+    document.getElementById('searchBar').classList.add('open');
+    document.getElementById('panel').classList.add('has-search');
+    document.getElementById('searchToggle').style.background = 'linear-gradient(135deg,#ff8c38,#ffca3a)';
+    setTimeout(function(){ document.getElementById('searchInput').focus(); }, 200);
+    render();
+  }
+  function closeSearch(){
+    searchOpen = false;
+    document.getElementById('searchBar').classList.remove('open');
+    document.getElementById('panel').classList.remove('has-search');
+    document.getElementById('searchToggle').style.background = '';
+    document.getElementById('searchInput').value = '';
+    render();
+  }
+  function onType(){ render(); }
+
+  function applyFilter(id){
+    applied = filters.filter(function(f){ return f.id === id; })[0];
+    closeSearch();
+  }
+  function applyInterest(label){
+    applied = { label: label, type:'Interest', green:false, count: Math.floor(Math.random()*8)+3 };
+    closeSearch();
+  }
+  function clearApplied(){ applied = null; render(); }
+
+  function esc(s){ return s.replace(/[&<>]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]; }); }
+
+  function highlight(label, q){
+    if(!q) return esc(label);
+    var i = label.toLowerCase().indexOf(q.toLowerCase());
+    if(i < 0) return esc(label);
+    return esc(label.slice(0,i)) + '<span class="hl">' + esc(label.slice(i,i+q.length)) + '</span>' + esc(label.slice(i+q.length));
+  }
+
+  function render(){
+    var panel = document.getElementById('panel');
+    var q = searchOpen ? document.getElementById('searchInput').value.trim() : '';
+    var html = '';
+
+    if(applied && !searchOpen){
+      html += '<div class="applied-pills">';
+      html += '<div class="ap-pill' + (applied.green ? ' green' : '') + '">' + esc(applied.label) + ' <span class="ap-x" onclick="clearApplied()">✕</span></div>';
+      html += '</div>';
+      html += '<div class="feed-meta">' + applied.count + ' events · ' + esc(applied.label) + '</div>';
+      if(applied.green || applied.id==='free'){
+        html += stub('ss-green','FOOD · MARKET','Saturday Farmers Market','Sat May 10 · 8am','free','FREE');
+        html += stub('ss-green','ART · COMMUNITY','Yoga in the Park','Sun · 8am · 0.5 mi','free','FREE');
+        html += stub('ss-green','MUSIC','Open Mic Night','Fri · 7pm · 1.1 mi','free','FREE');
+      } else {
+        html += stub('ss-amber','ART · MUSIC','Art Walk Downtown','Today · 6pm · 0.8 mi','price','$15');
+        html += stub('ss-amber','MUSIC','Jazz at Blue Room','Tonight · 8pm','price','$12');
+        html += stub('ss-amber','ART · COMMUNITY','Gallery Opening','Sat · 5pm · 1.4 mi','free','FREE');
+      }
+      panel.innerHTML = html;
+      return;
+    }
+
+    if(searchOpen && !q){
+      html += '<div class="grp-label">Recent</div><div class="chips">';
+      recents.forEach(function(r){ html += '<div class="chip">🕐 ' + esc(r) + '</div>'; });
+      html += '</div>';
+      html += '<div class="grp-label">Browse by Interest</div><div class="tiles">';
+      interests.forEach(function(it){
+        html += '<div class="tile" onclick="applyInterest(\'' + it.label + '\')"><div class="tile-ic">' + it.icon + '</div><div class="tile-name">' + it.label + '</div></div>';
+      });
+      html += '</div>';
+      panel.innerHTML = html;
+      return;
+    }
+
+    if(searchOpen && q){
+      var matches = filters.filter(function(f){ return f.label.toLowerCase().indexOf(q.toLowerCase()) >= 0; });
+      if(matches.length === 0){
+        panel.innerHTML = '<div class="no-match">No filters match "' + esc(q) + '"<br><span style="font-size:9px">Try "free", "music", or "weekend"</span></div>';
+        return;
+      }
+      html += '<div class="grp-label dim">Matching filters</div>';
+      matches.forEach(function(f){
+        html += '<div class="match" onclick="applyFilter(\'' + f.id + '\')">';
+        html += '<div class="match-ic' + (f.green ? ' green' : '') + '">' + f.icon + '</div>';
+        html += '<div class="match-body"><div class="match-name">' + highlight(f.label, q) + '</div>';
+        html += '<div class="match-type">' + f.type + ' · ' + f.count + ' nearby</div></div>';
+        html += '<div class="match-apply">Apply</div></div>';
+      });
+      panel.innerHTML = html;
+      return;
+    }
+
+    html += '<div class="no-match" style="padding-top:60px">Tap 🔍 to find a filter<br><span style="font-size:9px">or browse the Explore feed</span></div>';
+    panel.innerHTML = html;
+  }
+
+  function stub(stripe, badge, title, meta, utilType, utilVal){
+    var badgeCls = stripe === 'ss-green' ? '' : 'amber';
+    var util = utilType === 'free'
+      ? '<div class="stub-free">' + utilVal + '</div>'
+      : '<div class="stub-price">' + utilVal + '</div>';
+    return '<div class="stub"><div class="stub-stripe ' + stripe + '"></div>' +
+      '<div class="stub-body"><div class="stub-badge ' + badgeCls + '">' + badge + '</div>' +
+      '<div class="stub-title">' + title + '</div><div class="stub-meta">📍 ' + meta + '</div></div>' +
+      '<div class="stub-perf"></div><div class="stub-util">' + util + '</div></div>';
+  }
+
+  function resetDemo(){ applied = null; closeSearch(); render(); }
+  render();
+</script>

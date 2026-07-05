@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="See what's actually happening near you. Sparked surfaces local events by distance, not by feed.">
+<title>Sparked · Find events near you</title>
+<link rel="icon" type="image/svg+xml" href="../../../assets/sparked-icon.svg">
+<link rel="stylesheet" href="../_shared.css">
+<script src="../faq.js" defer></script>
+<style>
+  /* Page-specific overrides for /near-me */
+  .hero {
+    position: relative;
+    overflow: hidden;
+    padding: 28px 0 36px;
+  }
+  .hero .shell { position: relative; z-index: 1; }
+  .hero-eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    margin-bottom: 14px;
+  }
+  .hero-eyebrow .live-dot { width: 6px; height: 6px; box-shadow: 0 0 0 2px rgba(255,95,78,0.30), 0 0 10px rgba(255,95,78,0.50); }
+  .hero h1 {
+    font-family: var(--font-display); font-weight: 900;
+    font-size: clamp(38px, 8vw, 64px); line-height: 0.98; letter-spacing: -0.015em;
+    margin: 0 0 16px;
+  }
+  .hero p.lead { margin-bottom: 24px; max-width: 28ch; }
+  @media (min-width: 768px) { .hero p.lead { max-width: 40ch; } }
+
+  /* Mini-map */
+  .map {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    border-radius: 24px;
+    overflow: hidden;
+    border: 1px solid var(--border-soft);
+    background: radial-gradient(circle at 40% 35%, #233a64 0%, #14213D 65%, #0f1a30 100%);
+    margin: 0 0 22px;
+  }
+  @media (min-width: 768px) { .map { aspect-ratio: 16 / 11; } }
+  .map .grid-bg {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,0.04) 1px, transparent 1px);
+    background-size: 12% 16%;
+  }
+  .map .me {
+    position: absolute; left: 49%; top: 52%; transform: translate(-50%, -50%);
+    width: 14px; height: 14px; background: #3b82f6; border-radius: 9999px;
+    box-shadow: 0 0 0 5px rgba(59,130,246,0.30), 0 0 22px rgba(59,130,246,0.6);
+  }
+  .pin {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    color: var(--deep-night);
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: 11px;
+    border-radius: 9999px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .pin.s   { width: 22px; height: 22px; }
+  .pin.m   { width: 28px; height: 28px; font-size: 12px; }
+  .pin.l   { width: 36px; height: 36px; font-size: 14px; }
+  .pin.coral  { background: #ff5f4e; box-shadow: 0 0 0 4px rgba(255,95,78,0.20), 0 0 14px rgba(255,95,78,0.6); }
+  .pin.orange { background: #FCA311; box-shadow: 0 0 0 4px rgba(252,163,17,0.20), 0 0 14px rgba(252,163,17,0.6); }
+  .pin.gold   { background: #ffca3a; box-shadow: 0 0 0 4px rgba(255,202,58,0.20), 0 0 14px rgba(255,202,58,0.6); }
+  .map-legend {
+    position: absolute; bottom: 12px; left: 12px;
+    display: flex; gap: 6px;
+    background: rgba(15,26,48,0.85); backdrop-filter: blur(8px);
+    padding: 6px 10px; border-radius: 9999px;
+    border: 1px solid var(--border-soft);
+    font-size: 10px; font-weight: 900; letter-spacing: 0.18em;
+    color: var(--text-color); text-transform: uppercase;
+  }
+  .map-zoom {
+    position: absolute; bottom: 12px; right: 12px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .map-zoom button {
+    width: 32px; height: 32px;
+    background: rgba(15,26,48,0.85); backdrop-filter: blur(8px);
+    border: 1px solid var(--border-soft); border-radius: 10px;
+    color: var(--text-color); font-size: 18px; font-weight: 900; cursor: pointer;
+  }
+
+  /* Hero CTA stack */
+  .hero-cta-stack { display: flex; flex-direction: column; gap: 10px; max-width: 480px; }
+  .hero-cta-note { font-size: 12px; color: var(--muted-text); text-align: center; margin: 0; }
+
+  /* Filters strip */
+  .filters {
+    padding: 24px 0 12px;
+    border-top: 1px solid var(--border-soft);
+  }
+  .filters-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .filters-head h2 { font-family: var(--font-display); font-size: 22px; font-weight: 900; margin: 0; letter-spacing: -0.01em; }
+  .filters-head .count { font-size: 12px; font-weight: 800; color: var(--muted-text); }
+  .pill-row {
+    display: flex; gap: 8px; overflow-x: auto;
+    padding-bottom: 6px; margin: 0 -20px; padding-left: 20px; padding-right: 20px;
+    scrollbar-width: none;
+  }
+  .pill-row::-webkit-scrollbar { display: none; }
+  @media (min-width: 768px) {
+    .pill-row { margin: 0; padding: 0; flex-wrap: wrap; overflow: visible; }
+  }
+
+  /* Event card grid */
+  .events {
+    display: grid; grid-template-columns: 1fr; gap: 16px;
+    padding: 20px 0 36px;
+  }
+  @media (min-width: 640px) { .events { grid-template-columns: 1fr 1fr; gap: 18px; } }
+
+  .event-card {
+    background: var(--surface-2);
+    border: 1px solid var(--border-soft);
+    border-radius: 24px;
+    overflow: hidden;
+    transition: transform .2s, border-color .2s, box-shadow .2s;
+    cursor: pointer;
+  }
+  .event-card:hover { transform: translateY(-3px); border-color: rgba(247,183,49,0.35); box-shadow: var(--shadow-elevated); }
+  .event-img {
+    position: relative; aspect-ratio: 16 / 10; overflow: hidden;
+  }
+  .event-img::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(to top, rgba(20,33,61,0.7), transparent 55%);
+  }
+  .event-img .badge-live {
+    position: absolute; top: 12px; right: 12px;
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255,99,72,0.92); backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.20);
+    padding: 4px 10px; border-radius: 9999px;
+    font-size: 10px; font-weight: 900; letter-spacing: 0.18em; color: #fff;
+  }
+  .event-img .badge-dist {
+    position: absolute; top: 12px; left: 12px;
+    background: rgba(15,26,48,0.85); backdrop-filter: blur(8px);
+    border: 1px solid var(--border-soft);
+    padding: 4px 10px; border-radius: 9999px;
+    font-size: 10px; font-weight: 900; letter-spacing: 0.10em; color: var(--text-color);
+  }
+  .event-body { padding: 18px 18px 20px; }
+  .event-body h3 {
+    font-family: var(--font-display); font-weight: 900;
+    font-size: 18px; line-height: 1.15; letter-spacing: -0.01em;
+    margin: 0 0 10px; color: var(--text-color);
+  }
+  .event-meta { display: flex; flex-direction: column; gap: 4px; color: var(--muted-text); font-size: 13px; }
+  .event-meta-row { display: inline-flex; align-items: center; gap: 8px; }
+  .ico-time { color: var(--spark-coral); }
+  .ico-loc  { color: var(--bright-orange); }
+  .event-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+
+  /* How it works */
+  .how {
+    padding: 28px 0 36px;
+    border-top: 1px solid var(--border-soft);
+  }
+  .how .grid {
+    display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 18px;
+  }
+  @media (min-width: 768px) { .how .grid { grid-template-columns: 1fr 1fr 1fr; gap: 20px; } }
+  .how-card {
+    background: var(--surface-1-alt);
+    border: 1px solid var(--border-soft);
+    border-radius: 20px;
+    padding: 22px 20px;
+  }
+  .how-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 10px;
+    background: rgba(252,163,17,0.10); color: var(--bright-orange);
+    border: 1px solid rgba(252,163,17,0.30);
+    font-family: var(--font-display); font-size: 14px; font-weight: 900;
+    margin-bottom: 12px;
+  }
+  .how-card h4 { font-family: var(--font-display); font-size: 18px; font-weight: 900; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .how-card p { margin: 0; font-size: 13.5px; color: var(--muted-text); line-height: 1.55; }
+</style>
+</head>
+<body data-screen-label="V1 · /near-me · Discovery first">
+
+<header class="site-header">
+  <div class="shell">
+    <a class="logo" href="#" aria-label="Sparked home">
+      <svg viewBox="0 0 56 76" aria-hidden="true">
+        <defs>
+          <linearGradient id="tfb" x1="0" y1="1" x2="0" y2="0" gradientUnits="objectBoundingBox"><stop offset="0%" stop-color="#ff5f4e"/><stop offset="100%" stop-color="#ff8c38"/></linearGradient>
+          <linearGradient id="tft" x1="0" y1="1" x2="0" y2="0" gradientUnits="objectBoundingBox"><stop offset="0%" stop-color="#ff8c38"/><stop offset="100%" stop-color="#ffca3a"/></linearGradient>
+        </defs>
+        <path d="M28 68 C16 58 8 46 10 32 C12 20 20 12 28 10 C24 16 22 24 24 32 C26 40 32 44 32 52 C32 60 30 66 28 68Z" fill="url(#tfb)"/>
+        <path d="M28 8 C38 16 46 26 44 38 C42 50 34 58 28 60 C32 54 34 46 32 38 C30 30 24 26 24 18 C24 12 26 9 28 8Z" fill="url(#tft)" opacity=".9"/>
+      </svg>
+      <span class="wordmark">Sparked</span>
+    </a>
+    <div class="header-actions">
+      <button type="button" class="header-link">Log in</button>
+    </div>
+  </div>
+</header>
+
+<section class="hero heat" aria-labelledby="hero-h1">
+  <div class="shell">
+    <div class="hero-eyebrow">
+      <span class="live-dot" aria-hidden="true"></span>
+      <span class="eyebrow">Tonight in Phoenix</span>
+    </div>
+    <h1 id="hero-h1">
+      47 events <br>
+      <span class="gradient-word">within 5 miles.</span>
+    </h1>
+    <p class="lead">Skip the algorithm. Sparked surfaces what's actually near you, by distance — not by feed.</p>
+
+    <div class="map" role="img" aria-label="A map showing five event clusters within five miles of your location">
+      <div class="grid-bg" aria-hidden="true"></div>
+      <span class="pin coral m"  style="left:23%;top:30%">8</span>
+      <span class="pin orange l" style="left:56%;top:46%">14</span>
+      <span class="pin gold s"   style="left:36%;top:66%">5</span>
+      <span class="pin orange s" style="left:71%;top:24%">3</span>
+      <span class="pin coral l"  style="left:78%;top:70%">17</span>
+      <span class="me" aria-hidden="true"></span>
+      <div class="map-legend"><span>Live · 5mi radius</span></div>
+      <div class="map-zoom" aria-hidden="true">
+        <button type="button" aria-label="Zoom in">+</button>
+        <button type="button" aria-label="Zoom out">−</button>
+      </div>
+    </div>
+
+    <div class="hero-cta-stack">
+      <button type="button" class="btn spark-cta btn-lg btn-block">
+        Browse near me
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      </button>
+      <p class="hero-cta-note">Free · No login required</p>
+    </div>
+  </div>
+</section>
+
+<section class="filters" aria-labelledby="filters-h">
+  <div class="shell">
+    <div class="filters-head">
+      <h2 id="filters-h">This week, near you</h2>
+      <span class="count">47 events · 5mi radius</span>
+    </div>
+    <div class="pill-row" role="tablist" aria-label="Filter by interest">
+      <button type="button" class="pill active">All</button>
+      <button type="button" class="pill">Music</button>
+      <button type="button" class="pill">Markets</button>
+      <button type="button" class="pill">Art</button>
+      <button type="button" class="pill">Food</button>
+      <button type="button" class="pill">Family</button>
+      <button type="button" class="pill">Outdoor</button>
+      <button type="button" class="pill">Community</button>
+    </div>
+
+    <div class="events">
+      <article class="event-card">
+        <div class="event-img" style="background:linear-gradient(135deg,#3a1a3e,#7a2a6a 55%,#ff8c38);">
+          <span class="badge-live"><span class="live-dot" aria-hidden="true"></span>LIVE NOW</span>
+          <span class="badge-dist">0.4 MI</span>
+        </div>
+        <div class="event-body">
+          <h3>Sunset Songwriters Round</h3>
+          <div class="event-meta">
+            <span class="event-meta-row"><svg class="ico-time" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Tonight · 7:30pm</span>
+            <span class="event-meta-row"><svg class="ico-loc"  width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>The Rebel Lounge</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="event-card">
+        <div class="event-img" style="background:linear-gradient(135deg,#1d4d2c,#3a8e5c 55%,#a8d68b);">
+          <span class="badge-dist">1.2 MI</span>
+        </div>
+        <div class="event-body">
+          <h3>Roosevelt Saturday Market</h3>
+          <div class="event-meta">
+            <span class="event-meta-row"><svg class="ico-time" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Sat · 8:00am</span>
+            <span class="event-meta-row"><svg class="ico-loc"  width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>Roosevelt Park</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="event-card">
+        <div class="event-img" style="background:linear-gradient(135deg,#5b3220,#a8551d 55%,#e09c3a);">
+          <span class="badge-dist">0.8 MI</span>
+        </div>
+        <div class="event-body">
+          <h3>First Friday Art Walk</h3>
+          <div class="event-meta">
+            <span class="event-meta-row"><svg class="ico-time" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Fri · 6:00pm</span>
+            <span class="event-meta-row"><svg class="ico-loc"  width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>Roosevelt Row</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="event-card">
+        <div class="event-img" style="background:linear-gradient(135deg,#26384b,#5d7a98 55%,#ffca3a);">
+          <span class="badge-dist">2.1 MI</span>
+        </div>
+        <div class="event-body">
+          <h3>Phoenix Print Fair</h3>
+          <div class="event-meta">
+            <span class="event-meta-row"><svg class="ico-time" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Sun · 11:00am</span>
+            <span class="event-meta-row"><svg class="ico-loc"  width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>Warehouse 23</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="event-card">
+        <div class="event-img" style="background:linear-gradient(135deg,#1a2b4a,#3a5a8c 55%,#ff8c38);">
+          <span class="badge-dist">1.5 MI</span>
+        </div>
+        <div class="event-body">
+          <h3>Bike-In Movie: Goonies</h3>
+          <div class="event-meta">
+            <span class="event-meta-row"><svg class="ico-time" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Sat · 8:30pm</span>
+            <span class="event-meta-row"><svg class="ico-loc"  width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>Civic Space Park</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="event-card">
+        <div class="event-img" style="background:linear-gradient(135deg,#2a1f3a,#4d3a6e 55%,#ffca3a);">
+          <span class="badge-dist">3.2 MI</span>
+        </div>
+        <div class="event-body">
+          <h3>Desert Botanical Night Hike</h3>
+          <div class="event-meta">
+            <span class="event-meta-row"><svg class="ico-time" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Sat · 7:00pm</span>
+            <span class="event-meta-row"><svg class="ico-loc"  width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>Botanical Garden</span>
+          </div>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="how" aria-labelledby="how-h">
+  <div class="shell">
+    <span class="eyebrow">How Sparked works</span>
+    <h2 id="how-h" class="display display-2" style="margin: 8px 0 0;">By distance, not by feed.</h2>
+    <p class="lead" style="margin-top: 10px; max-width: 50ch;">No algorithm decides what you see. You set a radius. Sparked shows you everything inside it, sorted by time.</p>
+    <div class="grid">
+      <div class="how-card">
+        <span class="how-num">1</span>
+        <h4>Tell us your radius</h4>
+        <p>1 mile, 25 miles, or anywhere in between. Browse without signing up.</p>
+      </div>
+      <div class="how-card">
+        <span class="how-num">2</span>
+        <h4>See what's actually there</h4>
+        <p>Real events from local organizers, ranked by proximity and time.</p>
+      </div>
+      <div class="how-card">
+        <span class="how-num">3</span>
+        <h4>Go.</h4>
+        <p>Tap any event for details. Save a profile to block what's not for you.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="organizer-band" aria-labelledby="ob-h">
+  <div class="shell">
+    <div class="ob-label">
+      <span class="eyebrow">For organizers</span>
+      <h3 id="ob-h">Run an event? Reach the people next door.</h3>
+      <p>Publish in minutes. One flat price per event, not per impression. Free to start.</p>
+    </div>
+    <a href="#" class="btn btn-outline ob-cta">List an event →</a>
+  </div>
+</section>
+
+<div data-faq-mount></div>
+
+<footer class="site-footer">
+  <div class="shell">
+    <nav class="footnav" aria-label="Footer">
+      <a href="#">About</a><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Contact</a>
+    </nav>
+    <p class="copy">© 2026 Sparked. All rights reserved.</p>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,344 @@
+/*
+  Sparked landings — shared chrome
+  Imports the brand tokens (../../colors_and_type.css when used from
+  mockups/landings/<slug>/index.html), then adds layout primitives that
+  every variation reuses: header, mobile-first containers, the organizer
+  band, the footer, primary/outline buttons, eyebrow.
+
+  All variations are mobile-first. Desktop is progressive enhancement
+  via `@media (min-width: 768px)` only.
+
+  Gradient policy (enforced here):
+    - .spark-cta (primary action) uses the gradient
+    - .logo wordmark uses the gradient (inside SparkLogo SVG/text)
+    - .active pill uses the gradient
+    - Nothing else.
+*/
+@import url('../../colors_and_type.css');
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg-color);
+  color: var(--text-color);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: var(--line-normal);
+}
+
+img, svg { display: block; max-width: 100%; }
+button { font-family: inherit; }
+a { color: var(--spark-gold); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Outer width — narrow on mobile, expanded on desktop */
+.shell {
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+@media (min-width: 768px) { .shell { padding: 0 32px; } }
+
+/* Eyebrow */
+.eyebrow {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: var(--bright-orange);
+}
+
+/* Header (sticky) */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  backdrop-filter: blur(14px);
+  background: color-mix(in srgb, var(--bg-color) 80%, transparent);
+  border-bottom: 1px solid var(--border-soft);
+}
+.site-header .shell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 60px;
+}
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 6px 4px;
+}
+.logo svg { width: 22px; height: 30px; }
+.logo .wordmark {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  background-image: var(--spark-gradient);
+  -webkit-background-clip: text;
+          background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.header-link {
+  color: var(--text-color);
+  opacity: 0.75;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.header-link:hover { opacity: 1; background: var(--surface-3); }
+.header-link.gold { color: var(--ignition-gold); }
+
+/* Buttons --------------------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--font-sans);
+  font-weight: 900;
+  font-size: 15px;
+  padding: 14px 24px;
+  border-radius: 14px;
+  border: none;
+  cursor: pointer;
+  transition: transform .2s ease, box-shadow .2s ease, background .2s ease, color .2s ease, border-color .2s ease;
+  text-decoration: none;
+  line-height: 1;
+}
+.btn:hover { text-decoration: none; }
+.btn-lg { padding: 16px 28px; font-size: 16px; border-radius: 16px; }
+.btn-sm { padding: 10px 16px; font-size: 13px; border-radius: 12px; }
+
+/* The ONLY gradient button — there's exactly one per viewport */
+.spark-cta {
+  background-image: var(--spark-gradient);
+  color: var(--deep-night);
+  box-shadow: var(--shadow-cta);
+}
+.spark-cta:hover { transform: translateY(-1px) scale(1.01); box-shadow: var(--shadow-cta-hover); }
+.spark-cta:active { transform: scale(.98); }
+
+.btn-outline {
+  background: var(--surface-3);
+  color: var(--text-color);
+  border: 1px solid var(--border-strong);
+}
+.btn-outline:hover { background: var(--surface-hover); border-color: var(--ignition-gold); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-color);
+  border: 1px solid transparent;
+}
+.btn-ghost:hover { background: var(--surface-3); }
+
+.btn-block { width: 100%; }
+
+/* "Free" / inline label tucked into a button — gold, not gradient */
+.btn-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  color: var(--ignition-gold);
+}
+
+/* Typography helpers --------------------------------------------------- */
+.display {
+  font-family: var(--font-display);
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  line-height: 1.0;
+  color: var(--heading-text);
+  margin: 0;
+}
+.display-1 { font-size: clamp(36px, 9vw, 60px); }
+.display-2 { font-size: clamp(28px, 7vw, 44px); }
+.h-section { font-size: clamp(22px, 5vw, 32px); margin: 0 0 8px; }
+
+/* Brand-restrained: gradient only ever appears on ONE word in the H1 */
+.gradient-word {
+  background-image: var(--spark-gradient);
+  -webkit-background-clip: text;
+          background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.muted        { color: var(--muted-text); }
+.muted-strong { color: var(--text-muted-display); }     /* WCAG-compliant fade */
+.lead {
+  font-size: clamp(15px, 1.6vw, 17px);
+  color: var(--muted-text);
+  line-height: 1.55;
+  font-weight: 500;
+  margin: 0;
+}
+
+/* Card surfaces -------------------------------------------------------- */
+.surface {
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-3xl);
+}
+.surface-solid {
+  background: var(--surface-1-alt);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-xl);
+}
+
+/* Pills (interest tags) ------------------------------------------------ */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted-text);
+  background: var(--surface-3);
+  border: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+.pill.active {
+  /* Allowed gradient use #3: active state */
+  background-image: var(--spark-gradient);
+  color: var(--deep-night);
+  border-color: transparent;
+}
+.pill svg { color: var(--ignition-gold); }
+.pill.active svg { color: var(--deep-night); }
+
+/* Live dot */
+.live-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  background: var(--spark-coral);
+  border-radius: 9999px;
+  box-shadow: 0 0 0 3px rgba(255,95,78,0.30), 0 0 12px rgba(255,95,78,0.45);
+  animation: spk-pulse 2s ease-in-out infinite;
+}
+@keyframes spk-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(255,95,78,0.30), 0 0 12px rgba(255,95,78,0.45); }
+  50% { box-shadow: 0 0 0 6px rgba(255,95,78,0.10), 0 0 18px rgba(255,95,78,0.55); }
+}
+
+/* Ambient heat — used in heroes (single coral + gold blob), capped 0.15 */
+.heat::before, .heat::after {
+  content: '';
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(120px);
+  pointer-events: none;
+  z-index: 0;
+}
+.heat::before { top: -120px; left: -120px; width: 320px; height: 320px; background: rgba(255,99,72,0.15); }
+.heat::after  { bottom: -180px; right: -160px; width: 360px; height: 360px; background: rgba(247,183,49,0.10); }
+
+/* Organizer band — present on every variation, weight differs --------- */
+.organizer-band {
+  border-top: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--bg-color) 65%, #000 10%);
+}
+.organizer-band .shell {
+  padding-top: 32px; padding-bottom: 32px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.organizer-band .ob-label { display: flex; flex-direction: column; gap: 4px; }
+.organizer-band h3 { font-family: var(--font-display); font-size: 20px; font-weight: 900; letter-spacing: -0.01em; margin: 0; color: var(--text-color); }
+.organizer-band p  { color: var(--muted-text); font-size: 14px; margin: 0; max-width: 36ch; }
+.organizer-band .ob-cta { align-self: flex-start; }
+@media (min-width: 640px) {
+  .organizer-band .shell {
+    flex-direction: row; align-items: center; justify-content: space-between;
+  }
+  .organizer-band .ob-cta { align-self: center; }
+}
+
+/* Big-weight variant (V5 etc) */
+.organizer-band.weighty { background: var(--surface-1); }
+.organizer-band.weighty h3 { font-size: 24px; }
+
+/* Footer --------------------------------------------------------------- */
+.site-footer {
+  background: color-mix(in srgb, var(--bg-color) 90%, #000 10%);
+  border-top: 1px solid var(--border-soft);
+  padding: 28px 0 36px;
+}
+.site-footer .shell {
+  display: flex; flex-direction: column; gap: 14px; align-items: center;
+  text-align: center;
+}
+.site-footer .footnav {
+  display: flex; gap: 18px; flex-wrap: wrap; justify-content: center;
+  font-size: 12px; color: var(--muted-text); font-weight: 700;
+}
+.site-footer .footnav a { color: var(--muted-text); }
+.site-footer .footnav a:hover { color: var(--text-color); }
+.site-footer .copy { font-size: 11px; color: var(--hint-text); }
+
+/* Visually hidden — for SR-only labels */
+.sr {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* Focus rings — never strip */
+button:focus-visible, a:focus-visible, .pill:focus-visible, input:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Responsive shell — mobile-first single column; a centered, comfortably
+   margined column from tablet up. Applies site-wide, not per-section, so
+   nothing on a funnel page stretches edge-to-edge past ~900px. */
+@media (min-width: 768px) {
+  .shell { max-width: 900px; padding: 0 40px; }
+}
+
+/* FAQ — shared accordion section, rendered by faq.js into [data-faq-mount].
+   One source of markup/behavior for every funnel variant. */
+.faq-section { padding: 40px 0 48px; border-top: 1px solid var(--border-soft); }
+.faq-title {
+  font-family: var(--font-display); font-weight: var(--fw-extrabold);
+  font-size: clamp(22px, 5vw, 30px); letter-spacing: -0.01em;
+  text-align: center; margin: 0 0 22px;
+}
+.faq-list { display: flex; flex-direction: column; }
+.faq-item { border-bottom: 1px solid var(--border-soft); }
+.faq-item:first-child { border-top: 1px solid var(--border-soft); }
+.faq-q {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; background: none; border: none; padding: 18px 2px;
+  text-align: left; font-family: var(--font-sans); font-weight: 600;
+  font-size: 15px; color: var(--text-color); cursor: pointer;
+}
+.faq-q:hover { color: var(--ignition-gold); }
+.faq-q svg { flex-shrink: 0; color: var(--ignition-gold); transition: transform .2s ease; }
+.faq-item.open .faq-q svg { transform: rotate(180deg); }
+.faq-a-wrap { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .25s ease; }
+.faq-item.open .faq-a-wrap { grid-template-rows: 1fr; }
+.faq-a-inner { overflow: hidden; }
+.faq-a { margin: 0 2px 20px; font-size: 13.5px; line-height: 1.6; color: var(--muted-text); max-width: 62ch; }

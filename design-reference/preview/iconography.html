@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Brand" name="Iconography" subtitle="Lucide stroke icons in coral / orange / gold tiles" viewport="700x170" -->
+<html lang="en"><head><meta charset="UTF-8"><title>Iconography</title><link rel="stylesheet" href="_base.css">
+<style>
+  .row { gap: 14px; flex-wrap: wrap; align-items: center; }
+  .ic-tile {
+    display: flex; align-items: center; gap: 12px;
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.10);
+    padding: 14px 18px; border-radius: 16px;
+  }
+  .ic-tile .label { color: var(--muted-text); font-size: 10px; letter-spacing: 0.20em; }
+  .ic-color { width: 44px; height: 44px; border-radius: 14px; display:flex; align-items:center; justify-content:center; }
+  .ic-coral { background: rgba(255,99,72,0.20); color: #ff6348; }
+  .ic-orange { background: rgba(252,163,17,0.20); color: #FCA311; }
+  .ic-gold { background: rgba(247,183,49,0.20); color: #F7B731; }
+</style></head>
+<body><div class="card">
+  <div class="row">
+    <div class="ic-tile"><div class="ic-color ic-coral"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div><div><div style="font-weight:700;font-size:12px;color:#eef0ff">Time</div><div class="label">Coral · Lucide</div></div></div>
+    <div class="ic-tile"><div class="ic-color ic-orange"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></div><div><div style="font-weight:700;font-size:12px;color:#eef0ff">Place</div><div class="label">Orange · Lucide</div></div></div>
+    <div class="ic-tile"><div class="ic-color ic-gold"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.94 14.34A1 1 0 0 0 10 14a1 1 0 0 0-1-1l-7 0a1 1 0 0 0-1 1c0 4 3 7 7 7s7-3 7-7"/><path d="M9 13l3-9 3 9"/></svg></div><div><div style="font-weight:700;font-size:12px;color:#eef0ff">Sparkles / accent</div><div class="label">Gold · Lucide</div></div></div>
+  </div>
+  <div class="label" style="margin-top:18px">Lucide v0.563 — strokeWidth 2 (3 on FAB) · sized 12, 14, 16, 18, 20, 22, 24</div>
+</div></body></html>

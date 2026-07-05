@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Brand" name="Sparked Demo" subtitle="Click-thru walkthrough with prev/next nav" viewport="1200x980" -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sparked · Demo Walkthrough</title>
+<link rel="stylesheet" href="colors_and_type.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #0a0f1c; color: #eef0ff; font-family: 'Inter', sans-serif; min-height: 100vh; }
+  ::-webkit-scrollbar { display: none; }
+
+  /* Ambient glow behind the stage */
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(60% 50% at 18% 10%, rgba(255,99,72,0.10), transparent 60%),
+      radial-gradient(50% 50% at 85% 90%, rgba(247,183,49,0.08), transparent 60%);
+  }
+
+  .stage {
+    position: relative; z-index: 1;
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 36px 24px 24px;
+    gap: 20px;
+  }
+
+  /* On narrow viewports, switch the row so arrows tuck under the phone */
+  @media (max-width: 620px) {
+    .stage { padding: 24px 12px; }
+    .row { flex-wrap: wrap; justify-content: center; gap: 16px; }
+    .row .nav-btn { order: 2; }
+    .row > .phone-host { order: 1; flex-basis: 100%; display: flex; justify-content: center; }
+  }
+
+  /* Header strip */
+  .header {
+    width: 100%; max-width: 1100px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 24px; flex-wrap: wrap;
+  }
+  .brand {
+    display: inline-flex; align-items: center; gap: 12px;
+    font-family: 'Montserrat', sans-serif; font-weight: 900;
+    font-size: 18px; letter-spacing: -0.01em;
+  }
+  .brand .mark {
+    background-image: linear-gradient(135deg,#ff5f4e 0%,#ff8c38 50%,#ffca3a 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .crumb {
+    font-size: 10px; font-weight: 900; letter-spacing: 0.22em; text-transform: uppercase;
+    color: rgba(238,240,255,0.45);
+  }
+  .step-label {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 9999px; padding: 8px 16px;
+  }
+  .step-label .dot {
+    width: 6px; height: 6px; border-radius: 9999px;
+    background: #FCA311; box-shadow: 0 0 10px rgba(252,163,17,0.6);
+  }
+  .step-label .name {
+    font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 13px;
+    color: #fff; letter-spacing: -0.01em;
+  }
+  .step-label .count {
+    font-size: 10px; font-weight: 900; letter-spacing: 0.22em; text-transform: uppercase;
+    color: rgba(238,240,255,0.45);
+  }
+
+  /* Phone + arrow row */
+  .row {
+    display: flex; align-items: center; gap: 28px;
+  }
+
+  .nav-btn {
+    width: 56px; height: 56px; border-radius: 9999px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.10);
+    color: #eef0ff;
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: transform .2s ease, background .2s ease, border-color .2s ease, box-shadow .2s ease;
+    flex-shrink: 0;
+  }
+  .nav-btn:hover:not(:disabled) {
+    transform: scale(1.05);
+    background: rgba(255,255,255,0.06);
+    border-color: rgba(252,163,17,0.35);
+    box-shadow: 0 6px 22px rgba(255,95,78,0.18);
+  }
+  .nav-btn:active:not(:disabled) { transform: scale(0.96); }
+  .nav-btn:disabled { opacity: 0.30; cursor: not-allowed; }
+
+  /* Progress dots strip below the phone */
+  .progress {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 16px; border-radius: 9999px;
+    background: rgba(15,26,48,0.65); backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .progress button {
+    background: none; border: none; padding: 0; cursor: pointer;
+    width: 28px; height: 8px; border-radius: 9999px;
+    background: rgba(255,255,255,0.10);
+    transition: all .2s ease;
+  }
+  .progress button:hover { background: rgba(255,255,255,0.18); }
+  .progress button.active {
+    background-image: linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a);
+    box-shadow: 0 0 14px rgba(255,99,72,0.45);
+  }
+
+  /* Caption below the demo */
+  .caption {
+    max-width: 520px; text-align: center;
+    font-size: 13px; line-height: 1.6;
+    color: rgba(238,240,255,0.60); font-weight: 500;
+    min-height: 42px;
+  }
+  .caption strong { color: #fff; font-weight: 700; }
+
+  .kbd {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 10px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase;
+    color: rgba(238,240,255,0.40);
+  }
+  .kbd kbd {
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10);
+    border-bottom-width: 2px;
+    padding: 3px 8px; border-radius: 6px;
+    font-family: 'Inter', sans-serif; font-size: 10px; color: rgba(238,240,255,0.70);
+  }
+
+  /* Hide the native calendar indicator on webkit \u2014 our pill provides its own
+     Calendar icon, and the duplicate gray indicator clutters the pill. */
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 0; position: absolute; right: 6px; width: 18px; height: 100%; cursor: pointer;
+  }
+  input[type="date"]::-webkit-date-and-time-value { text-align: left; }
+
+  /* Live dot breathe (used inside phone screens) */
+  @keyframes sparked-breathe {
+    0%, 100% { transform: scale(1);   opacity: 1;   box-shadow: 0 0 0 0    rgba(255,72,72,0.55), 0 0 10px 2px rgba(255,72,72,0.55); }
+    50%      { transform: scale(1.18); opacity: 0.78; box-shadow: 0 0 0 8px rgba(255,72,72,0),    0 0 14px 4px rgba(255,72,72,0.30); }
+  }
+  .sparked-live-dot {
+    display: inline-block; width: 9px; height: 9px;
+    background: #ff4848; border-radius: 9999px;
+    animation: sparked-breathe 1.9s ease-in-out infinite;
+  }
+
+  /* Subtle fade-in when each step renders */
+  .phone-fade {
+    animation: phoneFade 320ms ease-out;
+  }
+  @keyframes phoneFade {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="ui_kits/mobile-app/Components.jsx"></script>
+<script type="text/babel" src="ui_kits/mobile-app/Screens.jsx"></script>
+<script type="text/babel">
+
+// --- Walkthrough script ---------------------------------------------------
+// Each step describes a screen + the data it needs. Free-form internal nav
+// inside a screen (tapping a card, toggling a view) still works — but the
+// arrow buttons (and ←/→ keys) move you through this canonical tour.
+
+const TOUR = [
+  {
+    id: 'landing',
+    label: 'Landing',
+    caption: <>Hero entry. <strong>“Your city. Your events. No algorithm.”</strong> The primary CTA is for hosts; <strong>Browse Local Events</strong> is the free secondary path.</>,
+  },
+  {
+    id: 'explore-list',
+    label: 'Explore · List',
+    view: 'list',
+    caption: <>The patron feed. Filter by <strong>interest</strong> and a <strong>date range</strong> (defaults to today → today, tap to change); switch between <strong>list</strong>, <strong>map</strong>, and <strong>time</strong>.</>,
+  },
+  {
+    id: 'explore-map',
+    label: 'Explore · Map',
+    view: 'map',
+    caption: <>Same data, proximity view. Gradient pins mark events; the blue dot is you.</>,
+  },
+  {
+    id: 'explore-time',
+    label: 'Explore · Time',
+    view: 'time',
+    caption: <>Time-ranked rail — <em>Happening now</em>, <em>This weekend</em>, <em>Next week</em>.</>,
+  },
+  {
+    id: 'detail',
+    label: 'Event Detail',
+    event: 0, // index into SAMPLE_EVENTS
+    caption: <>Tap any card to drill in. Save + <strong>Share</strong> in the top-right; primary <strong>I’m Going</strong> CTA with a secondary <strong>Share event</strong> button below.</>,
+  },
+  {
+    id: 'me',
+    label: 'Me',
+    caption: <>Profile shell. Two cards: <strong>Saved</strong> bookmarks and the <strong>Workspace</strong> host surface.</>,
+  },
+  {
+    id: 'saved',
+    label: 'Saved',
+    caption: <>Bookmarked events live here, separate from the algorithmic-free main feed.</>,
+  },
+  {
+    id: 'workspace',
+    label: 'Workspace',
+    caption: <>Host surface: stats grid, listings (with locked past events), and the <strong>Backstage</strong> early-access demo.</>,
+  },
+];
+
+// SAMPLE_EVENTS is defined inside Screens.jsx — we reach for it by name.
+const App = () => {
+  const [i, setI] = React.useState(0);
+  const [animKey, setAnimKey] = React.useState(0);
+  const step = TOUR[i];
+
+  const go = (n) => {
+    const next = Math.max(0, Math.min(TOUR.length - 1, n));
+    if (next === i) return;
+    setI(next);
+    setAnimKey(k => k + 1);
+  };
+
+  // Keyboard: ← / → / Home / End
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); go(i + 1); }
+      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(i - 1); }
+      else if (e.key === 'Home') { e.preventDefault(); go(0); }
+      else if (e.key === 'End')  { e.preventDefault(); go(TOUR.length - 1); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [i]);
+
+  // Resolve the screen for the current step.
+  const renderScreen = () => {
+    const noop = () => {};
+    switch (step.id) {
+      case 'landing':
+        return <LandingScreen
+          onSignup={() => go(5) /* jump to Me */}
+          onBrowse={() => go(1) /* jump to Explore list */}
+        />;
+      case 'explore-list':
+      case 'explore-map':
+      case 'explore-time': {
+        return <ExploreWithView
+          view={step.view}
+          onSelect={() => go(4)}
+          onCreate={() => go(5)}
+        />;
+      }
+      case 'detail': {
+        const ev = SAMPLE_EVENTS[step.event];
+        return <EventDetailScreen event={ev} onBack={() => go(1)} />;
+      }
+      case 'me':
+        return <MeScreen onOpenSaved={() => go(6)} onOpenWorkspace={() => go(7)} />;
+      case 'saved':
+        return <SavedScreen onBack={() => go(5)} onSelect={() => go(4)} />;
+      case 'workspace':
+        return <WorkspaceScreen onBack={() => go(5)} />;
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="stage">
+      {/* Header */}
+      <div className="header">
+        <div className="brand">
+          <img src="assets/sparked-icon.svg" width="22" height="30" alt="" />
+          <span className="mark">Sparked</span>
+          <span className="crumb">· Demo walkthrough</span>
+        </div>
+        <div className="step-label">
+          <span className="dot"></span>
+          <span className="name">{step.label}</span>
+          <span className="count">{String(i + 1).padStart(2, '0')} / {String(TOUR.length).padStart(2, '0')}</span>
+        </div>
+      </div>
+
+      {/* Phone + arrows */}
+      <div className="row" data-screen-label={`${String(i + 1).padStart(2, '0')} ${step.label}`}>
+        <button
+          className="nav-btn"
+          aria-label="Previous step"
+          onClick={() => go(i - 1)}
+          disabled={i === 0}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+
+        <div className="phone-host">
+          <PhoneFrame>
+            <div key={animKey} className="phone-fade" style={{ width: '100%', height: '100%', overflowX: 'hidden' }}>
+              {renderScreen()}
+            </div>
+          </PhoneFrame>
+        </div>
+
+        <button
+          className="nav-btn"
+          aria-label="Next step"
+          onClick={() => go(i + 1)}
+          disabled={i === TOUR.length - 1}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+
+      {/* Progress dots */}
+      <div className="progress" role="tablist" aria-label="Walkthrough steps">
+        {TOUR.map((t, idx) => (
+          <button
+            key={t.id}
+            className={idx === i ? 'active' : ''}
+            aria-label={`Go to ${t.label}`}
+            aria-current={idx === i}
+            onClick={() => go(idx)}
+            title={t.label}
+          ></button>
+        ))}
+      </div>
+
+      {/* Caption */}
+      <div className="caption">{step.caption}</div>
+
+      {/* Keyboard hint */}
+      <div className="kbd">
+        <kbd>←</kbd><kbd>→</kbd>
+        <span>to navigate</span>
+      </div>
+    </div>
+  );
+};
+
+// Wrapper that mounts ExploreScreen but forces its initial view.
+// We rebuild the screen here so each tour step can pin a specific view mode
+// without modifying the underlying ExploreScreen component.
+const ExploreWithView = ({ view, onSelect, onCreate }) => {
+  const [active, setActive] = React.useState(['Markets', 'Music']);
+  const [v, setV] = React.useState(view);
+  const [start, setStart] = React.useState(todayLocalYMD());
+  const [end, setEnd] = React.useState(todayLocalYMD());
+  React.useEffect(() => { setV(view); }, [view]);
+  const toggle = (i) => setActive(a => a.includes(i) ? a.filter(x => x !== i) : [...a, i]);
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
+      <StatusBar />
+      <div style={{ padding: '4px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <SparkLogo size={22} />
+        <button style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: 10, cursor: 'pointer' }}>
+          <Icon name="search" size={16} color="#fff" />
+        </button>
+      </div>
+      <div style={{ padding: '20px 20px 0' }}>
+        <Eyebrow>Explore Interests</Eyebrow>
+        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '12px 0 4px', scrollbarWidth: 'none' }}>
+          {INTERESTS.map(i => <InterestPill key={i} active={active.includes(i)} onClick={() => toggle(i)}>{i}</InterestPill>)}
+        </div>
+      </div>
+      <div style={{ padding: '14px 20px 0' }}>
+        <Eyebrow>When</Eyebrow>
+        <div style={{ marginTop: 10 }}>
+          <DateRangeBar start={start} end={end} onStartChange={setStart} onEndChange={setEnd} />
+        </div>
+      </div>
+      <div style={{ padding: '14px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: 13, color: 'rgba(238,240,255,0.55)', fontWeight: 700 }}>{VIEW_LABELS[v]}</span>
+        <ViewSwitcher value={v} onChange={setV} />
+      </div>
+      <div style={{ flex: 1, overflow: 'auto', padding: '16px 20px 100px' }}>
+        {v === 'list' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {SAMPLE_EVENTS.map(e => <EventCard key={e.id} event={e} onTap={() => onSelect(e)} />)}
+          </div>
+        )}
+        {v === 'map' && <MapView events={SAMPLE_EVENTS} onSelect={onSelect} />}
+        {v === 'time' && <TimeView events={SAMPLE_EVENTS} onSelect={onSelect} />}
+      </div>
+      <TabBar active="home" onChange={(t) => { if (t === 'profile') onCreate(); }} />
+    </div>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

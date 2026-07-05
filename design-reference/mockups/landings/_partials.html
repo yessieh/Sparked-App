@@ -1,0 +1,39 @@
+<!--
+  Reusable header + footer partial. Each landing index.html inlines this
+  via duplication (no JS includes needed) — kept here as source-of-truth
+  so future edits propagate by hand-merge.
+-->
+<header class="site-header">
+  <div class="shell">
+    <a class="logo" href="../" aria-label="Sparked home">
+      <svg viewBox="0 0 56 76" aria-hidden="true">
+        <defs>
+          <linearGradient id="tf-base" x1="0" y1="1" x2="0" y2="0" gradientUnits="objectBoundingBox">
+            <stop offset="0%" stop-color="#ff5f4e"/><stop offset="100%" stop-color="#ff8c38"/>
+          </linearGradient>
+          <linearGradient id="tf-tip" x1="0" y1="1" x2="0" y2="0" gradientUnits="objectBoundingBox">
+            <stop offset="0%" stop-color="#ff8c38"/><stop offset="100%" stop-color="#ffca3a"/>
+          </linearGradient>
+        </defs>
+        <path d="M28 68 C16 58 8 46 10 32 C12 20 20 12 28 10 C24 16 22 24 24 32 C26 40 32 44 32 52 C32 60 30 66 28 68Z" fill="url(#tf-base)"/>
+        <path d="M28 8 C38 16 46 26 44 38 C42 50 34 58 28 60 C32 54 34 46 32 38 C30 30 24 26 24 18 C24 12 26 9 28 8Z" fill="url(#tf-tip)" opacity=".9"/>
+      </svg>
+      <span class="wordmark">Sparked</span>
+    </a>
+    <div class="header-actions">
+      <button class="header-link">Log in</button>
+    </div>
+  </div>
+</header>
+
+<footer class="site-footer">
+  <div class="shell">
+    <nav class="footnav" aria-label="Footer">
+      <a href="#">About</a>
+      <a href="#">Privacy</a>
+      <a href="#">Terms</a>
+      <a href="#">Contact</a>
+    </nav>
+    <p class="copy">© 2026 Sparked. All rights reserved.</p>
+  </div>
+</footer>

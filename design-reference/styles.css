@@ -1,0 +1,13 @@
+/*
+  Sparked Design System — single entry stylesheet.
+
+  Link THIS file once per page to pull in the whole system:
+      <link rel="stylesheet" href="styles.css">
+
+  It re-exports the brand tokens, base type, and utility classes
+  (.spark-gradient, .spark-text-gradient, .eyebrow, .glass-card)
+  defined in colors_and_type.css — the source of truth for all
+  color + type custom properties (dark default, .theme-light opt-in).
+*/
+
+@import url('colors_and_type.css');

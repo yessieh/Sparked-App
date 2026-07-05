@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Brand" name="Landing Page · Mobile-First Explorations" subtitle="5 variations + auth feedback + mobile demo + visual review" viewport="1480x1100" -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sparked · Mobile-First Landing Explorations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Montserrat:wght@700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+
+  /* Reusable note-artboard styles ------------------------------ */
+  .note {
+    width: 100%; height: 100%; padding: 28px; overflow: auto;
+    background: #faf8f3; color: #2a1f15; font-family: 'Inter', sans-serif;
+  }
+  .note h2 { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 22px; margin: 0 0 6px; color: #1d1408; letter-spacing: -0.01em; line-height: 1.1; }
+  .note .lead { color: #5a4a36; font-size: 13px; line-height: 1.55; margin: 0 0 18px; max-width: 50ch; }
+  .note h3 { font-family: 'Inter', sans-serif; font-weight: 800; font-size: 13px; margin: 18px 0 6px; color: #1d1408; text-transform: uppercase; letter-spacing: 0.12em; }
+  .note p { font-size: 13px; line-height: 1.6; color: #3a2d1f; margin: 0 0 10px; }
+  .note ul { font-size: 13px; line-height: 1.65; color: #3a2d1f; margin: 0 0 14px; padding-left: 18px; }
+  .note ul li { margin-bottom: 5px; }
+  .note .kbd, .note code {
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px;
+    background: rgba(0,0,0,0.06); padding: 1px 6px; border-radius: 4px; color: #573714;
+  }
+  .note .tag {
+    display: inline-block; font-size: 10px; font-weight: 900; text-transform: uppercase;
+    letter-spacing: 0.18em; padding: 3px 9px; border-radius: 9999px;
+    margin-right: 6px; vertical-align: 1px;
+  }
+  .note .tag-fix { background: #c96442; color: #fff; }
+  .note .tag-keep { background: #4a7c3a; color: #fff; }
+  .note .tag-question { background: #d6a92e; color: #2a1f15; }
+  .note .row { display: flex; gap: 16px; align-items: flex-start; margin-bottom: 12px; }
+  .note .row > div { flex: 1; }
+  .swatchline {
+    display: flex; align-items: center; gap: 10px; padding: 8px 0;
+    border-bottom: 1px solid rgba(0,0,0,0.07); font-size: 12.5px;
+  }
+  .swatchline:last-child { border: none; }
+  .swatchline .dot { width: 38px; height: 24px; border-radius: 6px; flex-shrink: 0; }
+  .swatchline .label { flex: 1; color: #3a2d1f; }
+  .swatchline .meta { color: #806a4e; font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
+
+  /* Contrast demo helpers */
+  .contrast-demo {
+    background: #14213D; padding: 14px; border-radius: 10px;
+    font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 22px;
+    letter-spacing: -0.01em; line-height: 1.1; margin-bottom: 10px;
+  }
+</style>
+</head>
+<body>
+
+<!-- React + Babel -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="shared.jsx"></script>
+<script type="text/babel" src="variations.jsx"></script>
+<script type="text/babel" src="feedback.jsx"></script>
+
+<div id="root"></div>
+
+<script type="text/babel">
+
+// ---------- Note artboards (HTML inside an artboard) -----------------
+
+const IntroNote = () => (
+  <div className="note" data-screen-label="00 Read me first">
+    <h2>The multi-CTA question - what I'd do for a first launch</h2>
+    <p className="lead">
+      You asked the right question. Today your landing is doing two jobs - pitching <strong>consumers</strong> to browse <em>and</em> pitching <strong>organizers</strong> to list. On desktop you have three viewports of room to share. On mobile you have one. You have to pick a side.
+    </p>
+
+    <h3>My recommendation <span className="tag tag-keep">DO THIS</span></h3>
+    <p><strong>One front door, separate organizer page.</strong> Every successful events platform does it this way - Eventbrite, Meetup, Partiful, Resy, Luma. Your home page sells one audience; a dedicated page sells the other.</p>
+
+    <div style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 10, padding: '12px 14px', margin: '10px 0 14px' }}>
+      <div style={{ fontWeight: 800, fontSize: 12, marginBottom: 4 }}>sparked.app  <span style={{ color: '#806a4e', fontWeight: 600 }}>(home)</span></div>
+      <p style={{ margin: 0 }}><strong>Audience:</strong> consumers. <strong>One primary CTA:</strong> "Browse Local Events."</p>
+      <p style={{ margin: '6px 0 0' }}>Header carries a quiet <code>For organizers →</code> link. That's the entire organizer surface area on this page.</p>
+    </div>
+
+    <div style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+      <div style={{ fontWeight: 800, fontSize: 12, marginBottom: 4 }}>sparked.app/for-organizers  <span style={{ color: '#806a4e', fontWeight: 600 }}>(b2b page)</span></div>
+      <p style={{ margin: 0 }}><strong>Audience:</strong> organizers. <strong>One primary CTA:</strong> "List Your First Event."</p>
+      <p style={{ margin: '6px 0 0' }}>Full pitch lives here: pricing tiers, reach numbers, workspace screenshots. None of it competes with consumer copy.</p>
+    </div>
+
+    <h3>Why this beats "two CTAs on home"</h3>
+    <ul>
+      <li><strong>Each page does its best work.</strong> A consumer page that's half organizer-pitch confuses both audiences.</li>
+      <li><strong>Conversion is measurable.</strong> Two URLs = two funnels. Today you can't tell whether "List an Event" is poaching consumer clicks.</li>
+      <li><strong>You can run separate ads.</strong> Instagram targeting locals → home URL. LinkedIn targeting venue owners → /for-organizers.</li>
+      <li><strong>Fixes the hierarchy backwards.</strong> Your gradient CTA today is the organizer one, but ~95% of visitors are consumers. The math is upside-down.</li>
+    </ul>
+
+    <h3>What to actually do this week</h3>
+    <ol style={{ fontSize: 13, lineHeight: 1.65, paddingLeft: 18, margin: '0 0 14px' }}>
+      <li>Replace the dual-CTA stack on home with one primary "Browse Local Events," plus a small <code>For organizers →</code> link in the header.</li>
+      <li>Add a <code>/for-organizers</code> route. Move the entire organizer pitch (pricing tiers, list-an-event flow, testimonials) there.</li>
+      <li>Both pages share the same brand: Spark gradient, Montserrat Black, eyebrow microcopy, ambient glows. They just serve different goals.</li>
+    </ol>
+    <p style={{ fontSize: 12.5, fontStyle: 'italic', color: '#5a4a36', margin: 0 }}>
+      The five variations to the right all assume this single-audience model. They explore different ways to land the consumer story - pick the premise that feels right and we'll fold in the organizer entry consistently.
+    </p>
+  </div>
+);
+
+const VariationsNote = () => (
+  <div className="note" data-screen-label="01 Variations · how to compare">
+    <h2>Five mobile-first directions</h2>
+    <p className="lead">
+      Each is a deliberately different bet. Pick the one whose <em>premise</em> feels right; we can swap visuals later.
+    </p>
+
+    <h3>V1 - Discovery first</h3>
+    <p>Lead with a live count and a faux map. Browse is primary; organizer entry is a quiet footer line. Best if your goal is consumer adoption above all.</p>
+
+    <h3>V2 - Tonight's pick</h3>
+    <p>One curated event fills the viewport like a magazine cover. Hooks the user with a specific real thing happening soon. Best if you have editorial bandwidth or AI-pick logic.</p>
+
+    <h3>V3 - This week, near you</h3>
+    <p>Anti-algorithm positioning, on-brand H1 ("YOUR CITY. YOUR EVENTS."), swipeable strip of real events near you, and a category index for the week. Brand color lives only on the logo + CTA - the H1 is flat white. Best if you want the home page to feel like the product itself, not marketing copy.</p>
+
+    <h3>V4 - Live now (stories)</h3>
+    <p>Borrows the Instagram-stories pattern - organizer logos with live rings up top, feed below. Best if you want to feel social and real-time. Risk: trains users to scroll, not to filter.</p>
+
+    <h3>V5 - Two doors</h3>
+    <p>Explicitly splits audiences in the first viewport: a consumer card on top, an organizer card below. <em>Only pick this if you reject the separate-page recommendation</em> - it's the strongest single-page compromise, but compromise is what it is.</p>
+
+    <h3>If I had to pick one <span className="tag tag-keep">PICK</span></h3>
+    <p style={{ margin: 0 }}><strong>V3 (This week, near you).</strong> You picked this one - it commits to the anti-algorithm positioning, uses the brand H1 honestly (no "curated" overclaim), shows real events via the swipeable strip, and reserves brand color for the CTA. The category index gives breadth without an infinite feed.</p>
+  </div>
+);
+
+const AuthFeedbackNote = () => (
+  <div className="note" data-screen-label="02 Auth · feedback">
+    <h2>Sign-in screen - what changed</h2>
+    <p className="lead">
+      The brand work was strong. The structure was the issue. Here's what's in the "Suggested" rendering to the right - all your calls.
+    </p>
+
+    <h3>Changes locked in <span className="tag tag-fix">DONE</span></h3>
+    <ul>
+      <li><strong>Magic-link gradient: gone.</strong> Continue with Google is the only filled gradient CTA. Magic link survives as a plain text link below it - present, not competing for the eye. One primary action per screen.</li>
+      <li><strong>Headline rewritten.</strong> "Welcome back - let's spark" → <code>"Your city. Your preferences."</code> with a short blurb about jumping straight to the interests and activities you care about. Reads like a value prop, not a salutation - useful for the first-time visitor who arrives at this screen from a sign-up link.</li>
+      <li><strong>Benefit cards dropped.</strong> Going with the "let the product peek do the work" route - the faded event behind the auth card <em>is</em> the value prop. Six bullet points of copy on a sign-in screen was tax.</li>
+      <li><strong>Em-dash → hyphen.</strong> Applied throughout this canvas per your call.</li>
+    </ul>
+
+    <h3>What's still working <span className="tag tag-keep">KEEP</span></h3>
+    <ul>
+      <li>Ambient coral + gold glows behind the surface - signature Sparked atmosphere.</li>
+      <li>Single primary CTA (Google), single quiet alternative (magic link). Clear hierarchy.</li>
+      <li>A real event peeks through the top of the screen - the user sees what they're signing into.</li>
+    </ul>
+  </div>
+);
+
+const VisualFeedbackNote = () => (
+  <div className="note" data-screen-label="03 Visual · feedback">
+    <h2>Visual design - brand-level principles</h2>
+    <p className="lead">
+      You're right to push back - the landing-page work happens in section 01. These are <strong>brand-level disciplines</strong> that apply to <em>every</em> Sparked surface (landing, auth, explore, event detail, workspace). Two demos to the right show each principle in isolation.
+    </p>
+
+    <h3>What's working <span className="tag tag-keep">KEEP</span></h3>
+    <ul>
+      <li>The 135° coral → orange → gold gradient as a single signature. Distinctive and consistently applied.</li>
+      <li>The eyebrow microcopy pattern (10px, 900 weight, 0.20em tracking, orange). It's the connective tissue of the brand.</li>
+      <li>Type discipline: Montserrat Black for display, Inter 500–900 for everything else.</li>
+      <li>Radius scale (24–48px on most surfaces) and the warm-glow shadow treatment. Reads premium without trying too hard.</li>
+    </ul>
+
+    <h3>Principle 1 - Gradient discipline <span className="tag tag-fix">RULE</span></h3>
+    <p>Today the spark gradient appears on: the logo, the H1 middle line, the primary CTA, the active pill, the 2px top-bar on feature cards, the 4px left bar on the About section, and the 1px stroke around auth buttons. Voice doc says the gradient should mark <em>actionable elements only</em> - but right now it's everywhere.</p>
+    <p><strong>Reserve the gradient for three things only:</strong></p>
+    <ol style={{ fontSize: 13, lineHeight: 1.6, paddingLeft: 18, margin: '0 0 10px' }}>
+      <li>The <strong>wordmark</strong> (logo lockup).</li>
+      <li>The <strong>primary CTA</strong> - one per screen.</li>
+      <li>The <strong>currently-active state</strong> (selected pill, current tab, "Recommended" badge).</li>
+    </ol>
+    <p>Remove gradient from: feature-card top bars, About-section left bars, decorative dividers, hover halos, eyebrow accents, and headline-word emphasis on every page. <em>See the before/after to the right.</em></p>
+
+    <h3>Principle 2 - Two-line headline, "no algorithm" in eyebrow <span className="tag tag-keep">DECIDED</span></h3>
+    <p>The H1 drops to two lines: "YOUR CITY. / YOUR EVENTS." "No algorithm" moves up into the eyebrow microcopy alongside the location ("TONIGHT IN PHOENIX · NO ALGORITHM"). Still front-and-center, no longer a faded H1 line at 1.3:1 contrast. <em>See the placement to the right - both Option B (sub-line) and Option C (chip) were considered and skipped.</em></p>
+
+    <h3>One observation, not a fix <span className="tag tag-question">CONSIDER</span></h3>
+    <p>Sparked uses no photography on marketing surfaces - everything is gradient + type. Defensible choice (stays brand-consistent without a content team), but it means visitors never see a real event before being asked to act. The V1–V5 variations in section 01 all bring photography in - if you pick any of them, this is already handled.</p>
+  </div>
+);
+
+const GradientOverloadDemo = () => (
+  <div className="note" data-screen-label="03b Gradient · before/after">
+    <h2>Gradient overload - visual</h2>
+    <p className="lead">Reserve the spark gradient. Same hero, fewer gradient applications.</p>
+
+    <h3>Today - six gradient applications in one viewport</h3>
+    <div className="contrast-demo" style={{ padding: '18px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+          <span style={{ width: 14, height: 19, background: 'linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a)', borderRadius: 3 }}></span>
+          <span style={{ backgroundImage: 'linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Sparked</span>
+        </span>
+        <span style={{
+          fontSize: 9, fontWeight: 900, color: '#14213D',
+          background: 'linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a)', padding: '4px 10px', borderRadius: 9, letterSpacing: '0.05em',
+        }}>List an Event</span>
+      </div>
+      <span style={{ display: 'inline-block', fontSize: 8, fontWeight: 900, color: '#FCA311', letterSpacing: '0.20em', textTransform: 'uppercase' }}>Eyebrow</span>
+      <div style={{ fontSize: 22, margin: '6px 0' }}>
+        <span style={{ color: '#fff' }}>YOUR CITY. </span>
+        <span style={{ backgroundImage: 'linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>YOUR EVENTS.</span>
+      </div>
+      <span style={{ display: 'inline-block', fontSize: 8, fontWeight: 900, padding: '3px 7px', borderRadius: 9999, background: 'linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a)', color: '#14213D', letterSpacing: '0.15em', marginRight: 4 }}>MARKETS</span>
+      <span style={{ display: 'inline-block', fontSize: 8, fontWeight: 900, padding: '3px 7px', borderRadius: 9999, background: 'linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a)', color: '#14213D', letterSpacing: '0.15em', marginRight: 4 }}>MUSIC</span>
+      <span style={{ display: 'inline-block', fontSize: 8, fontWeight: 900, padding: '3px 7px', borderRadius: 9999, background: 'linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a)', color: '#14213D', letterSpacing: '0.15em' }}>ART</span>
+      <div style={{ marginTop: 10, padding: '10px 16px', background: 'linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a)', color: '#14213D', borderRadius: 12, fontWeight: 900, fontSize: 13, textAlign: 'center', letterSpacing: '-0.01em' }}>
+        List Your First Event
+      </div>
+    </div>
+
+    <h3>Restrained - same brand, gradient earns its impact</h3>
+    <div className="contrast-demo" style={{ padding: '18px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+          <span style={{ width: 14, height: 19, background: 'linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a)', borderRadius: 3 }}></span>
+          <span style={{ backgroundImage: 'linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Sparked</span>
+        </span>
+        <span style={{ fontSize: 10, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>Log in</span>
+      </div>
+      <span style={{ display: 'inline-block', fontSize: 8, fontWeight: 900, color: '#FCA311', letterSpacing: '0.20em', textTransform: 'uppercase' }}>Tonight in Phoenix</span>
+      <div style={{ fontSize: 22, margin: '6px 0' }}>
+        <span style={{ color: '#fff' }}>Find what's </span>
+        <span style={{ backgroundImage: 'linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>near you.</span>
+      </div>
+      <span style={{ display: 'inline-block', fontSize: 8, fontWeight: 900, padding: '3px 7px', borderRadius: 9999, background: 'rgba(255,255,255,0.05)', color: 'rgba(238,240,255,0.65)', border: '1px solid rgba(255,255,255,0.10)', letterSpacing: '0.15em', marginRight: 4 }}>MARKETS</span>
+      <span style={{ display: 'inline-block', fontSize: 8, fontWeight: 900, padding: '3px 7px', borderRadius: 9999, background: 'rgba(255,255,255,0.05)', color: 'rgba(238,240,255,0.65)', border: '1px solid rgba(255,255,255,0.10)', letterSpacing: '0.15em', marginRight: 4 }}>MUSIC</span>
+      <span style={{ display: 'inline-block', fontSize: 8, fontWeight: 900, padding: '3px 7px', borderRadius: 9999, background: 'rgba(255,255,255,0.05)', color: 'rgba(238,240,255,0.65)', border: '1px solid rgba(255,255,255,0.10)', letterSpacing: '0.15em' }}>ART</span>
+      <div style={{ marginTop: 10, padding: '10px 16px', background: 'linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a)', color: '#14213D', borderRadius: 12, fontWeight: 900, fontSize: 13, textAlign: 'center', letterSpacing: '-0.01em' }}>
+        Browse near me
+      </div>
+    </div>
+    <p style={{ fontSize: 12, color: '#5a4a36', margin: '6px 0 0' }}>
+      <strong>Before:</strong> 6 gradient applications fighting for attention. <strong>After:</strong> 2 - the wordmark and the primary CTA. The brand still reads as Sparked; the CTA is now the only place your eye lands.
+    </p>
+  </div>
+);
+
+const ContrastDemo = () => (
+  <div className="note" data-screen-label="03c Contrast">
+    <h2>"NO ALGORITHM." - decision locked</h2>
+    <p className="lead">You picked <strong>Option B</strong>. Two lines carry the headline. The third line moves down as a smaller eyebrow or sub if needed.</p>
+
+    <h3>✓ Going with this <span className="tag tag-keep">SELECTED</span></h3>
+    <div className="contrast-demo" style={{ border: '2px solid #4a7c3a', position: 'relative' }}>
+      <div style={{ color: '#fff', fontSize: 28 }}>YOUR CITY.</div>
+      <div style={{ backgroundImage: 'linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontSize: 28 }}>YOUR EVENTS.</div>
+    </div>
+    <p style={{ fontSize: 12, color: '#3a2d1f' }}><strong>What this gets right:</strong> tighter, more confident headline. No contrast hazard. "No algorithm" becomes an eyebrow above (“YOUR CITY · NO ALGORITHM”) or a sub-line below in regular body weight - both are readable.</p>
+
+    <h3>"No algorithm" placement - decided</h3>
+    <p style={{ fontSize: 12.5, color: '#3a2d1f', margin: '0 0 10px' }}>You're going with <strong>Option A</strong>: "No algorithm" lives in the eyebrow microcopy above the H1, alongside the location.</p>
+
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* Placement A: SELECTED */}
+      <div>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+          <span style={{ fontSize: 11, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#1d1408' }}>A · Eyebrow microcopy <span className="tag tag-keep" style={{ marginLeft: 6 }}>SELECTED</span></span>
+        </div>
+        <div className="contrast-demo" style={{ padding: '16px 14px', border: '2px solid #4a7c3a' }}>
+          <div style={{ fontSize: 10, fontWeight: 900, color: '#FCA311', letterSpacing: '0.22em', textTransform: 'uppercase', marginBottom: 10 }}>Tonight in Phoenix · No algorithm</div>
+          <div style={{ color: '#fff', fontSize: 24, fontFamily: 'Montserrat', fontWeight: 900, letterSpacing: '-0.01em', lineHeight: 1 }}>YOUR CITY.</div>
+          <div style={{ backgroundImage: 'linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontSize: 24, fontFamily: 'Montserrat', fontWeight: 900, letterSpacing: '-0.01em', lineHeight: 1 }}>YOUR EVENTS.</div>
+        </div>
+        <p style={{ fontSize: 11.5, color: '#3a2d1f', margin: '6px 0 0' }}>Reads as honest metadata about the section, not a slogan. Fits the brand's existing eyebrow pattern at zero extra layout cost.</p>
+      </div>
+
+      <h3 style={{ margin: '6px 0 0' }}>Alternatives considered <span className="tag tag-fix">SKIP</span></h3>
+
+      {/* B */}
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#1d1408', marginBottom: 6 }}>B · Sub-line below H1</div>
+        <div className="contrast-demo" style={{ padding: '12px 14px', opacity: 0.55 }}>
+          <div style={{ color: '#fff', fontSize: 18, fontFamily: 'Montserrat', fontWeight: 900, letterSpacing: '-0.01em', lineHeight: 1 }}>YOUR CITY.</div>
+          <div style={{ backgroundImage: 'linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontSize: 18, fontFamily: 'Montserrat', fontWeight: 900, letterSpacing: '-0.01em', lineHeight: 1 }}>YOUR EVENTS.</div>
+          <div style={{ color: 'rgba(238,240,255,0.75)', fontFamily: 'Inter', fontSize: 12, fontWeight: 700, marginTop: 8 }}>No algorithm. Just what's actually near you.</div>
+        </div>
+        <p style={{ fontSize: 11, color: '#806a4e', margin: '4px 0 0' }}>Strongest call-out, but reads as marketing copy rather than feature truth.</p>
+      </div>
+
+      {/* C */}
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#1d1408', marginBottom: 6 }}>C · Chip above H1</div>
+        <div className="contrast-demo" style={{ padding: '12px 14px', opacity: 0.55 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 9px', borderRadius: 9999, border: '1px solid rgba(252,163,17,0.30)', background: 'rgba(252,163,17,0.08)', marginBottom: 10 }}>
+            <span style={{ width: 5, height: 5, borderRadius: 9999, background: '#FCA311' }}></span>
+            <span style={{ fontSize: 9, fontWeight: 900, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#FCA311' }}>No algorithm</span>
+          </div>
+          <div style={{ color: '#fff', fontSize: 18, fontFamily: 'Montserrat', fontWeight: 900, letterSpacing: '-0.01em', lineHeight: 1 }}>YOUR CITY.</div>
+          <div style={{ backgroundImage: 'linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontSize: 18, fontFamily: 'Montserrat', fontWeight: 900, letterSpacing: '-0.01em', lineHeight: 1 }}>YOUR EVENTS.</div>
+        </div>
+        <p style={{ fontSize: 11, color: '#806a4e', margin: '4px 0 0' }}>Feels like a feature badge, but adds another visual element competing for the eye.</p>
+      </div>
+    </div>
+
+    <h3>Rejected options <span className="tag tag-fix">SKIP</span></h3>
+    <div style={{ display: 'flex', gap: 10, marginBottom: 6 }}>
+      <div style={{ flex: 1 }}>
+        <div className="contrast-demo" style={{ padding: '10px 12px', marginBottom: 4 }}>
+          <div style={{ color: '#fff', fontSize: 14 }}>YOUR CITY.</div>
+          <div style={{ backgroundImage: 'linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontSize: 14 }}>YOUR EVENTS.</div>
+          <div style={{ color: '#414657', fontSize: 14 }}>NO ALGORITHM.</div>
+        </div>
+        <p style={{ fontSize: 11, color: '#806a4e', margin: 0 }}><strong>Current</strong> · 1.3:1 contrast. Reads as broken color on dimmed phones.</p>
+      </div>
+      <div style={{ flex: 1 }}>
+        <div className="contrast-demo" style={{ padding: '10px 12px', marginBottom: 4 }}>
+          <div style={{ color: '#fff', fontSize: 14 }}>YOUR CITY.</div>
+          <div style={{ backgroundImage: 'linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontSize: 14 }}>YOUR EVENTS.</div>
+          <div style={{ color: '#5a6378', fontSize: 14 }}>NO ALGORITHM.</div>
+        </div>
+        <p style={{ fontSize: 11, color: '#806a4e', margin: 0 }}><strong>Option A</strong> · 3.1:1 lift. Readable, but keeps the three-line stack.</p>
+      </div>
+    </div>
+  </div>
+);
+
+// -------- Canvas root --------------------------------------------------
+
+const Phone1 = () => <Phone><V1/></Phone>;
+const Phone2 = () => <Phone><V2/></Phone>;
+const Phone3 = () => <Phone><V3/></Phone>;
+const Phone4 = () => <Phone><V4/></Phone>;
+const Phone5 = () => <Phone><V5/></Phone>;
+const PhoneAuthCurrent = () => <Phone><AuthCurrent/></Phone>;
+const PhoneAuthNew = () => <Phone><AuthSuggested/></Phone>;
+
+const App = () => (
+  <DesignCanvas
+    title="Sparked · Mobile-first landing explorations"
+    subtitle="Five directions for the landing, plus feedback on the auth flow and visual brand"
+  >
+    <DCSection id="intro" title="00 · Read me" subtitle="Start here">
+      <DCArtboard id="intro-note" label="The multi-CTA recommendation" width={620} height={820}>
+        <IntroNote/>
+      </DCArtboard>
+    </DCSection>
+
+    <DCSection id="variations" title="01 · Five mobile-first landings" subtitle="Five distinct directions to react to">
+      <DCArtboard id="v-note" label="How to compare" width={480} height={760}><VariationsNote/></DCArtboard>
+      <DCArtboard id="v1" label="V1 · Discovery first" width={364} height={760}><Phone1/></DCArtboard>
+      <DCArtboard id="v2" label="V2 · Tonight's pick" width={364} height={760}><Phone2/></DCArtboard>
+      <DCArtboard id="v3" label="V3 · This week, near you" width={364} height={760}><Phone3/></DCArtboard>
+      <DCArtboard id="v4" label="V4 · Live now" width={364} height={760}><Phone4/></DCArtboard>
+      <DCArtboard id="v5" label="V5 · Two doors" width={364} height={760}><Phone5/></DCArtboard>
+    </DCSection>
+
+    <DCSection id="auth" title="02 · Auth screen feedback" subtitle="Current state and the redesign">
+      <DCArtboard id="auth-note" label="What changed" width={560} height={760}><AuthFeedbackNote/></DCArtboard>
+      <DCArtboard id="auth-current" label="Current" width={364} height={760}><PhoneAuthCurrent/></DCArtboard>
+      <DCArtboard id="auth-new" label="Suggested" width={364} height={760}><PhoneAuthNew/></DCArtboard>
+    </DCSection>
+
+    <DCSection id="visual" title="03 · Visual-design review" subtitle="Brand-level principles - apply to every Sparked surface">
+      <DCArtboard id="vis-note" label="The review" width={600} height={840}><VisualFeedbackNote/></DCArtboard>
+      <DCArtboard id="vis-gradient" label="Gradient overload · before/after" width={520} height={820}><GradientOverloadDemo/></DCArtboard>
+      <DCArtboard id="vis-contrast" label="No-algorithm placement · A locked in" width={500} height={1020}><ContrastDemo/></DCArtboard>
+    </DCSection>
+  </DesignCanvas>
+);
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

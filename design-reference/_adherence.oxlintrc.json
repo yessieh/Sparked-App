@@ -1,0 +1,211 @@
+{
+  "plugins": [
+    "react",
+    "import"
+  ],
+  "rules": {
+    "react/forbid-elements": [
+      "warn",
+      {
+        "forbid": []
+      }
+    ],
+    "no-restricted-imports": [
+      "warn",
+      {
+        "patterns": [
+          {
+            "group": [
+              "components/EventStub/**",
+              "mockups/**",
+              "mockups/landings/**",
+              "source/**",
+              "ui_kits/mobile-app/**"
+            ],
+            "message": "Import design-system components from 'index.js', not component internals."
+          }
+        ]
+      }
+    ],
+    "no-restricted-syntax": [
+      "warn",
+      {
+        "selector": "Literal[value=/#[0-9a-fA-F]{3,8}\\b/]",
+        "message": "Raw hex color — use a design-system color token via var()."
+      },
+      {
+        "selector": "Literal[value=/\\b\\d+px\\b/]",
+        "message": "Raw px value — use a design-system spacing token via var()."
+      },
+      {
+        "selector": "Literal[value=/font-family\\s*:\\s*(?!['\\\"]?(?:Inter|Montserrat))/i]",
+        "message": "Font not provided by the design system. Available: Inter, Montserrat."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='EventStubEvent'] > JSXAttribute > JSXIdentifier[name!=/^(?:title|date|time|location|tags|gradient|price|startISO|mi|saved|going|rsvps|key|ref|className|style|children)$/]",
+        "message": "<EventStubEvent> doesn't accept that prop. Declared props: title, date, time, location, tags, gradient, price, startISO, mi, saved, going, rsvps."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/index.js"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ],
+  "x-omelette": {
+    "components": {
+      "EventStubEvent": {
+        "replaces": []
+      }
+    },
+    "tokens": [
+      "--bg-color",
+      "--blur-glass",
+      "--blur-overlay",
+      "--blur-strong",
+      "--border-soft",
+      "--border-strong",
+      "--bright-orange",
+      "--card-bg",
+      "--card-border",
+      "--danger-text",
+      "--deep-night",
+      "--flame-red",
+      "--focus-ring",
+      "--font-display",
+      "--font-sans",
+      "--fs-body",
+      "--fs-body-sm",
+      "--fs-caption",
+      "--fs-display",
+      "--fs-eyebrow",
+      "--fs-h1",
+      "--fs-h2",
+      "--fs-h3",
+      "--fs-tick",
+      "--fw-black",
+      "--fw-bold",
+      "--fw-extrabold",
+      "--fw-medium",
+      "--heading-text",
+      "--hint-text",
+      "--ignition-gold",
+      "--line-normal",
+      "--line-relaxed",
+      "--line-snug",
+      "--line-tight",
+      "--muted-text",
+      "--radius-2xl",
+      "--radius-3xl",
+      "--radius-4xl",
+      "--radius-lg",
+      "--radius-md",
+      "--radius-pill",
+      "--radius-sm",
+      "--radius-xl",
+      "--scrollbar-thumb",
+      "--scrollbar-thumb-hover",
+      "--scrollbar-track",
+      "--shadow-card",
+      "--shadow-cta",
+      "--shadow-cta-hover",
+      "--shadow-elevated",
+      "--shadow-glow-coral",
+      "--spark-coral",
+      "--spark-gold",
+      "--spark-gradient",
+      "--spark-orange",
+      "--surface-1",
+      "--surface-1-alt",
+      "--surface-2",
+      "--surface-3",
+      "--surface-hover",
+      "--text-color",
+      "--text-muted-display",
+      "--tracking-eyebrow",
+      "--tracking-normal",
+      "--tracking-tight",
+      "--tracking-wide",
+      "--tracking-widest"
+    ],
+    "tokenKinds": {
+      "--spark-gradient": "color",
+      "--spark-coral": "color",
+      "--spark-orange": "color",
+      "--spark-gold": "color",
+      "--ignition-gold": "color",
+      "--flame-red": "color",
+      "--bright-orange": "color",
+      "--deep-night": "color",
+      "--bg-color": "color",
+      "--surface-1": "color",
+      "--surface-1-alt": "color",
+      "--surface-2": "color",
+      "--surface-3": "color",
+      "--surface-hover": "color",
+      "--card-bg": "color",
+      "--card-border": "color",
+      "--border-soft": "color",
+      "--border-strong": "color",
+      "--text-color": "font",
+      "--heading-text": "font",
+      "--muted-text": "font",
+      "--hint-text": "font",
+      "--text-muted-display": "font",
+      "--danger-text": "font",
+      "--focus-ring": "color",
+      "--scrollbar-track": "color",
+      "--scrollbar-thumb": "color",
+      "--scrollbar-thumb-hover": "color",
+      "--font-sans": "font",
+      "--font-display": "font",
+      "--fs-display": "spacing",
+      "--fs-h1": "spacing",
+      "--fs-h2": "spacing",
+      "--fs-h3": "spacing",
+      "--fs-body": "spacing",
+      "--fs-body-sm": "spacing",
+      "--fs-caption": "spacing",
+      "--fs-eyebrow": "spacing",
+      "--fs-tick": "spacing",
+      "--fw-medium": "font",
+      "--fw-bold": "font",
+      "--fw-extrabold": "font",
+      "--fw-black": "font",
+      "--tracking-tight": "font",
+      "--tracking-normal": "font",
+      "--tracking-wide": "font",
+      "--tracking-widest": "font",
+      "--tracking-eyebrow": "font",
+      "--line-tight": "font",
+      "--line-snug": "font",
+      "--line-normal": "font",
+      "--line-relaxed": "font",
+      "--radius-sm": "radius",
+      "--radius-md": "radius",
+      "--radius-lg": "radius",
+      "--radius-xl": "radius",
+      "--radius-2xl": "radius",
+      "--radius-3xl": "radius",
+      "--radius-4xl": "radius",
+      "--radius-pill": "radius",
+      "--shadow-card": "shadow",
+      "--shadow-elevated": "shadow",
+      "--shadow-glow-coral": "shadow",
+      "--shadow-cta": "shadow",
+      "--shadow-cta-hover": "shadow",
+      "--blur-glass": "spacing",
+      "--blur-overlay": "spacing",
+      "--blur-strong": "spacing"
+    },
+    "fontFamilies": [
+      "Inter",
+      "Montserrat"
+    ]
+  }
+}

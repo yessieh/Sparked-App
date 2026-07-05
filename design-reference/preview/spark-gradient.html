@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Colors" name="Spark Gradient" subtitle="The signature 135° coral→orange→gold gradient + stops" viewport="700x290" -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>The Spark Gradient</title>
+<link rel="stylesheet" href="_base.css">
+<style>
+  .card { padding: 28px 32px; }
+  .hero {
+    height: 132px;
+    border-radius: 24px;
+    background: var(--spark-gradient);
+    box-shadow: 0 6px 22px rgba(255, 95, 78, 0.24);
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::after {
+    content: "linear-gradient(135deg, #ff5f4e 0%, #ff8c38 50%, #ffca3a 100%)";
+    position: absolute;
+    bottom: 12px; left: 16px;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 10px;
+    color: #1a1407;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .hero::before {
+    content: "THE SPARK";
+    position: absolute;
+    top: 12px; left: 16px;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.20em;
+    color: #2a1808;
+  }
+  .stops { display: flex; gap: 12px; margin-top: 20px; }
+  .stop { flex: 1; }
+  .stop .chip { height: 56px; border-radius: 12px; border: 1px solid var(--border-soft); }
+  .stop .name { margin-top: 8px; font-size: 11px; font-weight: 800; color: var(--text-color); }
+  .stop .role { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.18em; color: var(--muted-text); margin-top: 2px; }
+  .stop .hex { font-family: ui-monospace, Menlo, monospace; font-size: 10px; color: var(--muted-text); margin-top: 4px; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="hero"></div>
+  <div class="stops">
+    <div class="stop">
+      <div class="chip" style="background: #ff5f4e"></div>
+      <div class="name">Coral · 0%</div>
+      <div class="role">Energy / Live / Alerts</div>
+      <div class="hex">#FF5F4E</div>
+    </div>
+    <div class="stop">
+      <div class="chip" style="background: #ff8c38"></div>
+      <div class="name">Orange · 50%</div>
+      <div class="role">Eyebrows / Icons</div>
+      <div class="hex">#FF8C38</div>
+    </div>
+    <div class="stop">
+      <div class="chip" style="background: #ffca3a"></div>
+      <div class="name">Gold · 100%</div>
+      <div class="role">Links / Stat numbers</div>
+      <div class="hex">#FFCA3A</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

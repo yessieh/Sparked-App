@@ -1,0 +1,16 @@
+<svg width="1024" height="1024" viewBox="0 0 56 76" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="tf-base" x1="0" y1="1" x2="0" y2="0" gradientUnits="objectBoundingBox">
+      <stop offset="0%" stop-color="#ff5f4e"></stop>
+      <stop offset="100%" stop-color="#ff8c38"></stop>
+    </linearGradient>
+    <linearGradient id="tf-tip" x1="0" y1="1" x2="0" y2="0" gradientUnits="objectBoundingBox">
+      <stop offset="0%" stop-color="#ff8c38"></stop>
+      <stop offset="100%" stop-color="#ffca3a"></stop>
+    </linearGradient>
+  </defs>
+
+  <path d="M28 68&#xA;       C16 58 8 46 10 32&#xA;       C12 20 20 12 28 10&#xA;       C24 16 22 24 24 32&#xA;       C26 40 32 44 32 52&#xA;       C32 60 30 66 28 68Z" fill="url(#tf-base)"></path>
+
+  <path d="M28 8&#xA;       C38 16 46 26 44 38&#xA;       C42 50 34 58 28 60&#xA;       C32 54 34 46 32 38&#xA;       C30 30 24 26 24 18&#xA;       C24 12 26 9 28 8Z" fill="url(#tf-tip)" opacity="0.9"></path>
+</svg>

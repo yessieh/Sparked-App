@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Components" name="Event Card" subtitle="Core feed unit — anatomy callout" viewport="700x380" -->
+<html lang="en"><head><meta charset="UTF-8"><title>Event Card</title><link rel="stylesheet" href="_base.css">
+<style>
+  .ec {
+    width: 100%; max-width: 380px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(238,240,255,0.10);
+    border-radius: 28px; overflow: hidden;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.20);
+  }
+  .ec .img {
+    height: 184px;
+    background: linear-gradient(135deg,#5b3220 0%,#a8551d 60%,#e09c3a 100%);
+    position: relative;
+  }
+  .ec .img::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(to top, rgba(20,33,61,0.85), transparent);
+  }
+  .ec .badge {
+    position: absolute; top: 14px; right: 14px; z-index: 2;
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(255,99,72,0.88); backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.20);
+    padding: 6px 12px; border-radius: 9999px;
+    font-weight: 900; font-size: 10px; letter-spacing: 0.20em;
+    color: white;
+  }
+  .ec .badge .ring { width: 6px; height: 6px; background: white; border-radius: 9999px; box-shadow: 0 0 0 3px rgba(255,255,255,0.3); }
+  .ec .body { padding: 24px; }
+  .ec h3 { font-family: Montserrat; font-size: 22px; font-weight: 900; letter-spacing: -0.01em; margin: 0 0 12px; line-height: 1.1; color: #eef0ff; }
+  .meta { display: flex; gap: 8px; align-items: center; font-size: 13px; color: rgba(238,240,255,0.60); margin-bottom: 6px; }
+  .meta svg { color: #ff6348; }
+  .meta.loc svg { color: #FCA311; }
+  .pipe { color: rgba(238,240,255,0.20); }
+  .tags { display: flex; gap: 6px; margin-top: 14px; flex-wrap: wrap; }
+  .tag {
+    display: inline-flex; align-items: center;
+    padding: 3px 10px; border-radius: 9999px;
+    font-weight: 900; font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.18em;
+    background: var(--spark-gradient); color: #14213D;
+  }
+</style></head>
+<body><div class="card" style="padding: 24px 32px">
+  <div style="display:flex; gap:24px; align-items:flex-start">
+    <div class="ec">
+      <div class="img"></div>
+      <div class="body">
+        <h3>Art Walk Downtown</h3>
+        <div class="meta">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          <span>Today, May 8</span>
+          <span class="pipe">|</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          <span>6:00 – 9:00pm</span>
+        </div>
+        <div class="meta loc">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span>Downtown Arts District</span>
+        </div>
+        <div class="tags"><span class="tag">Art</span><span class="tag">Music</span><span class="tag">Community</span></div>
+      </div>
+    </div>
+    <div style="flex:1; padding-top: 30px">
+      <div class="label">EVENT CARD · core feed unit</div>
+      <p style="font-size:13px;color:rgba(238,240,255,0.60);margin-top:14px;line-height:1.6">Photo header (h:184) with bottom navy fade, live badge top-right, 24px body padding, h3 in Montserrat 900, meta rows with coral &amp; orange icons, gradient tag pills.</p>
+    </div>
+  </div>
+</div></body></html>

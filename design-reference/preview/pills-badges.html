@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Components" name="Pills &amp; Badges" subtitle="Interest pill · live · eyebrow · recommended" viewport="700x160" -->
+<html lang="en"><head><meta charset="UTF-8"><title>Pills &amp; Badges</title><link rel="stylesheet" href="_base.css">
+<style>
+  .row { gap: 10px; align-items: center; flex-wrap: wrap; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 16px; border-radius: 9999px;
+    font-family: Inter; font-weight: 900; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.20em;
+    border: 1px solid rgba(255,255,255,0.10);
+    color: var(--muted-text);
+    background: transparent;
+  }
+  .pill.active { background: var(--spark-gradient); color: #14213D; border-color: transparent; transform: scale(1.05); box-shadow: 0 6px 22px rgba(255, 99, 72, 0.20); }
+  .pill.eyebrow { background: rgba(255,255,255,0.05); color: #eef0ff; }
+  .pill .dot-gold { width: 6px; height: 6px; background: #F7B731; border-radius: 9999px; box-shadow: 0 0 8px #F7B731; }
+  .badge-live {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(255,99,72,0.85); backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.20);
+    padding: 6px 14px; border-radius: 9999px;
+    font-weight: 900; font-size: 10px; letter-spacing: 0.20em;
+    color: white;
+  }
+  .badge-live .ring { width: 8px; height: 8px; background: white; border-radius: 9999px; box-shadow: 0 0 0 3px rgba(255,255,255,0.3); }
+  .recommend {
+    border: 1px solid rgba(247,183,49,0.35);
+    background: rgba(20,33,61,0.80);
+    padding: 6px 14px; border-radius: 9999px;
+    font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.18em;
+    background-image: linear-gradient(rgba(20,33,61,0.80), rgba(20,33,61,0.80));
+  }
+  .recommend span { background: var(--spark-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+</style></head>
+<body><div class="card">
+  <div class="row">
+    <span class="pill active">Markets</span>
+    <span class="pill">Music</span>
+    <span class="pill">Art</span>
+    <span class="pill eyebrow"><span class="dot-gold"></span>TONIGHT</span>
+    <span class="badge-live"><span class="ring"></span>LIVE</span>
+    <span class="recommend"><span>RECOMMENDED</span></span>
+  </div>
+  <div class="label" style="margin-top: 18px">Interest pill (active = full gradient + scale 1.05) · Live · Eyebrow · Recommended</div>
+</div></body></html>

@@ -1,0 +1,81 @@
+/* Shared base styles for every Design System preview card.
+   Each card targets ~700×<flexible> px. Background sits on the
+   Sparked Deep Night canvas so swatches and components render in
+   their native context. */
+
+@import url('../colors_and_type.css');
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-color);
+  color: var(--text-color);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.card {
+  width: 700px;
+  padding: 32px;
+  background: var(--bg-color);
+  position: relative;
+}
+
+.row { display: flex; gap: 16px; align-items: stretch; flex-wrap: wrap; }
+.row-tight { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.col { display: flex; flex-direction: column; gap: 12px; }
+
+.eyebrow {
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.20em;
+  color: var(--bright-orange);
+}
+
+.label {
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.20em;
+  color: var(--muted-text);
+}
+
+.mono {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--muted-text);
+}
+
+.swatch {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.swatch .chip {
+  height: 80px;
+  border-radius: 16px;
+  border: 1px solid var(--border-soft);
+  position: relative;
+  overflow: hidden;
+}
+
+.swatch .name {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-color);
+  letter-spacing: 0.02em;
+}
+
+.swatch .hex {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 10px;
+  color: var(--muted-text);
+  text-transform: uppercase;
+}

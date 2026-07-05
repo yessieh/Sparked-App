@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="One pick a night. Hand-curated local events in Phoenix. Sparked's tonight feed.">
+<title>Sparked · Tonight</title>
+<link rel="icon" type="image/svg+xml" href="../../../assets/sparked-icon.svg">
+<link rel="stylesheet" href="../_shared.css">
+<script src="../faq.js" defer></script>
+<style>
+  /* Page-specific overrides for /tonight */
+  .hero {
+    position: relative; min-height: calc(100vh - 60px);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  /* Editorial photo (gradient stand-in) */
+  .hero-photo {
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg,#3a1a3e 0%,#7a2a6a 45%,#ff8c38 100%);
+    z-index: -2;
+  }
+  .hero-photo::after {
+    /* dust / grain texture */
+    content: ""; position: absolute; inset: 0;
+    background-image:
+      radial-gradient(circle at 30% 40%, rgba(255,255,255,0.06) 0px, transparent 2px),
+      radial-gradient(circle at 70% 60%, rgba(255,255,255,0.05) 0px, transparent 2px),
+      radial-gradient(circle at 50% 80%, rgba(255,255,255,0.07) 0px, transparent 1.5px);
+    background-size: 22px 24px, 28px 30px, 18px 20px;
+    opacity: 0.6;
+    mix-blend-mode: screen;
+  }
+  .hero-veil {
+    position: absolute; inset: 0; z-index: -1;
+    background: linear-gradient(to top, var(--bg-color) 5%, rgba(20,33,61,0.85) 30%, rgba(20,33,61,0.45) 55%, transparent 85%);
+  }
+
+  .hero .shell { position: relative; padding-top: 28px; padding-bottom: 36px; flex: 1; display: flex; flex-direction: column; }
+  .hero-top {
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px;
+  }
+  .hero-top .live-dot { width: 6px; height: 6px; box-shadow: 0 0 0 2px rgba(255,95,78,0.30), 0 0 10px rgba(255,95,78,0.50); }
+  .hero-top .eyebrow { color: var(--spark-gold); text-align: center; }
+  .hero-spacer { flex: 1; min-height: 40px; }
+
+  .hero-body h1 {
+    font-family: var(--font-display); font-weight: 900;
+    font-size: clamp(40px, 11vw, 92px);
+    line-height: 0.95; letter-spacing: -0.025em;
+    margin: 0 0 16px;
+    color: #fff;
+    text-shadow: 0 2px 24px rgba(0,0,0,0.25);
+  }
+  .hero-meta { display: flex; flex-direction: column; gap: 6px; margin-bottom: 24px; color: rgba(255,255,255,0.92); font-weight: 600; font-size: 15px; }
+  .hero-meta-row { display: inline-flex; align-items: center; gap: 8px; }
+  .ico-pin   { color: var(--bright-orange); }
+  .ico-clock { color: var(--spark-coral); }
+
+  .hero-cta { max-width: 460px; }
+  .hero-after {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    margin-top: 22px; color: rgba(255,255,255,0.70); font-size: 11px;
+    font-weight: 900; letter-spacing: 0.22em; text-transform: uppercase;
+  }
+  .hero-after svg { animation: spk-arrow 2.2s ease-in-out infinite; }
+  @keyframes spk-arrow {
+    0%,100% { transform: translateY(0); opacity: 0.6; }
+    50% { transform: translateY(4px); opacity: 1; }
+  }
+
+  /* Tonight strip */
+  .tonight-strip { padding: 36px 0 28px; border-top: 1px solid var(--border-soft); }
+  .tonight-strip .head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+  .tonight-strip h2 { font-family: var(--font-display); font-size: clamp(24px, 4vw, 32px); font-weight: 900; margin: 0; letter-spacing: -0.01em; }
+  .tonight-strip .meta { font-size: 12px; font-weight: 800; color: var(--muted-text); }
+
+  .tonight-row {
+    display: flex; gap: 14px; overflow-x: auto;
+    margin: 0 -20px; padding: 0 20px 12px;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+  .tonight-row::-webkit-scrollbar { display: none; }
+  @media (min-width: 768px) {
+    .tonight-row { margin: 0; padding: 0 0 4px; gap: 18px; }
+  }
+
+  .mini-card {
+    flex: 0 0 240px;
+    scroll-snap-align: start;
+    background: var(--surface-2); border: 1px solid var(--border-soft);
+    border-radius: 18px; overflow: hidden;
+    transition: transform .2s, border-color .2s;
+    cursor: pointer;
+  }
+  @media (min-width: 768px) { .mini-card { flex: 1 1 0; min-width: 0; } }
+  .mini-card:hover { transform: translateY(-3px); border-color: rgba(247,183,49,0.35); }
+  .mini-img {
+    aspect-ratio: 4/3; position: relative;
+  }
+  .mini-img::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(to top, rgba(20,33,61,0.6), transparent 60%);
+  }
+  .mini-time {
+    position: absolute; top: 10px; left: 10px;
+    background: rgba(15,26,48,0.85); backdrop-filter: blur(8px);
+    border: 1px solid var(--border-soft);
+    padding: 3px 9px; border-radius: 9999px;
+    font-size: 10px; font-weight: 900; letter-spacing: 0.16em;
+    color: var(--text-color); text-transform: uppercase;
+  }
+  .mini-body { padding: 14px 16px 16px; }
+  .mini-body h3 { font-family: var(--font-display); font-weight: 900; font-size: 15px; line-height: 1.2; letter-spacing: -0.005em; margin: 0 0 6px; }
+  .mini-body p { font-size: 12px; color: var(--muted-text); margin: 0; }
+
+  /* How we pick */
+  .pick { padding: 28px 0 36px; border-top: 1px solid var(--border-soft); }
+  .pick-grid {
+    display: grid; grid-template-columns: 1fr; gap: 14px; margin-top: 18px;
+  }
+  @media (min-width: 768px) { .pick-grid { grid-template-columns: 1fr 1fr; gap: 18px; } }
+
+  .pick-card {
+    background: var(--surface-1-alt); border: 1px solid var(--border-soft);
+    border-radius: 22px; padding: 22px;
+  }
+  .pick-card h4 { font-family: var(--font-display); font-weight: 900; font-size: 17px; margin: 0 0 6px; letter-spacing: -0.005em; }
+  .pick-card p { color: var(--muted-text); font-size: 13.5px; line-height: 1.55; margin: 0; }
+  .pick-num { color: var(--spark-gold); font-weight: 900; font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; display: block; margin-bottom: 8px; }
+
+  .signature {
+    border-top: 1px solid var(--border-soft);
+    padding: 36px 0 24px;
+    text-align: center;
+  }
+  .signature blockquote {
+    font-family: var(--font-display); font-weight: 900;
+    font-size: clamp(22px, 4vw, 32px); letter-spacing: -0.01em;
+    line-height: 1.15; margin: 0 auto; max-width: 24ch;
+    color: var(--text-color);
+  }
+  .signature blockquote .gradient-word { font-style: normal; }
+  .signature .by { display: block; margin-top: 12px; font-size: 11px; font-weight: 900; letter-spacing: 0.22em; color: var(--muted-text); text-transform: uppercase; }
+</style>
+</head>
+<body data-screen-label="V2 · /tonight · Editor's pick">
+
+<header class="site-header">
+  <div class="shell">
+    <a class="logo" href="#" aria-label="Sparked home">
+      <svg viewBox="0 0 56 76" aria-hidden="true">
+        <defs>
+          <linearGradient id="tfb" x1="0" y1="1" x2="0" y2="0" gradientUnits="objectBoundingBox"><stop offset="0%" stop-color="#ff5f4e"/><stop offset="100%" stop-color="#ff8c38"/></linearGradient>
+          <linearGradient id="tft" x1="0" y1="1" x2="0" y2="0" gradientUnits="objectBoundingBox"><stop offset="0%" stop-color="#ff8c38"/><stop offset="100%" stop-color="#ffca3a"/></linearGradient>
+        </defs>
+        <path d="M28 68 C16 58 8 46 10 32 C12 20 20 12 28 10 C24 16 22 24 24 32 C26 40 32 44 32 52 C32 60 30 66 28 68Z" fill="url(#tfb)"/>
+        <path d="M28 8 C38 16 46 26 44 38 C42 50 34 58 28 60 C32 54 34 46 32 38 C30 30 24 26 24 18 C24 12 26 9 28 8Z" fill="url(#tft)" opacity=".9"/>
+      </svg>
+      <span class="wordmark">Sparked</span>
+    </a>
+    <div class="header-actions">
+      <button type="button" class="header-link">Log in</button>
+    </div>
+  </div>
+</header>
+
+<section class="hero" aria-labelledby="hero-h1">
+  <div class="hero-photo" aria-hidden="true"></div>
+  <div class="hero-veil" aria-hidden="true"></div>
+  <div class="shell">
+    <div class="hero-top">
+      <span class="live-dot" aria-hidden="true"></span>
+      <span class="eyebrow">Editor's pick · Tonight in Phoenix</span>
+    </div>
+
+    <div class="hero-spacer"></div>
+
+    <div class="hero-body">
+      <h1 id="hero-h1">Sunset Songwriters Round</h1>
+      <div class="hero-meta">
+        <span class="hero-meta-row">
+          <svg class="ico-pin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          The Rebel Lounge · 0.4 mi
+        </span>
+        <span class="hero-meta-row">
+          <svg class="ico-clock" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          Tonight · 7:30pm — 10:00pm
+        </span>
+      </div>
+      <div class="hero-cta">
+        <button type="button" class="btn spark-cta btn-lg btn-block">
+          Open in Sparked
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+      <div class="hero-after">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 13l7 7 7-7"/></svg>
+        46 more tonight
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="tonight-strip" aria-labelledby="ts-h">
+  <div class="shell">
+    <div class="head">
+      <div>
+        <span class="eyebrow">Also tonight</span>
+        <h2 id="ts-h">After this set, here's what's open.</h2>
+      </div>
+      <span class="meta">Updated 9 minutes ago</span>
+    </div>
+
+    <div class="tonight-row">
+      <article class="mini-card">
+        <div class="mini-img" style="background:linear-gradient(135deg,#1a2b4a,#3a5a8c 55%,#ff8c38);"><span class="mini-time">8:30pm</span></div>
+        <div class="mini-body"><h3>Bike-In Movie: Goonies</h3><p>Civic Space Park · 1.5 mi</p></div>
+      </article>
+      <article class="mini-card">
+        <div class="mini-img" style="background:linear-gradient(135deg,#5b3220,#a8551d 55%,#e09c3a);"><span class="mini-time">9:00pm</span></div>
+        <div class="mini-body"><h3>Roosevelt Row Late Night</h3><p>Roosevelt Row · 0.8 mi</p></div>
+      </article>
+      <article class="mini-card">
+        <div class="mini-img" style="background:linear-gradient(135deg,#26384b,#5d7a98 55%,#ffca3a);"><span class="mini-time">10:00pm</span></div>
+        <div class="mini-body"><h3>The Print Shop · Open Studio</h3><p>Warehouse 23 · 2.1 mi</p></div>
+      </article>
+      <article class="mini-card">
+        <div class="mini-img" style="background:linear-gradient(135deg,#2a1f3a,#4d3a6e 55%,#ffca3a);"><span class="mini-time">11:00pm</span></div>
+        <div class="mini-body"><h3>Late Set: Marisol & Co.</h3><p>The Lost Leaf · 0.7 mi</p></div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="pick" aria-labelledby="pick-h">
+  <div class="shell">
+    <span class="eyebrow">How tonight gets picked</span>
+    <h2 id="pick-h" class="display display-2" style="margin: 8px 0 0;">One pick a night. No algorithm.</h2>
+    <p class="lead" style="margin-top: 10px; max-width: 50ch;">Editors choose one anchor event each evening based on what's local, what's open, and what's worth your time. Everything else is sorted by distance.</p>
+    <div class="pick-grid">
+      <div class="pick-card">
+        <span class="pick-num">01 · Local</span>
+        <h4>Within five miles, always</h4>
+        <p>The featured pick lives in your neighborhood. Not "in your city" — within walking, biking, or a short ride.</p>
+      </div>
+      <div class="pick-card">
+        <span class="pick-num">02 · Curated</span>
+        <h4>Selected, not surfaced</h4>
+        <p>A real editor picks each night. We don't weight engagement, paid boosts, or impressions.</p>
+      </div>
+      <div class="pick-card">
+        <span class="pick-num">03 · Time-aware</span>
+        <h4>Right now, not "this weekend"</h4>
+        <p>The pick adjusts by hour. After 9pm, it's a late-night option. Before 5pm, an after-work plan.</p>
+      </div>
+      <div class="pick-card">
+        <span class="pick-num">04 · Transparent</span>
+        <h4>You can see everything else too</h4>
+        <p>The pick is a starting point, not a filter. Browse 46 other things happening tonight whenever you want.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="signature">
+  <div class="shell">
+    <blockquote>"Built for local discovery, <span class="gradient-word">not feed fatigue.</span>"</blockquote>
+    <span class="by">— Sparked, since 2024</span>
+  </div>
+</section>
+
+<section class="organizer-band" aria-labelledby="ob-h">
+  <div class="shell">
+    <div class="ob-label">
+      <span class="eyebrow">For organizers</span>
+      <h3 id="ob-h">Want to be tomorrow night's pick?</h3>
+      <p>Publish your event. Sparked editors review every submission. Free to start.</p>
+    </div>
+    <a href="#" class="btn btn-outline ob-cta">List an event →</a>
+  </div>
+</section>
+
+<div data-faq-mount></div>
+
+<footer class="site-footer">
+  <div class="shell">
+    <nav class="footnav" aria-label="Footer">
+      <a href="#">About</a><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Contact</a>
+    </nav>
+    <p class="copy">© 2026 Sparked. All rights reserved.</p>
+  </div>
+</footer>
+
+</body>
+</html>

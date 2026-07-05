@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Brand" name="Sparked App" subtitle="Navigator: scrollable screens, prev/next, page index + web funnels" viewport="1280x950" -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sparked · Interactive Prototype</title>
+<link rel="stylesheet" href="colors_and_type.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #070b14; color: #eef0ff; font-family: 'Inter', sans-serif; height: 100vh; overflow: hidden; }
+  ::-webkit-scrollbar { width: 0; height: 0; }
+  .pages ::-webkit-scrollbar { width: 6px; }
+  .pages ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 9999px; }
+
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(50% 40% at 14% 6%, rgba(255,99,72,0.10), transparent 60%),
+      radial-gradient(45% 45% at 78% 96%, rgba(247,183,49,0.06), transparent 60%);
+  }
+
+  .shell { position: relative; z-index: 1; height: 100vh; display: flex; }
+
+  /* ---- Center stage ---- */
+  .main {
+    flex: 1; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px; padding: 20px; overflow: hidden;
+  }
+  .screen-pill {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 9999px; padding: 7px 16px;
+  }
+  .screen-pill .dot { width: 6px; height: 6px; border-radius: 9999px; background: #FCA311; box-shadow: 0 0 10px rgba(252,163,17,0.6); }
+  .screen-pill .name { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 13px; color: #fff; letter-spacing: -0.01em; }
+  .screen-pill .count { font-size: 10px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(238,240,255,0.40); }
+
+  .device-row { display: flex; align-items: center; gap: 22px; width: 100%; min-width: 0; }
+  .main.main--wide .device-row { flex: 1; min-width: 0; }
+  .main.main--wide { overflow: auto; align-items: stretch; justify-content: flex-start; }
+
+  .nav-btn {
+    width: 52px; height: 52px; border-radius: 9999px; flex-shrink: 0;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10);
+    color: #eef0ff; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: transform .18s ease, background .18s ease, border-color .18s ease, box-shadow .18s ease;
+  }
+  .nav-btn:hover:not(:disabled) { transform: scale(1.06); background: rgba(255,255,255,0.07); border-color: rgba(252,163,17,0.35); box-shadow: 0 6px 22px rgba(255,95,78,0.16); }
+  .nav-btn:active:not(:disabled) { transform: scale(0.95); }
+  .nav-btn:disabled { opacity: 0.28; cursor: not-allowed; }
+
+  .kbd-hint { font-size: 10px; font-weight: 900; letter-spacing: 0.16em; text-transform: uppercase; color: rgba(238,240,255,0.35); display: inline-flex; gap: 6px; align-items: center; }
+  .kbd-hint kbd { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); border-bottom-width: 2px; padding: 2px 7px; border-radius: 5px; font-family: 'Inter'; font-size: 10px; color: rgba(238,240,255,0.65); }
+
+  /* ---- Web-funnel frame ---- */
+  .funnel-frame {
+    width: 390px; height: 844px; border-radius: 44px; padding: 8px;
+    background: #000; box-shadow: 0 30px 80px rgba(0,0,0,0.45);
+    display: flex; flex-direction: column;
+  }
+  .funnel-urlbar {
+    height: 38px; flex-shrink: 0; display: flex; align-items: center; gap: 8px;
+    padding: 0 14px; color: rgba(238,240,255,0.70);
+  }
+  .funnel-urlbar .url {
+    flex: 1; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 9999px; padding: 6px 12px; font-size: 11px; font-weight: 700;
+    color: rgba(238,240,255,0.75); display: flex; align-items: center; gap: 7px;
+    overflow: hidden; white-space: nowrap;
+  }
+  .funnel-urlbar .url b { color: #fff; font-weight: 800; }
+  .funnel-frame iframe { flex: 1; width: 100%; border: none; border-radius: 0 0 36px 36px; background: #14213D; }
+
+  /* ---- Right page index ---- */
+  .pages {
+    width: 296px; flex-shrink: 0; height: 100vh; overflow-y: auto;
+    border-left: 1px solid rgba(255,255,255,0.07);
+    background: rgba(10,15,26,0.55); backdrop-filter: blur(8px);
+    padding: 22px 18px 40px;
+  }
+  .pages .brand { display: inline-flex; align-items: center; gap: 10px; font-family: 'Montserrat'; font-weight: 900; font-size: 15px; }
+  .pages .brand .mark { background-image: linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .pages .tag { font-size: 9px; font-weight: 900; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(238,240,255,0.38); margin-top: 6px; }
+  .restart {
+    display: inline-flex; align-items: center; gap: 7px; margin-top: 14px;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10);
+    color: rgba(238,240,255,0.75); border-radius: 9999px; padding: 7px 13px;
+    font-size: 11px; font-weight: 800; cursor: pointer; transition: all .2s ease;
+  }
+  .restart:hover { background: rgba(255,255,255,0.07); border-color: rgba(252,163,17,0.35); color: #fff; }
+
+  .grp-label {
+    font-size: 9.5px; font-weight: 900; letter-spacing: 0.22em; text-transform: uppercase;
+    color: #FCA311; margin: 26px 0 10px; display: flex; align-items: center; gap: 8px;
+  }
+  .grp-label .ln { flex: 1; height: 1px; background: linear-gradient(to right, rgba(252,163,17,0.25), transparent); }
+
+  .page-item {
+    display: flex; align-items: center; gap: 11px; width: 100%;
+    background: transparent; border: 1px solid transparent; border-radius: 12px;
+    padding: 9px 11px; cursor: pointer; text-align: left;
+    color: rgba(238,240,255,0.70); transition: all .15s ease; margin-bottom: 2px;
+  }
+  .page-item:hover { background: rgba(255,255,255,0.04); color: #fff; }
+  .page-item.active {
+    background: rgba(252,163,17,0.10); border-color: rgba(252,163,17,0.30); color: #fff;
+  }
+  .page-item .idx {
+    width: 22px; height: 22px; border-radius: 7px; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 900; font-family: 'Montserrat';
+    background: rgba(255,255,255,0.05); color: rgba(238,240,255,0.55);
+  }
+  .page-item.active .idx { background: linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a); color: #14213D; }
+  .page-item .lbl { flex: 1; min-width: 0; }
+  .page-item .lbl .t { font-size: 13px; font-weight: 700; line-height: 1.2; }
+  .page-item .lbl .s { font-size: 10.5px; color: rgba(238,240,255,0.42); margin-top: 1px; }
+  .page-item.active .lbl .s { color: rgba(238,240,255,0.55); }
+
+  @media (max-width: 880px) { .pages { display: none; } }
+
+  /* per-screen fade — animate transform only, never opacity, so the resting
+     state is always visible even if the animation is throttled (e.g. the
+     iframe/tab is backgrounded and CSS animations are paused at frame 0). */
+  .scr-fade { animation: scrFade 260ms ease-out; height: 100%; width: 100%; }
+  @keyframes scrFade { from { transform: translateY(6px); } to { transform: translateY(0); } }
+
+  /* Filter-finder overlay: panel drops from the top (transform-only so the
+     end state is always visible — safe for capture, print, reduced-motion). */
+  @keyframes ffPanelDrop { from { transform: translateY(-12px); } to { transform: translateY(0); } }
+
+  /* Onboarding feed-preview rows slide in (transform only — opacity stays 1
+     so a throttled tab never leaves the feed blank). */
+  .onb-feed-row { animation: onbFeedRowIn 360ms ease-out; }
+  @keyframes onbFeedRowIn { from { transform: translateY(10px); } to { transform: translateY(0); } }
+
+  @keyframes sparked-breathe {
+    0%,100% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(255,72,72,0.55), 0 0 10px 2px rgba(255,72,72,0.55); }
+    50% { transform: scale(1.18); opacity: 0.78; box-shadow: 0 0 0 8px rgba(255,72,72,0), 0 0 14px 4px rgba(255,72,72,0.30); }
+  }
+  .sparked-live-dot { display: inline-block; width: 9px; height: 9px; background: #ff4848; border-radius: 9999px; animation: sparked-breathe 1.9s ease-in-out infinite; }
+
+  input[type="date"]::-webkit-calendar-picker-indicator { opacity: 0; position: absolute; right: 6px; width: 18px; height: 100%; cursor: pointer; }
+  input[type="date"]::-webkit-date-and-time-value { text-align: left; }
+  input::placeholder, textarea::placeholder { color: rgba(238,240,255,0.35); }
+
+  /* Non-blocking category warning: fades in, holds, fades out on its own. */
+  @keyframes ceFadeWarn { 0% { opacity: 0; transform: translateY(-4px); } 12% { opacity: 1; transform: none; } 82% { opacity: 1; } 100% { opacity: 0; transform: translateY(-2px); } }
+  /* Rich-text empty-state placeholder. */
+  [contenteditable][data-ph]:empty::before { content: attr(data-ph); color: rgba(238,240,255,0.35); pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="ui_kits/mobile-app/Components.jsx"></script>
+<script type="text/babel" src="ui_kits/mobile-app/event-stub.jsx"></script>
+<script type="text/babel" src="ui_kits/mobile-app/FilterFinder.jsx"></script>
+<script type="text/babel" src="ui_kits/mobile-app/Screens.jsx"></script>
+<script type="text/babel" src="ui_kits/mobile-app/AppScreens.jsx"></script>
+<script type="text/babel" src="ui_kits/mobile-app/Onboarding.jsx"></script>
+<script type="text/babel">
+
+// ===========================================================================
+// PAGE INDEX — every built page, in tour order. `seed` builds the nav stack
+// so in-screen back arrows stay meaningful; `funnel` entries load a web page.
+// ===========================================================================
+// YYYY-MM-DD for the coming Sunday (never same-day; Sundays get +7).
+const getNextSunday = () => {
+  const d = new Date();
+  const offset = 7 - d.getDay() || 7;
+  const sun = new Date(d.getTime() + offset * 86400000);
+  return `${sun.getFullYear()}-${String(sun.getMonth()+1).padStart(2,'0')}-${String(sun.getDate()).padStart(2,'0')}`;
+};
+
+const PAGES = [
+  // --- Mobile app ---
+  { key: 'landing',   group: 'app', t: 'Landing',        s: 'Front door · dual funnel', seed: () => [n('landing')] },
+  { key: 'pricing',   group: 'app', t: 'Plans & Pricing', s: 'Tiers + features',        seed: () => [n('landing'), n('pricing')] },
+  { key: 'auth',      group: 'app', t: 'Sign In',       s: 'Signup / login',           seed: () => [n('landing'), n('auth', { mode: 'signup' })] },
+  { key: 'ob-int',    group: 'app', t: 'Onboarding · Interests', s: 'What are you into?',  seed: () => [n('ob-interests')] },
+  { key: 'ob-block',  group: 'app', t: 'Onboarding · Block',     s: 'Anything to block?',  seed: () => [n('ob-interests'), n('ob-block')] },
+  { key: 'ob-done',   group: 'app', t: 'Onboarding · Feed Ready', s: 'Confirm + preview',  seed: () => [n('ob-interests'), n('ob-block'), n('ob-confirm')] },
+  { key: 'explore',   group: 'app', t: 'Explore',       s: 'Feed · list / map / time', seed: () => [n('explore')] },
+  { key: 'detail',    group: 'app', t: 'Event Detail',  s: 'RSVP + share',             seed: () => [n('explore'), n('detail', { event: SAMPLE_EVENTS[0] })] },
+  { key: 'me',        group: 'app', t: 'Me',            s: 'Profile hub',              seed: () => [n('me')] },
+  { key: 'saved',     group: 'app', t: 'Saved',         s: 'Bookmarked events',        seed: () => [n('me'), n('saved')] },
+  { key: 'workspace', group: 'app', t: 'Workspace',     s: 'Host surface + Backstage', seed: () => [n('me'), n('workspace')] },
+  { key: 'create',    group: 'app', t: 'Create Event',  s: 'Fork · Event or Curbside', seed: () => [n('me'), n('workspace'), n('createFork')] },
+  { key: 'popup',     group: 'app', t: 'Post a Curbside', s: 'Free mini form',          seed: () => [n('me'), n('workspace'), n('createFork'), n('createPopup')] },
+  { key: 'settings',  group: 'app', t: 'Settings',      s: 'Toggles + account',        seed: () => [n('me'), n('settings')] },
+  { key: 'interests', group: 'app', t: 'Interests & blocks', s: 'Edit feed taxonomy',    seed: () => [n('me'), n('settings'), n('interests')] },
+  { key: 'quiet',     group: 'app', t: 'Quiet hours',      s: 'Silent window + overrides', seed: () => [n('me'), n('settings'), n('quietHours')] },
+  { key: 'privacy',   group: 'app', t: 'Privacy',         s: 'Permissions + data',       seed: () => [n('me'), n('settings'), n('privacy')] },
+  { key: 'feedback',  group: 'app', t: 'Feedback',        s: 'Suggestion / issue form',  seed: () => [n('me'), n('settings'), n('feedback')] },
+  { key: 'appearance', group: 'app', t: 'Appearance',     s: 'System / Dark / Light',    seed: () => [n('me'), n('settings'), n('appearance')] },
+  { key: 'editprof',  group: 'app', t: 'Edit Profile',  s: 'Profile form',             seed: () => [n('me'), n('settings'), n('editProfile')] },
+  // --- Web landing funnels (live marketing pages) ---
+  { key: 'f-nearme',  group: 'funnel', t: '/near-me',  s: 'V1 · Discovery first', url: 'sparked.app/near-me', src: 'mockups/landings/near-me/index.html' },
+  { key: 'f-tonight', group: 'funnel', t: '/tonight',  s: "V2 · Editor's pick",   url: 'sparked.app/tonight', src: 'mockups/landings/tonight/index.html' },
+];
+function n(name, props = {}) { return { name, props }; }
+
+// Map a nav-stack top screen name → PAGES key (for active highlight + prev/next).
+const NAME_TO_KEY = {
+  landing: 'landing', auth: 'auth', explore: 'explore', detail: 'detail',
+  me: 'me', saved: 'saved', workspace: 'workspace',
+  create: 'create', createFork: 'create', createPopup: 'popup', settings: 'settings', editProfile: 'editprof', pricing: 'pricing',
+  interests: 'interests',
+  quietHours: 'quiet',
+  privacy: 'privacy',
+  feedback: 'feedback',
+  appearance: 'appearance',
+  'ob-interests': 'ob-int', 'ob-block': 'ob-block', 'ob-confirm': 'ob-done',
+};
+
+const App = () => {
+  // view: { mode: 'app', stack } | { mode: 'funnel', key }
+  const [stack, setStack] = React.useState([n('landing')]);
+  const [funnel, setFunnel] = React.useState(null); // PAGES key when a funnel is shown
+  const [animKey, setAnimKey] = React.useState(0);
+  // Onboarding picks live here so all three steps + the Explore feed share them.
+  // Seeded with sensible defaults so browsing straight to a step still previews well.
+  const [obInterests, setObInterests] = React.useState(['Markets', 'Art', 'Food', 'Community']);
+  const [obBlocks, setObBlocks] = React.useState(['Pop-Ups']);
+  const [obTown, setObTown] = React.useState('Phoenix');
+  const [obRadius, setObRadius] = React.useState(25);
+  // Notification preferences — lifted here so edits survive navigating to
+  // Interests & blocks and back, and so the fit-gate can react to interests.
+  const [notif, setNotif] = React.useState({ push: true, nearby: true, digest: true, pushNum: 1, pushUnit: 'hr', radius: 25, day: 'Friday' });
+  const patchNotif = (p) => setNotif((s) => ({ ...s, ...p }));
+  // No fit (zero interests) → Push + Nearby are forced off; when interests
+  // return they stay off (default), so the user re-enables deliberately.
+  React.useEffect(() => {
+    if (obInterests.length === 0) setNotif((s) => ({ ...s, push: false, nearby: false }));
+  }, [obInterests.length]);
+  // Quiet hours — window + late-night override, lifted so it persists on leave/return.
+  const [quiet, setQuiet] = React.useState({ start: '21:00', end: '09:00', override: 'ask' });
+  const patchQuiet = (p) => setQuiet((s) => ({ ...s, ...p }));
+  // Privacy — permission toggles, lifted so they persist on leave/return.
+  const [privacy, setPrivacy] = React.useState({ location: true, analytics: false });
+  const patchPrivacy = (p) => setPrivacy((s) => ({ ...s, ...p }));
+  // Appearance — System / Dark / Light, lifted so it persists on leave/return.
+  // System resolves live against the device's prefers-color-scheme.
+  const [appearanceMode, setAppearanceMode] = React.useState('system');
+  const [systemIsDark, setSystemIsDark] = React.useState(() =>
+    typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-color-scheme: dark)').matches : true);
+  React.useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onMq = (e) => setSystemIsDark(e.matches);
+    mq.addEventListener ? mq.addEventListener('change', onMq) : mq.addListener(onMq);
+    return () => { mq.removeEventListener ? mq.removeEventListener('change', onMq) : mq.removeListener(onMq); };
+  }, []);
+  const resolvedTheme = appearanceMode === 'system' ? (systemIsDark ? 'dark' : 'light') : appearanceMode;
+  // Account presence. Anonymous by default: browsing, event detail, and share
+  // links stay open, but the Me tab shows a signup invitation until an account
+  // exists. Set true on login / completed signup, cleared on logout.
+  const [account, setAccount] = React.useState(false);
+  // User-posted events (Pop-ups) — pinned to the top of the Explore feed.
+  const [userEvents, setUserEvents] = React.useState([]);
+  // Workspaces the signed-in host belongs to. Seeded with one (window.WORKSPACES)
+  // so Workspace opens straight in and the 2+ picker stays dormant. A non-host
+  // would have []; tapping "Create your first event" spins one up silently.
+  const [workspaces, setWorkspaces] = React.useState(window.WORKSPACES || []);
+  const _newWorkspace = () => ({ id: 'ws_' + Date.now(), name: 'My Workspace', initials: 'MW',
+    gradient: 'linear-gradient(135deg,#ff5f4e,#ff8c38,#ffca3a)', live: 0, rsvps: 0, reach: '0' });
+  // Patches the (single, seeded) workspace's public-profile fields — accepts
+  // either a plain object or an updater fn (w) => partialPatch, for fields
+  // that need the previous value (nested socials).
+  const patchWorkspace = (patch) => setWorkspaces(ws => ws.map((w, i) => i === 0 ? { ...w, ...(typeof patch === 'function' ? patch(w) : patch) } : w));
+  // Open Workspace: a host with 2+ workspaces gets the picker; otherwise straight in.
+  const openWorkspace = () => (workspaces.length >= 2 ? push('workspacePicker') : push('workspace'));
+  // Non-host create: create the workspace silently, then drop into event creation.
+  const createFirstEvent = () => { if (workspaces.length === 0) setWorkspaces([_newWorkspace()]); push('createFork'); };
+  const top = stack[stack.length - 1];
+  // Desktop create-flow — fork/wizard/checkout/pop-up drop the phone bezel
+  // entirely at ≥1024px and render full-bleed, same pattern as the web
+  // funnel pages. Below 1024px these stay in the phone frame as-is.
+  const DESKTOP_WIDE_NAMES = ['create', 'createFork', 'checkout', 'createPopup', 'workspace', 'pricing', 'organizerProfile', 'detail'];
+  const [vw, setVw] = React.useState(window.innerWidth);
+  React.useEffect(() => {
+    const onResize = () => setVw(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  const desktopWide = DESKTOP_WIDE_NAMES.includes(top.name) && vw >= 1024;
+
+  const bump = () => setAnimKey(k => k + 1);
+  const push = (name, props = {}) => { setFunnel(null); setStack(s => [...s, n(name, props)]); bump(); };
+  const pop = () => { setStack(s => s.length > 1 ? s.slice(0, -1) : s); bump(); };
+  const setRoot = (entries) => { setFunnel(null); setStack(entries); bump(); };
+  const resetTo = (name, props = {}) => setRoot([n(name, props)]);
+  // Post a Pop-up: add it to the feed and drop the user straight onto Explore.
+  const postPopup = (ev) => { setUserEvents(list => [ev, ...list]); setRoot([n('explore')]); };
+
+  const onTab = (t) => { if (t === 'home') resetTo('explore'); else if (t === 'profile') resetTo('me'); };
+
+  // Finish onboarding → land on Explore with the picks applied to the feed.
+  const finishOnboarding = () => { setAccount(true); setRoot([n('explore', { initialInterests: obInterests, blocked: obBlocks })]); };
+
+  // Navigate to a PAGES entry (from the index or prev/next).
+  const goPage = (page) => {
+    if (page.group === 'funnel') { setFunnel(page.key); bump(); }
+    else { setRoot(page.seed()); }
+  };
+
+  // Which PAGES entry is current?
+  const currentKey = funnel || NAME_TO_KEY[top.name] || null;
+  const curIndex = PAGES.findIndex(p => p.key === currentKey);
+  const goPrev = () => { if (curIndex > 0) goPage(PAGES[curIndex - 1]); };
+  const goNext = () => { if (curIndex > -1 && curIndex < PAGES.length - 1) goPage(PAGES[curIndex + 1]); };
+
+  // Keyboard arrows step through the index.
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === 'ArrowRight') { e.preventDefault(); goNext(); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); goPrev(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [curIndex]);
+
+  // Fit the 390×844 device to the viewport.
+  const [scale, setScale] = React.useState(1);
+  React.useEffect(() => {
+    const fit = () => {
+      const sideW = window.innerWidth > 880 ? 296 : 0;
+      const s = Math.min(1, (window.innerHeight - 150) / 844, (window.innerWidth - sideW - 200) / 390);
+      setScale(Math.max(0.4, s));
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, []);
+
+  const renderAppScreen = () => {
+    const p = top.props || {};
+    switch (top.name) {
+      case 'landing': {
+        const nextSun = getNextSunday();
+        return <LandingScreen
+          onSignup={() => push('auth', { mode: 'signup' })}
+          onLogin={() => push('auth', { mode: 'login' })}
+          onBrowse={() => resetTo('explore')}
+          onBrowseToday={() => resetTo('explore', { initialStart: todayLocalYMD(), initialEnd: nextSun })}
+          onBrowseWithInterest={(id) => resetTo('explore', { initialInterests: [id], initialStart: todayLocalYMD(), initialEnd: nextSun })}
+          onPricing={() => push('pricing')}
+          onEventTap={(e) => push('detail', { event: e })}
+        />;
+      }
+      case 'auth':
+        return <AuthScreen mode={p.mode}
+          onAuth={(m) => { setAccount(true); m === 'login' ? resetTo('explore') : push('ob-interests'); }}
+          onBrowse={() => resetTo('explore')} onBack={pop} />;
+      case 'ob-interests':
+        return <OnbInterestsScreen value={obInterests} onChange={setObInterests}
+          onNext={() => push('ob-block')} onSkip={() => resetTo('explore')} />;
+      case 'ob-block':
+        return <OnbBlockScreen value={obBlocks} onChange={setObBlocks} interests={obInterests}
+          onNext={() => push('ob-confirm')} onSkip={() => { setObBlocks([]); push('ob-confirm'); }} />;
+      case 'ob-confirm':
+        return <OnbConfirmScreen interests={obInterests} blocks={obBlocks}
+          town={obTown} radius={obRadius} onTownChange={setObTown} onRadiusChange={setObRadius}
+          onStart={finishOnboarding} onBack={pop} />;
+      case 'explore':
+        return <ExploreScreen initialInterests={p.initialInterests} initialStart={p.initialStart} initialEnd={p.initialEnd} blocked={p.blocked} userEvents={userEvents}
+          onSelect={(e) => push('detail', { event: e })} onTab={onTab} />;
+      case 'detail':
+        return <EventDetailScreen desktop={desktopWide} event={p.event} onBack={pop} onOrganizerTap={() => push('organizerProfile', { workspace: workspaces[0] || window.WORKSPACES?.[0] })} onRSVP={(e) => push('confirm', {
+          icon: 'check', title: "You're going!",
+          body: `We saved your spot for ${e.title}. We'll remind you before it starts.`,
+          primaryLabel: 'Back to event', onPrimary: pop,
+          secondaryLabel: 'Find more events', onSecondary: () => resetTo('explore'),
+        })} />;
+      case 'me':
+        return <MeScreen signedIn={account} workspaces={workspaces}
+          onSignup={() => push('auth', { mode: 'signup' })} onLogin={() => push('auth', { mode: 'login' })}
+          onOpenSaved={() => push('saved')} onOpenWorkspace={openWorkspace} onCreateFirst={createFirstEvent} onSettings={() => push('settings')} onTab={onTab} />;
+      case 'saved':
+        return <SavedScreen onBack={pop} onSelect={(e) => push('detail', { event: e })} onTab={onTab} />;
+      case 'workspace':
+        return <WorkspaceScreen desktop={desktopWide} onBack={pop} onCreate={() => push('createFork')} onEditProfile={() => push('editOrganizerProfile')} onSelectEvent={(e) => push('detail', { event: e })} onViewProfile={() => push('organizerProfile', { workspace: workspaces[0] || window.WORKSPACES?.[0] })} onTab={onTab} />;
+      case 'editOrganizerProfile':
+        return <EditOrganizerProfileScreen workspace={workspaces[0] || window.WORKSPACES?.[0]} onBack={pop} onChange={patchWorkspace} onPreview={() => push('organizerProfile', { workspace: workspaces[0] || window.WORKSPACES?.[0] })} onTab={onTab} />;
+      case 'organizerProfile':
+        return <OrganizerProfileScreen desktop={desktopWide} workspace={p.workspace} onBack={pop} onSelect={(e) => push('detail', { event: e })} onTab={onTab} />;
+      case 'workspacePicker':
+        return <WorkspacePickerScreen workspaces={workspaces} onBack={pop} onTab={onTab}
+          onPick={() => push('workspace')}
+          onCreate={() => { setWorkspaces(ws => [...ws, _newWorkspace()]); push('createFork'); }} />;
+      case 'create':
+        return <CreateEventScreen desktop={desktopWide} onBack={pop} onCheckout={(order) => push('checkout', { order })} />;
+      case 'createFork':
+        return <CreateForkScreen desktop={desktopWide} onBack={pop} onPickEvent={() => push('create')} onPickPopup={() => push('createPopup')} />;
+      case 'createPopup':
+        return <CreatePopupScreen desktop={desktopWide} onBack={pop} onPost={postPopup} />;
+      case 'checkout':
+        return <CheckoutScreen desktop={desktopWide} order={p.order} onBack={pop}
+          onPaid={() => setStack([n('me'), n('workspace'), n('confirm', {
+            icon: 'check', title: 'Payment complete!',
+            body: `“${p.order.title}” is now live and discoverable near you.`,
+            primaryLabel: 'View in Workspace', onPrimary: pop,
+            secondaryLabel: 'Create another', onSecondary: () => push('createFork'),
+          })])} />;
+      case 'confirm':
+        return <ConfirmScreen icon={p.icon} title={p.title} body={p.body} primaryLabel={p.primaryLabel} onPrimary={p.onPrimary} secondaryLabel={p.secondaryLabel} onSecondary={p.onSecondary} />;
+      case 'settings':
+        return <SettingsScreen onBack={pop} onEditProfile={() => push('editProfile')} onInterests={() => push('interests')} interests={obInterests} notif={notif} onNotifChange={patchNotif} quiet={quiet} onQuietHours={() => push('quietHours')} onPrivacy={() => push('privacy')} onFeedback={() => push('feedback')} onAppearance={() => push('appearance')} onLogout={() => { setAccount(false); resetTo('landing'); }} />;
+      case 'interests':
+        return <InterestsBlocksScreen interests={obInterests} blocks={obBlocks}
+          onInterestsChange={setObInterests} onBlocksChange={setObBlocks} onBack={pop} />;
+      case 'quietHours':
+        return <QuietHoursScreen onBack={pop} quiet={quiet} onChange={patchQuiet} />;
+      case 'privacy':
+        return <PrivacyScreen onBack={pop} privacy={privacy} onChange={patchPrivacy} />;
+      case 'feedback':
+        return <FeedbackScreen onBack={pop} />;
+      case 'appearance':
+        return <AppearanceScreen onBack={pop} mode={appearanceMode} onChange={setAppearanceMode} />;
+      case 'editProfile':
+        return <EditProfileScreen onBack={pop} onSave={pop} onGoWorkspace={openWorkspace} />;
+      case 'pricing':
+        return <PricingScreen desktop={desktopWide} onBack={pop} onGetStarted={() => push('auth', { mode: 'signup' })} />;
+      default: return null;
+    }
+  };
+
+  const funnelPage = funnel ? PAGES.find(p => p.key === funnel) : null;
+  const pillName = funnelPage ? funnelPage.t : (PAGES[curIndex] ? PAGES[curIndex].t : top.name);
+
+  return (
+    <div className="shell">
+      {/* Center stage */}
+      <div className={'main' + (desktopWide ? ' main--wide' : '')}>
+        <div className="screen-pill" data-screen-label={pillName}>
+          <span className="dot"></span>
+          <span className="name">{pillName}</span>
+          {curIndex > -1 && <span className="count">{String(curIndex + 1).padStart(2, '0')} / {String(PAGES.length).padStart(2, '0')}</span>}
+        </div>
+
+        <div className="device-row">
+          <button className="nav-btn" aria-label="Previous page" onClick={goPrev} disabled={curIndex <= 0}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+
+          <div style={desktopWide ? { width: '100%', minHeight: 'calc(100vh - 160px)' } : { transform: `scale(${scale})`, transformOrigin: 'center center' }}>
+            {funnelPage ? (
+              <div className="funnel-frame">
+                <div className="funnel-urlbar">
+                  <Icon name="globe" size={13} color="#FCA311" />
+                  <span className="url"><Icon name="lock" size={10} color="rgba(238,240,255,0.45)" /> <b>{funnelPage.url}</b></span>
+                </div>
+                <iframe key={funnelPage.key} src={funnelPage.src} title={funnelPage.t}></iframe>
+              </div>
+            ) : desktopWide ? (
+              <div style={{ ...APP_THEME_VARS[resolvedTheme], width: '100%', minHeight: '100%', overflow: 'visible', background: 'var(--app-bg)', borderRadius: 20, boxShadow: '0 20px 60px rgba(0,0,0,0.35)' }}>
+                <div key={animKey} className="scr-fade">{renderAppScreen()}</div>
+              </div>
+            ) : (
+              <PhoneFrame theme={resolvedTheme}>
+                <div key={animKey} className="scr-fade">{renderAppScreen()}</div>
+              </PhoneFrame>
+            )}
+          </div>
+
+          <button className="nav-btn" aria-label="Next page" onClick={goNext} disabled={curIndex === -1 || curIndex >= PAGES.length - 1}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+
+        <div className="kbd-hint"><kbd>←</kbd><kbd>→</kbd> step · tap inside to explore freely</div>
+      </div>
+
+      {/* Right page index */}
+      <div className="pages">
+        <div className="brand">
+          <img src="assets/sparked-icon.svg" width="18" height="24" alt="" />
+          <span className="mark">Sparked</span>
+        </div>
+        <div className="tag">Interactive prototype</div>
+        <div>
+          <button className="restart" onClick={() => setRoot([n('landing')])}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+            Restart
+          </button>
+        </div>
+
+        {['app', 'funnel'].map(grp => (
+          <div key={grp}>
+            <div className="grp-label">
+              {grp === 'app' ? 'Mobile App' : 'Landing Funnels · Web'}
+              <span className="ln"></span>
+            </div>
+            {PAGES.map((p, i) => p.group === grp && (
+              <button key={p.key} className={'page-item' + (p.key === currentKey ? ' active' : '')} onClick={() => goPage(p)}>
+                <span className="idx">{String(i + 1).padStart(2, '0')}</span>
+                <span className="lbl">
+                  <span className="t">{p.t}</span>
+                  <span className="s">{p.s}</span>
+                </span>
+                {p.group === 'funnel' && <Icon name="globe" size={13} color={p.key === currentKey ? '#FCA311' : 'rgba(238,240,255,0.35)'} />}
+              </button>
+            ))}
+          </div>
+        ))}
+
+        <div style={{ fontSize: 11, lineHeight: 1.6, color: 'rgba(238,240,255,0.40)', marginTop: 24, fontWeight: 500 }}>
+          Every screen scrolls. Tap cards, tabs, search, and forms to move around — or step through with the arrows.
+        </div>
+      </div>
+    </div>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

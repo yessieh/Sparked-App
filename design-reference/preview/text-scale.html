@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Colors" name="Text Color Scale" subtitle="100/50/25 ladder + eyebrow + gold link" viewport="700x280" -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Text Scale</title>
+<link rel="stylesheet" href="_base.css">
+<style>
+  .row { gap: 0; flex-direction: column; }
+  .row > div {
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding: 14px 16px; border-radius: 12px; gap: 16px;
+  }
+  .row > div + div { margin-top: 8px; }
+  .sample { font-size: 14px; }
+  .meta { font-family: ui-monospace, Menlo, monospace; font-size: 10px; color: var(--muted-text); white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="row">
+    <div style="background: rgba(255,255,255,0.03)">
+      <span class="sample" style="color:#eef0ff">Aa — Primary, headings & body</span>
+      <span class="meta">#EEF0FF · 100%</span>
+    </div>
+    <div style="background: rgba(255,255,255,0.03)">
+      <span class="sample" style="color:rgba(238,240,255,0.50)">Aa — Muted, descriptions & 2°</span>
+      <span class="meta">#EEF0FF · 50%</span>
+    </div>
+    <div style="background: rgba(255,255,255,0.03)">
+      <span class="sample" style="color:rgba(238,240,255,0.25)">Aa — Hint, placeholders & "or"</span>
+      <span class="meta">#EEF0FF · 25%</span>
+    </div>
+    <div style="background: rgba(255,255,255,0.03)">
+      <span class="sample" style="color:#FCA311; font-weight:900; text-transform:uppercase; letter-spacing:0.20em; font-size:11px">Eyebrow — Bright Orange</span>
+      <span class="meta">#FCA311</span>
+    </div>
+    <div style="background: rgba(255,255,255,0.03)">
+      <span class="sample" style="color:#F7B731; font-weight:700">Gold — link / stat</span>
+      <span class="meta">#F7B731</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

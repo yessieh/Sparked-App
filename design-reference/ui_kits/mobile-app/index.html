@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<!-- @dsCard group="UI Kit — Mobile App" name="Mobile App UI Kit" subtitle="Click-thru: Landing → Explore → Event Detail + Workspace demo" viewport="1480x1100" -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sparked · Mobile App UI Kit</title>
+<link rel="stylesheet" href="../../colors_and_type.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #0a0f1c; color: #eef0ff; font-family: 'Inter', sans-serif; }
+  .stage { padding: 60px 40px; min-height: 100vh; }
+  h1.kit-title { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 36px; margin: 0 0 8px; letter-spacing: -0.01em; }
+  .kit-sub { color: rgba(238,240,255,0.55); margin: 0 0 40px; font-size: 14px; max-width: 600px; line-height: 1.6; }
+  .row {
+    display: flex; gap: 60px; flex-wrap: wrap; align-items: flex-start;
+  }
+  ::-webkit-scrollbar { display: none; }
+
+  /* Live dot — slow, breathing pulse */
+  @keyframes sparked-breathe {
+    0%, 100% { transform: scale(1);   opacity: 1;   box-shadow: 0 0 0 0    rgba(255,72,72,0.55), 0 0 10px 2px rgba(255,72,72,0.55); }
+    50%      { transform: scale(1.18); opacity: 0.78; box-shadow: 0 0 0 8px rgba(255,72,72,0),    0 0 14px 4px rgba(255,72,72,0.30); }
+  }
+  .sparked-live-dot {
+    display: inline-block; width: 9px; height: 9px;
+    background: #ff4848; border-radius: 9999px;
+    animation: sparked-breathe 1.9s ease-in-out infinite;
+  }
+</style>
+</head>
+<body>
+<div id="root" class="stage"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="Components.jsx"></script>
+<script type="text/babel" src="Screens.jsx"></script>
+<script type="text/babel">
+
+const App = () => {
+  const [route, setRoute] = React.useState('landing');
+  const [event, setEvent] = React.useState(null);
+
+  const goTo = (r) => setRoute(r);
+
+  return (
+    <>
+      <h1 className="kit-title">Sparked · Mobile App</h1>
+      <p className="kit-sub">Click-thru prototype: tap <strong>Browse Local Events</strong> on the landing screen, then any event card to drill in. The middle phone shows the new <strong>Me</strong> tab with Saved + Workspace + Backstage demo. Fake data, real components.</p>
+      <div className="row" data-screen-label="01 Sparked Mobile">
+        <PhoneFrame label="Landing → Explore">
+          {route === 'landing' && <LandingScreen onSignup={() => goTo('me')} onBrowse={() => goTo('explore')} />}
+          {route === 'explore' && <ExploreScreen onSelect={(e) => { setEvent(e); goTo('detail'); }} onCreate={() => goTo('me')} />}
+          {route === 'detail' && event && <EventDetailScreen event={event} onBack={() => goTo('explore')} />}
+          {route === 'me' && <MeScreen onOpenSaved={() => goTo('saved')} onOpenWorkspace={() => goTo('workspace')} />}
+          {route === 'saved' && <SavedScreen onBack={() => goTo('me')} onSelect={(e) => { setEvent(e); goTo('detail'); }} />}
+          {route === 'workspace' && <WorkspaceScreen onBack={() => goTo('me')} />}
+        </PhoneFrame>
+        <PhoneFrame label="Me · default">
+          <MeScreen onOpenSaved={() => {}} onOpenWorkspace={() => {}} />
+        </PhoneFrame>
+        <PhoneFrame label="Workspace · with Backstage">
+          <WorkspaceScreen onBack={() => {}} />
+        </PhoneFrame>
+      </div>
+    </>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Colors" name="Dark Surfaces" subtitle="Page bg, deep navy, glass + hover layers" viewport="700x270" -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dark Surfaces</title>
+<link rel="stylesheet" href="_base.css">
+<style>
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .swatch .chip { height: 72px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="grid">
+    <div class="swatch">
+      <div class="chip" style="background:#14213D"></div>
+      <div class="name">Page bg</div><div class="hex">#14213D</div>
+    </div>
+    <div class="swatch">
+      <div class="chip" style="background:#0f1a30"></div>
+      <div class="name">Surface 1 alt</div><div class="hex">#0F1A30</div>
+    </div>
+    <div class="swatch">
+      <div class="chip" style="background:#192847"></div>
+      <div class="name">Surface 1</div><div class="hex">#192847</div>
+    </div>
+    <div class="swatch">
+      <div class="chip" style="background: rgba(255,255,255,0.03); backdrop-filter: blur(12px); background-image: linear-gradient(rgba(255,255,255,0.03), rgba(255,255,255,0.03)), linear-gradient(135deg,#192847,#14213D)"></div>
+      <div class="name">Glass card</div><div class="hex">rgba(255,255,255, .03)</div>
+    </div>
+    <div class="swatch">
+      <div class="chip" style="background: rgba(255,255,255,0.05); background-image: linear-gradient(rgba(255,255,255,0.05), rgba(255,255,255,0.05)), linear-gradient(135deg,#192847,#14213D)"></div>
+      <div class="name">Surface 3</div><div class="hex">rgba(255,255,255, .05)</div>
+    </div>
+    <div class="swatch">
+      <div class="chip" style="background: rgba(255,255,255,0.10); background-image: linear-gradient(rgba(255,255,255,0.10), rgba(255,255,255,0.10)), linear-gradient(135deg,#192847,#14213D)"></div>
+      <div class="name">Hover</div><div class="hex">rgba(255,255,255, .10)</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

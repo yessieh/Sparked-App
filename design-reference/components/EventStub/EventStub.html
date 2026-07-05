@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Components" name="Event Stub" subtitle="Universal ticket-stub event card · photo + compact variants" viewport="900x560" -->
+<html lang="en"><head><meta charset="UTF-8"><title>Event Stub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Montserrat:wght@700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: #14213D; font-family: 'Inter', sans-serif; padding: 30px; color: #eef0ff; }
+  .wrap { display: flex; gap: 30px; align-items: flex-start; max-width: 840px; margin: 0 auto; }
+  .col { flex: 1; min-width: 0; }
+  .eyebrow { font-size: 10px; font-weight: 900; letter-spacing: 0.22em; text-transform: uppercase; color: #FCA311; margin-bottom: 4px; }
+  .vtitle { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 15px; color: #fff; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .vsub { font-size: 11.5px; color: rgba(238,240,255,0.50); line-height: 1.5; margin: 0 0 16px; }
+
+  .stub { display: flex; align-items: stretch; background: rgba(255,255,255,0.03); border: 1px solid rgba(238,240,255,0.10); border-radius: 24px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.20); }
+  .stripe { width: 5px; flex-shrink: 0; background: linear-gradient(180deg,#ff6348,#FCA311,#F7B731); }
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .photo { height: 150px; position: relative; }
+  .photo .fade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(20,33,61,0.78), transparent 60%); }
+  .pill { display: inline-flex; align-items: center; padding: 4px 9px; border-radius: 9999px; background: rgba(15,26,48,0.72); border: 1px solid rgba(252,163,17,0.30); font-size: 9px; font-weight: 900; letter-spacing: 0.14em; color: #FCA311; white-space: nowrap; }
+  .price { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 9999px; background: rgba(15,26,48,0.72); border: 1px solid rgba(255,255,255,0.16); font-size: 11px; font-weight: 800; color: #fff; }
+  .footer { display: flex; align-items: stretch; }
+  .info { flex: 1; min-width: 0; padding: 13px 15px; }
+  .info h3 { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 18px; letter-spacing: -0.01em; margin: 0; line-height: 1.12; color: #eef0ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 11.5px; color: rgba(238,240,255,0.60); }
+  .meta svg.cal, .meta svg.clk { color: #ff6348; }
+  .meta svg.pin { color: #FCA311; }
+  .perf { position: relative; width: 2px; align-self: stretch; margin: 12px 0; display: flex; justify-content: center; }
+  .perf .line { width: 0; border-left: 2px dotted rgba(238,240,255,0.22); height: 100%; }
+  .perf .notch { position: absolute; left: 50%; transform: translateX(-50%); width: 14px; height: 14px; border-radius: 50%; background: #14213D; }
+  .perf .notch.t { top: -18px; } .perf .notch.b { bottom: -18px; }
+  .util { width: 84px; flex-shrink: 0; padding: 12px 8px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: 12px; text-align: center; }
+  .util.center { justify-content: center; }
+  .cd-val { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 22px; line-height: 1; color: #FCA311; }
+  .cd-label { font-size: 8px; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(238,240,255,0.45); margin-top: 5px; line-height: 1.3; white-space: nowrap; }
+  .cd-sub { font-size: 8px; color: rgba(238,240,255,0.40); margin-top: 4px; white-space: nowrap; }
+  .acts { display: flex; gap: 6px; }
+  .acts button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 9px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12); color: #fff; cursor: pointer; }
+  .status { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 9999px; background: rgba(252,163,17,0.12); border: 1px solid rgba(252,163,17,0.32); font-size: 10.5px; font-weight: 800; color: #FCA311; }
+  .rsvp { font-size: 11px; color: rgba(238,240,255,0.45); }
+  .legend { font-size: 11px; color: rgba(238,240,255,0.45); line-height: 1.6; margin-top: 16px; }
+  .legend b { color: rgba(238,240,255,0.75); font-weight: 800; }
+</style></head>
+<body>
+<div class="wrap">
+  <!-- PHOTO variant — Explore -->
+  <div class="col">
+    <div class="eyebrow">Explore</div>
+    <div class="vtitle">variant="photo"</div>
+    <div class="vsub">Photo sells the unknown. Stripe runs full height; perforation + utility column carry over.</div>
+    <div class="stub">
+      <div class="stripe"></div>
+      <div class="main">
+        <div class="photo" style="background: linear-gradient(135deg,#5b3220,#a8551d 60%,#e09c3a);">
+          <div class="fade"></div>
+          <span class="pill" style="position:absolute;top:12px;left:12px;">ART · COMMUNITY</span>
+          <span class="price" style="position:absolute;top:12px;right:12px;">Free</span>
+        </div>
+        <div class="footer">
+          <div class="info">
+            <h3>Art Walk Downtown</h3>
+            <div class="meta"><svg class="cal" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><span>Today, May 8 · 6:00 – 9:00pm</span></div>
+            <div class="meta"><svg class="pin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg><span>Downtown Arts District · 1.2 mi</span></div>
+          </div>
+          <div class="perf"><div class="notch t"></div><div class="line"></div><div class="notch b"></div></div>
+          <div class="util">
+            <div><div class="cd-val">4h</div><div class="cd-label">Starts in</div><div class="cd-sub">6pm</div></div>
+            <div class="acts">
+              <button aria-label="Save"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
+              <button aria-label="Share"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMPACT variant — Saved -->
+  <div class="col">
+    <div class="eyebrow" style="color:#ff8c38;">Saved / Me</div>
+    <div class="vtitle">variant="compact"</div>
+    <div class="vsub">You already know this event. No photo — logistics, status, and countdown lead.</div>
+    <div class="stub">
+      <div class="stripe"></div>
+      <div class="info">
+        <span class="pill">ART · COMMUNITY</span>
+        <h3 style="margin-top:9px;">Art Walk Downtown</h3>
+        <div class="meta"><svg class="clk" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span>6:00 – 9:00pm</span></div>
+        <div class="meta"><svg class="pin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg><span>Downtown Arts District</span></div>
+        <div style="display:flex;align-items:center;gap:9px;margin-top:10px;">
+          <span class="status"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>Going</span>
+          <span class="rsvp">84 RSVPs</span>
+        </div>
+      </div>
+      <div class="perf"><div class="notch t"></div><div class="line"></div><div class="notch b"></div></div>
+      <div class="util center">
+        <div><div class="cd-val">4h</div><div class="cd-label">Starts in</div><div class="cd-sub">6pm</div></div>
+      </div>
+    </div>
+    <div class="legend">
+      <b>Shared anatomy:</b> left stripe · perforated divider · right utility column with a live countdown.<br>
+      <b>Stripe</b> is a single brand bar (no category color, no green). <b>Price</b> shows top-right ("Free" / "$5"). Perforation is reserved for events.
+    </div>
+  </div>
+</div>
+</body></html>
