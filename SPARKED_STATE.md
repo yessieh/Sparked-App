@@ -79,9 +79,15 @@ Constant across ALL variants:
   the EventStub displays consumer-facing data only (also applies to the public
   Organizer Profile).
 - **Value binding:** card price reads `entryFee` (attendee fee), NOT the derived
-  publish `price`. Gotcha found: binding was gated on `isPlus`, zeroing the fee
-  on Standard events. Entry fee renders on any tier where paid entry is on.
-  (Entry-fee tier gating decision still open — see tracker.)
+  publish `price`. **DECIDED: entry-fee display is ALL-TIER** (customer trust —
+  a Standard event charging at the door must not imply "free"). The prototype's
+  `isPlus &&` gate (AppScreens.jsx:404, :1009) is a KNOWN BUG in frozen
+  reference — production ignores it. Plus differentiates via gallery + site
+  map/vendors.
+- **Stripe rule (DECIDED):** the card stripe is the CATEGORY COLOR on ALL
+  variants. The prototype's gradient stripe (photo variant, Event Detail,
+  EventStub.tsx) was undecided drift — production removes ALL decorative
+  gradients; gradient = actionable only.
 - **Free state:** green semantic pill ("Free" + ticket icon). `#4ade80`
   (light mode: `#16a34a`), never gradient.
 - **Paid state:** inline "$N per person" — `$` ICON green `#4ade80`, amount text
@@ -279,6 +285,33 @@ Create Event's tier step (per-day model is DEAD everywhere):
   "Cancelled" stamp. Advance cancellations vanish from the feed by event day; SAME-DAY
   cancellations stay visible (greyed) so day-of attendees aren't confused.
 - Cancellation must notify bookmarked/RSVP'd users (push/email) — Code stage.
+
+## SCHEMA LOCKS (from the Code-stage conflict report — production rules; prototype is frozen reference and its bugs are IGNORED)
+
+1. **entry_fee vs publish_fee are distinct columns.** Never one `price` field —
+   the prototype overloads `price` two ways (feed events = entry fee; wizard =
+   publish fee). Card/profile surfaces only ever read `entry_fee`.
+2. **Curbside tier id = `curbside`** (prototype still uses `popup` — do not carry
+   it into the schema; the consumer category "Pop-Ups" continues to exist
+   separately).
+3. **events.workspace_id is a foreign key.** Organizer display name is DERIVED
+   from the workspace — never a free-text string on the event (prototype's
+   organizer strings are a demo shim; sample data even mismatches ws_aurora).
+4. **One canonical category taxonomy** feeding Create Event, Explore filters,
+   Settings interests, onboarding. Prototype drift to fix in production: 'Live'
+   is not a category (kill it); Explore's 9-item INTERESTS list vs the 13-item
+   CREATE_CATEGORIES is the exact divergence that breaks fit-matching.
+5. **All display dates/times derive from the single UTC `starts_at`.** The
+   prototype's hardcoded `date`/`time` strings alongside startISO are a demo shim
+   (same trap class as the hardcoded `mi` field).
+6. **Curbside category color: NOT green** (green stays semantic-only for
+   free/going/confirmed; prototype's `Curbside: '#4ade80'` violates this — pick a
+   distinct hue at Code stage; give Outdoors' lime a squint at the same time).
+7. **Backstage is NOT a pricing tier.** It's a demand-capture teaser card,
+   deliberately outside PRICING_TIERS. Copy spec (LOCKED): vague deliverables —
+   "We're building new event and collaboration tools for teams and audiences."
+   REMOVE all AR references for now. Keep the interest/beta checkboxes and ADD a
+   suggestion box (free-text) under them to collect feedback on this growth area.
 
 ## SCREENS ADDED SINCE THE TABLE ABOVE (all Design-proven)
 - **Organizer Profile (public, workspace-owned):** logo/name/bio/location, website + social

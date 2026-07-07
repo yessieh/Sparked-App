@@ -66,9 +66,9 @@ and verified in Cursor/Claude Code.
       bound to its own state, each opening a picker; End ≥ Start. Demo gate:
       show a date actually changing.
 - [ ] **Real image uploads** — cover, gallery, vendor logos (Supabase Storage).
-- [ ] **Entry-fee tier gating** — confirm whether attendee entry fee is
-      Plus-only or all-tier. Prototype currently displays it all-tier; the
-      earlier `isPlus` gate was a display bug. Lock the intended rule.
+- [ ] **Entry-fee display: RESOLVED — ALL-TIER.** Any tier with paid entry on
+      shows the fee. The prototype's `isPlus` gate is a known frozen-reference
+      bug (AppScreens.jsx:404, :1009) — production ignores it.
 - [ ] **Share button** (device share sheet).
 - [ ] **Gallery swipe + social links rendering** on Review.
 - [ ] **Published events appear in Workspace** (real write + read-back).
