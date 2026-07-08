@@ -52,7 +52,14 @@ or ts script), never a migration.
 ## 3. Migration 0001 — core spine
 
 ### 3.0 Extensions & helpers
-- `create extension if not exists postgis;` (SCHEMA LOCK: geo in migration 1)
+- `create extension postgis with schema extensions;` (SCHEMA LOCK: geo in
+  migration 1). **Never install PostGIS into `public`** — its
+  `spatial_ref_sys` table is extension-owned (can't RLS/revoke it) and picks
+  up blanket grants there, exposing it read-write through the Data API.
+  Applied as migration 0003 after 0001 installed it bare.
+  **search_path rule:** any SQL function that calls PostGIS (the feed RPC,
+  distance computations) must set `search_path = public, extensions`, or the
+  geography types/functions won't resolve.
 - `pgcrypto` if needed for `gen_random_uuid()` (built-in ≥ PG13, include guard).
 - `app` schema for helper functions; `app.is_member(...)` (§1.6),
   `app.set_updated_at()` trigger fn.
