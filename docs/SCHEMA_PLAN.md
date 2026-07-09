@@ -420,6 +420,12 @@ decision, the column ships here).
 6. **`description` as markdown text** — bold/italic/bullets only; sanitization
    is an app/edge concern. A JSON rich-text AST would be stricter but heavier
    than three formatting marks justify.
+7. **Accepted advisor noise (do not re-litigate):** the two security-advisor
+   warnings on `public.rls_auto_enable()` ("Public/Signed-In Users Can Execute
+   SECURITY DEFINER Function") are Supabase platform noise — it returns
+   `event_trigger`, which Postgres cannot invoke directly (verified: anon RPC
+   → `0A000`), and its body only ever ENABLES RLS on new public tables from
+   DDL-event context. Inert for any client; leave it alone.
 
 ---
 
