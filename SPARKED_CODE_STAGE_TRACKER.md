@@ -116,10 +116,12 @@ and verified in Cursor/Claude Code.
       expect stragglers.
 - [ ] **Cold-start empty state** (if not closed in Design) — feed + funnels.
 - [ ] **Pre-launch: full Security Advisor sweep**, resolve or document every
-      warning (baseline: 0 errors / 2 accepted, see SCHEMA_PLAN §10.7).
-- [ ] **Enable leaked-password protection** (Auth → Passwords, HaveIBeenPwned
-      check; may be Pro-gated) when auth lands at stage 4. Advisor flags it
-      since the first auth.users row (dev seed); moot until signup exists.
+      warning (baseline: 0 errors / 3 accepted, see SCHEMA_PLAN §10.7).
+- [x] **Leaked-password protection: DECIDED — deferred to launch prep.**
+      Confirmed Pro-gated (2026-07-09: toggle save silently rejected on Free;
+      advisor badge stays DISABLED). Documented as the third accepted advisor
+      warning. Enable it with the launch-prep Pro upgrade (folds into the
+      pre-launch advisor sweep above), restoring baseline to 0 / 2 accepted.
 
 ## GEO / MAPS (carried from prior state doc)
 

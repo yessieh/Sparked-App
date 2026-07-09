@@ -426,6 +426,12 @@ decision, the column ships here).
    `event_trigger`, which Postgres cannot invoke directly (verified: anon RPC
    → `0A000`), and its body only ever ENABLES RLS on new public tables from
    DDL-event context. Inert for any client; leave it alone.
+   **Third accepted warning (2026-07-09): "Leaked Password Protection
+   Disabled."** The HaveIBeenPwned check is Pro-plan-gated (verified: toggle
+   save silently rejected on Free — badge stays DISABLED). DECIDED: defer;
+   enable it with the launch-prep Pro upgrade, at which point the baseline
+   returns to 0 errors / 2 accepted. Current baseline: **0 errors / 3
+   accepted warnings.**
 
 ---
 

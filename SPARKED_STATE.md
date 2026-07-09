@@ -323,7 +323,9 @@ Create Event's tier step (per-day model is DEAD everywhere):
 
 **Applied migrations (Sparked-App project):** 0001 core spine (+0002 grants),
 0003 PostGIS → extensions schema, 0004 search_path pin. Advisor baseline:
-0 errors / 2 accepted platform warnings (SCHEMA_PLAN §10.7).
+0 errors / 3 accepted warnings (SCHEMA_PLAN §10.7 — two rls_auto_enable
+platform warnings + leaked-password protection, Pro-gated on the Free plan;
+DECIDED 2026-07-09: enable with the launch-prep Pro upgrade).
 
 ## SCREENS ADDED SINCE THE TABLE ABOVE (all Design-proven)
 - **Organizer Profile (public, workspace-owned):** logo/name/bio/location, website + social
