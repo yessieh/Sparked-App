@@ -117,6 +117,15 @@ and verified in Cursor/Claude Code.
 - [ ] **Cold-start empty state** (if not closed in Design) — feed + funnels.
 - [ ] **Pre-launch: full Security Advisor sweep**, resolve or document every
       warning (baseline: 0 errors / 3 accepted, see SCHEMA_PLAN §10.7).
+- [ ] **Transfer Supabase project to business-email org — MUST precede the
+      Pro upgrade** (billing attaches to the org, not the project). Built-in
+      transfer, zero downtime. Prep: create the business-email Supabase
+      account/org anytime.
+- [ ] **Google Cloud cleanup:** delete the Firebase browser key +
+      firebase-adminsdk service account from `sparked-dedd9` (old-rendition
+      residue) — after confirming the old build is fully dead. Store accounts
+      (Apple / Google Play) register under the business identity — decide
+      business structure before enrollment.
 - [x] **Leaked-password protection: DECIDED — deferred to launch prep.**
       Confirmed Pro-gated (2026-07-09: toggle save silently rejected on Free;
       advisor badge stays DISABLED). Documented as the third accepted advisor
