@@ -327,6 +327,16 @@ Create Event's tier step (per-day model is DEAD everywhere):
 platform warnings + leaked-password protection, Pro-gated on the Free plan;
 DECIDED 2026-07-09: enable with the launch-prep Pro upgrade).
 
+**Auth backend configured (2026-07-09, dashboard only — no app code):**
+email confirmations ON; Google OAuth provider ENABLED (GCP web client,
+callback `<project>.supabase.co/auth/v1/callback`; secret lives only in the
+dashboard, never in repo/chat); redirect allowlist = `sparked://**` (app.json
+scheme, standalone builds), `exp://127.0.0.1:8081/--/**` +
+`exp://192.168.*.*:8081/--/**` (Expo Go dev), `http://localhost:8081/**`
+(Expo web dev). Rate limits left at defaults — NOTE: built-in mailer caps at
+2 emails/hr until custom SMTP lands with the email-provider pick. App-side
+auth (login screen, session handling, profile rows) = next session.
+
 ## SCREENS ADDED SINCE THE TABLE ABOVE (all Design-proven)
 - **Organizer Profile (public, workspace-owned):** logo/name/bio/location, website + social
   buttons (secondary outline, not gradient), upcoming events as bookmarkable compact EventStubs,
