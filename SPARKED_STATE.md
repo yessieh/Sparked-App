@@ -312,6 +312,18 @@ Create Event's tier step (per-day model is DEAD everywhere):
    "We're building new event and collaboration tools for teams and audiences."
    REMOVE all AR references for now. Keep the interest/beta checkboxes and ADD a
    suggestion box (free-text) under them to collect feedback on this growth area.
+8. **saves + rsvps = two independent tables** (an event can be saved AND going
+   at once). Pattern rule that decided it: STORE what only transactions change
+   (rsvp_count via trigger), COMPUTE what time changes (curbside quota =
+   trailing-100-day count). See SCHEMA_PLAN §11.
+9. **Extensions install `with schema extensions` — never public.** PostGIS in
+   public exposed spatial_ref_sys read-write through the Data API
+   (extension-owned: can't RLS/revoke it). Fixed by relocation in 0003;
+   applies to every future extension.
+
+**Applied migrations (Sparked-App project):** 0001 core spine (+0002 grants),
+0003 PostGIS → extensions schema, 0004 search_path pin. Advisor baseline:
+0 errors / 2 accepted platform warnings (SCHEMA_PLAN §10.7).
 
 ## SCREENS ADDED SINCE THE TABLE ABOVE (all Design-proven)
 - **Organizer Profile (public, workspace-owned):** logo/name/bio/location, website + social
@@ -348,7 +360,11 @@ Create Event's tier step (per-day model is DEAD everywhere):
 1. **Remaining funnel variants** (7 of 9) from the shared template.
 2. **Cold-start empty state** — feed + funnels with zero events in radius (the most common
    real screen at launch; matters MOST on the web funnels).
-3. **Roadmap (NOT MVP):** teams/roles/task assignment + Backstage permissions (covers the
+3. **Apple Developer enrollment — start WEEKS before App Store submission.**
+   Identity verification (and D-U-N-S if enrolling as an organization) has
+   multi-week lead time; it gates TestFlight and EAS iOS builds. Kick it off
+   early, it runs in parallel with build work.
+4. **Roadmap (NOT MVP):** teams/roles/task assignment + Backstage permissions (covers the
    multi-business social-manager persona); multi-workspace richness; account handoff;
    advertising content (distinct card anatomy, always "Sponsored"); consumer
    momentum/light-gamification (deferred — contradicts "no algorithm"; NO streaks);

@@ -115,6 +115,8 @@ and verified in Cursor/Claude Code.
 - [ ] **Light-mode QA sweep** on real devices — token conversion was 3-pass;
       expect stragglers.
 - [ ] **Cold-start empty state** (if not closed in Design) — feed + funnels.
+- [ ] **Pre-launch: full Security Advisor sweep**, resolve or document every
+      warning (baseline: 0 errors / 2 accepted, see SCHEMA_PLAN §10.7).
 
 ## GEO / MAPS (carried from prior state doc)
 
@@ -126,14 +128,21 @@ and verified in Cursor/Claude Code.
 
 ## DATA MODEL GUARDRAILS (protect these at schema time)
 
-- [ ] **Workspace-owns-events.** Events belong to a workspace, not a user.
+- [x] **Workspace-owns-events.** Events belong to a workspace, not a user.
       Membership table links users→workspaces with a role. Enables teams +
       account handoff with no migration. Do NOT shortcut to user-owned events.
-- [ ] **Anonymous browse.** Explore/detail/share open to guests; saving,
+      ✅ Schema applied (migration 0001: workspaces, memberships,
+      events.workspace_id FK, RLS by role).
+- [x] **Anonymous browse.** Explore/detail/share open to guests; saving,
       persisting prefs, creating events are account-gated.
-- [ ] **Client-side time.** Countdowns/grouping computed on-device from a single
+      ✅ DB layer applied (0001–0002: anon SELECT on published events/
+      workspaces/categories, writes auth-gated by policy + grants). App-side
+      UX lands at stages 3–4.
+- [x] **Client-side time.** Countdowns/grouping computed on-device from a single
       UTC `starts_at`. No polling/subscriptions to keep time current. No
       Realtime in MVP; RSVP counts refresh on screen focus.
+      ✅ Schema applied (0001: single `starts_at`/`ends_at` timestamptz, no
+      stored display strings). On-device rendering rules land with the app.
 - [ ] **Notification prefs stored structured** (category, channel, frequency),
       NOT as loose booleans — anticipates the channel×category grid without a
       later migration.
