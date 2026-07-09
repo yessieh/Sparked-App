@@ -117,6 +117,9 @@ and verified in Cursor/Claude Code.
 - [ ] **Cold-start empty state** (if not closed in Design) — feed + funnels.
 - [ ] **Pre-launch: full Security Advisor sweep**, resolve or document every
       warning (baseline: 0 errors / 2 accepted, see SCHEMA_PLAN §10.7).
+- [ ] **Enable leaked-password protection** (Auth → Passwords, HaveIBeenPwned
+      check; may be Pro-gated) when auth lands at stage 4. Advisor flags it
+      since the first auth.users row (dev seed); moot until signup exists.
 
 ## GEO / MAPS (carried from prior state doc)
 
