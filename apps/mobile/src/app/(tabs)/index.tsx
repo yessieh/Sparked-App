@@ -13,10 +13,10 @@ import {
   View,
 } from 'react-native';
 
-import EventStub, { type FeedEvent } from '../components/EventStub';
-import SparkedLogo from '../components/SparkedLogo';
-import { supabase } from '../lib/supabase';
-import { brand, tracking, trackingEm, useTheme } from '../theme';
+import EventStub, { type FeedEvent } from '../../components/EventStub';
+import SparkedLogo from '../../components/SparkedLogo';
+import { supabase } from '../../lib/supabase';
+import { brand, tracking, trackingEm, useTheme } from '../../theme';
 
 // Dev test location: Sahuarita, AZ. Device geolocation lands at a later stage.
 const TEST_ORIGIN = { lat: 31.9576, lng: -110.9556 };
