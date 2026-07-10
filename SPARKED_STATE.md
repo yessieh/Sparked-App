@@ -125,8 +125,14 @@ Constant across ALL variants:
   line, only when N > 0. A signal, not a shout — never bold, never gradient.
 - **Card action-button affordance:** bookmark + going buttons show a small
   label chip pre-use — hover on desktop, press on mobile ("Save" /
-  "I'm going"; "Saved" / "Going" when active). Label chip ONLY, no
-  animation — the stamp celebration stays reserved for Event Detail.
+  "I'm going"; "Saved" / "Going" when active). AMENDED same day: the chip
+  gets a small pop on appearance (~180ms scale-in, settles fast) — chip
+  feedback ONLY; the stamp celebration stays reserved for Event Detail.
+  Both buttons render on BOTH variants (Saved is where plans firm up —
+  promoting to Going must work there). Going-count is optimistic: it moves
+  with the toggle, never waits for a focus change, vanishes entirely at 0.
+- **Card tap-through → Event Detail: CONFIRMED WANTED from both Explore and
+  Saved** — lands with the Event Detail stage, not before.
 
 ---
 
