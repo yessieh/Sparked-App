@@ -12,8 +12,8 @@
 // Save/Going buttons only render when handlers are passed; anonymous gating
 // (route to auth) is the calling screen's decision.
 
-import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
 import { eventCountdown, eventDateLabel, eventTimeLabel } from '../lib/eventTime';
@@ -123,12 +123,26 @@ function StubButton({
 }) {
   const theme = useTheme();
   const [labelVisible, setLabelVisible] = useState(false);
+  // Chip pop: quick scale-in when the label appears (~180ms settle). Chip
+  // feedback only — the stamp celebration stays reserved for Event Detail.
+  const chipScale = useRef(new Animated.Value(0.7)).current;
+  useEffect(() => {
+    if (labelVisible) {
+      chipScale.setValue(0.7);
+      Animated.spring(chipScale, {
+        toValue: 1,
+        speed: 40,
+        bounciness: 9,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [labelVisible, chipScale]);
   const activeBg = tint === 'gold' ? 'rgba(252,163,17,0.14)' : 'rgba(74,222,128,0.14)';
   const activeBorder = tint === 'gold' ? 'rgba(252,163,17,0.35)' : 'rgba(74,222,128,0.36)';
   return (
     <View style={{ alignItems: 'center' }}>
       {labelVisible && (
-        <View
+        <Animated.View
           pointerEvents="none"
           style={{
             position: 'absolute',
@@ -140,6 +154,7 @@ function StubButton({
             borderRadius: 7,
             paddingHorizontal: 8,
             paddingVertical: 4,
+            transform: [{ scale: chipScale }],
           }}
         >
           <Text
@@ -152,7 +167,7 @@ function StubButton({
           >
             {label}
           </Text>
-        </View>
+        </Animated.View>
       )}
       <Pressable
         onPress={onPress}

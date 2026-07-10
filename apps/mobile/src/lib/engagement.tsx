@@ -28,6 +28,14 @@ interface EngagementContextValue {
   refresh: () => Promise<void>;
   toggleSave: (eventId: string) => Promise<void>;
   toggleRsvp: (eventId: string) => Promise<void>;
+  /**
+   * Local rsvp_count adjustment for an event: toggles since the data on
+   * screen was fetched. Screens add this to their fetched rsvp_count so the
+   * going-count moves with the optimistic toggle instead of waiting for the
+   * next focus refetch (deltas reset when refresh() lands fresh sets —
+   * screens refetch rows at the same moment).
+   */
+  rsvpDelta: (eventId: string) => number;
 }
 
 const EngagementContext = createContext<EngagementContextValue>({
@@ -36,6 +44,7 @@ const EngagementContext = createContext<EngagementContextValue>({
   refresh: async () => {},
   toggleSave: async () => {},
   toggleRsvp: async () => {},
+  rsvpDelta: () => 0,
 });
 
 const flip = (set: ReadonlySet<string>, id: string): Set<string> => {
@@ -50,6 +59,7 @@ export function EngagementProvider({ children }: { children: ReactNode }) {
   const userId = session?.user.id ?? null;
   const [savedIds, setSavedIds] = useState<ReadonlySet<string>>(new Set());
   const [goingIds, setGoingIds] = useState<ReadonlySet<string>>(new Set());
+  const [rsvpDeltas, setRsvpDeltas] = useState<Record<string, number>>({});
   // Stale-response guard: a refresh started before sign-out must not
   // resurrect rows after the sets were cleared.
   const generation = useRef(0);
@@ -63,7 +73,12 @@ export function EngagementProvider({ children }: { children: ReactNode }) {
     ]);
     if (gen !== generation.current) return;
     if (!saves.error) setSavedIds(new Set(saves.data.map((r) => r.event_id)));
-    if (!rsvps.error) setGoingIds(new Set(rsvps.data.map((r) => r.event_id)));
+    if (!rsvps.error) {
+      setGoingIds(new Set(rsvps.data.map((r) => r.event_id)));
+      // Fresh server state — screens refetch their rows on the same focus,
+      // so accumulated local count adjustments are absorbed.
+      setRsvpDeltas({});
+    }
   }, [userId]);
 
   useEffect(() => {
@@ -73,6 +88,7 @@ export function EngagementProvider({ children }: { children: ReactNode }) {
       generation.current++;
       setSavedIds(new Set());
       setGoingIds(new Set());
+      setRsvpDeltas({});
     }
   }, [userId, refresh]);
 
@@ -85,13 +101,21 @@ export function EngagementProvider({ children }: { children: ReactNode }) {
     ) => {
       if (!userId) return;
       const had = current.has(eventId);
+      const bump = (dir: 1 | -1) =>
+        setRsvpDeltas((prev) => ({ ...prev, [eventId]: (prev[eventId] ?? 0) + dir }));
       setState((prev) => flip(prev, eventId));
+      // The displayed going-count moves with the toggle (ruling: never wait
+      // for a focus change) — rsvps only; saves don't carry a public count.
+      if (table === 'rsvps') bump(had ? -1 : 1);
       const { error } = had
         ? await supabase.from(table).delete().match({ user_id: userId, event_id: eventId })
         : await supabase.from(table).insert({ user_id: userId, event_id: eventId });
       // 23505 = duplicate insert (already saved elsewhere) — optimistic state
       // is already correct; anything else reverts.
-      if (error && error.code !== '23505') setState((prev) => flip(prev, eventId));
+      if (error && error.code !== '23505') {
+        setState((prev) => flip(prev, eventId));
+        if (table === 'rsvps') bump(had ? 1 : -1);
+      }
     },
     [userId],
   );
@@ -103,8 +127,9 @@ export function EngagementProvider({ children }: { children: ReactNode }) {
       refresh,
       toggleSave: (eventId) => toggle('saves', savedIds, setSavedIds, eventId),
       toggleRsvp: (eventId) => toggle('rsvps', goingIds, setGoingIds, eventId),
+      rsvpDelta: (eventId) => rsvpDeltas[eventId] ?? 0,
     }),
-    [savedIds, goingIds, refresh, toggle],
+    [savedIds, goingIds, rsvpDeltas, refresh, toggle],
   );
 
   return <EngagementContext.Provider value={value}>{children}</EngagementContext.Provider>;

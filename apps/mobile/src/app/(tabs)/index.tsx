@@ -30,7 +30,7 @@ const RADIUS_MILES = 25;
 export default function Explore() {
   const theme = useTheme();
   const { session } = useAuth();
-  const { savedIds, goingIds, toggleSave, toggleRsvp, refresh } = useEngagement();
+  const { savedIds, goingIds, toggleSave, toggleRsvp, refresh, rsvpDelta } = useEngagement();
   const [events, setEvents] = useState<FeedEvent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -123,7 +123,11 @@ export default function Explore() {
         keyExtractor={(e) => e.id}
         renderItem={({ item }) => (
           <EventStub
-            event={item}
+            event={
+              typeof item.rsvp_count === 'number'
+                ? { ...item, rsvp_count: item.rsvp_count + rsvpDelta(item.id) }
+                : item
+            }
             saved={savedIds.has(item.id)}
             going={goingIds.has(item.id)}
             onToggleSave={gated(() => toggleSave(item.id))}

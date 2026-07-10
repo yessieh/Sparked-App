@@ -131,7 +131,7 @@ function SignedOutSaved() {
 export default function Saved() {
   const theme = useTheme();
   const { session } = useAuth();
-  const { savedIds, goingIds, toggleSave, refresh } = useEngagement();
+  const { savedIds, goingIds, toggleSave, toggleRsvp, refresh, rsvpDelta } = useEngagement();
   const [rows, setRows] = useState<SavedEventRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // All is the default — nothing is ever hidden by default (locked ruling).
@@ -206,7 +206,7 @@ export default function Saved() {
         ends_at: r.ends_at,
         venue_name: r.venue_name,
         entry_fee_cents: r.entry_fee_cents,
-        rsvp_count: r.rsvp_count,
+        rsvp_count: r.rsvp_count + rsvpDelta(r.id),
         categories: r.event_categories.map((c) => c.category_id),
       });
     }
@@ -218,7 +218,7 @@ export default function Saved() {
         ...buckets[key].filter((e) => !goingIds.has(e.id)),
       ],
     })).filter((s) => s.items.length > 0);
-  }, [rows, savedIds, goingIds, filter]);
+  }, [rows, savedIds, goingIds, filter, rsvpDelta]);
 
   if (!session) return <SignedOutSaved />;
 
@@ -356,6 +356,7 @@ export default function Saved() {
                     saved={savedIds.has(e.id)}
                     going={goingIds.has(e.id)}
                     onToggleSave={() => toggleSave(e.id)}
+                    onToggleGoing={() => toggleRsvp(e.id)}
                   />
                 ))}
               </View>
