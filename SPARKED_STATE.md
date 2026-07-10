@@ -349,6 +349,17 @@ document-global on web and screens stay mounted behind modals.
 **Pending: email-confirmation in-app return test** (2/hr built-in mailer cap
 hit during testing; retest when the window resets).
 
+**Saves + RSVPs built (2026-07-09):** migration 0006 (saves + rsvps as two
+independent tables per the lock, trigger-maintained events.rsvp_count in the
+app schema, own-rows RLS — 13/13 behavioral checks PASS via `supabase db
+query` role simulation; security advisor baseline intact 0/3). App: engagement
+provider (focus-refresh, optimistic toggles), EventStub compact variant +
+save/going card buttons, Saved tab (Tonight/This Weekend/Coming Up client-side
+grouping), anonymous engagement taps gate to auth. Perf note for the
+pre-launch advisor sweep: CLI flags auth_rls_initplan (bare auth.uid()) on
+ALL own-rows policies, 0001 + 0006 alike — perf-only, fix in one batch
+migration then.
+
 ## SCREENS ADDED SINCE THE TABLE ABOVE (all Design-proven)
 - **Organizer Profile (public, workspace-owned):** logo/name/bio/location, website + social
   buttons (secondary outline, not gradient), upcoming events as bookmarkable compact EventStubs,
