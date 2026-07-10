@@ -13,7 +13,15 @@ import * as Clipboard from 'expo-clipboard';
 import * as Linking from 'expo-linking';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Animated,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
 import { GradientButton, GradientFill, SecondaryButton } from '../../components/AuthControls';
@@ -132,6 +140,7 @@ export default function EventDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastOpacity = useRef(new Animated.Value(1)).current;
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -182,9 +191,17 @@ export default function EventDetailScreen() {
         ta.remove();
       }
     }
+    // ~1.8s life ending in a ~250ms opacity fade (no abrupt vanish).
     setToast(true);
+    toastOpacity.setValue(1);
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(false), 1800);
+    toastTimer.current = setTimeout(() => {
+      Animated.timing(toastOpacity, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }).start(() => setToast(false));
+    }, 1550);
   };
 
   const back = () => {
@@ -436,7 +453,7 @@ export default function EventDetailScreen() {
 
       {/* "Link copied" toast per the reference's share confirmation. */}
       {toast && (
-        <View
+        <Animated.View
           pointerEvents="none"
           style={{
             position: 'absolute',
@@ -452,13 +469,14 @@ export default function EventDetailScreen() {
             paddingHorizontal: 18,
             paddingVertical: 12,
             boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
+            opacity: toastOpacity,
           }}
         >
           <Ionicons name="checkmark" size={14} color={brand.brightOrange} />
           <Text style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 12, letterSpacing: 0.24, color: '#ffffff' }}>
             Link copied
           </Text>
-        </View>
+        </Animated.View>
       )}
     </View>
   );
