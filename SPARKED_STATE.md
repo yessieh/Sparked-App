@@ -106,6 +106,30 @@ Constant across ALL variants:
 
 ---
 
+## NAVIGATION & ENGAGEMENT SURFACES (LOCKED 2026-07-09)
+
+- **Tab bar = Explore / Saved / Me (top-level).** SUPERSEDES the design
+  reference's Me→Saved card placement. (Ruled after the fact — this class of
+  user-visible deviation from the reference is stop-and-ask going forward.)
+- **Saved screen = UNION of saved OR going.** Unsaving an event the user is
+  still Going to never removes it — a commitment outranks a tidied bookmark.
+  A card drops off only when NEITHER state holds. Chips render per-state:
+  Going (semantic green, full weight) survives unsave; Saved (muted)
+  survives un-RSVP.
+- **Going gets structural priority, never hiding:** within each Tonight /
+  This Weekend / Coming Up group, Going events sort first; saved-only cards
+  follow. "All / Going" filter pill row at top (locked pill language,
+  gradient when active). All is the DEFAULT — nothing is ever hidden by
+  default.
+- **Feed photo cards show social proof:** muted "N going" beside the price
+  line, only when N > 0. A signal, not a shout — never bold, never gradient.
+- **Card action-button affordance:** bookmark + going buttons show a small
+  label chip pre-use — hover on desktop, press on mobile ("Save" /
+  "I'm going"; "Saved" / "Going" when active). Label chip ONLY, no
+  animation — the stamp celebration stays reserved for Event Detail.
+
+---
+
 ## ARCHITECTURE DECISIONS (locked — protect these)
 
 ### 1. Workspace-owns-events data model (THE most important decision)
