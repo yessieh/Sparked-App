@@ -122,21 +122,28 @@ function StubButton({
   children: React.ReactNode;
 }) {
   const theme = useTheme();
-  const [labelVisible, setLabelVisible] = useState(false);
-  // Chip pop: quick scale-in when the label appears (~180ms settle). Chip
+  // Hover and press tracked separately so a desktop click doesn't hide the
+  // chip out from under a still-hovering pointer on press-out.
+  const [hovered, setHovered] = useState(false);
+  const [pressed, setPressed] = useState(false);
+  const labelVisible = hovered || pressed;
+  // Chip pop: quick scale-in (~180ms settle), fired on EVERY activation —
+  // appearance (hover/press-in) AND each click/tap while visible. Chip
   // feedback only — the stamp celebration stays reserved for Event Detail.
   const chipScale = useRef(new Animated.Value(0.7)).current;
+  const pop = () => {
+    chipScale.setValue(0.7);
+    Animated.spring(chipScale, {
+      toValue: 1,
+      speed: 40,
+      bounciness: 9,
+      useNativeDriver: true,
+    }).start();
+  };
   useEffect(() => {
-    if (labelVisible) {
-      chipScale.setValue(0.7);
-      Animated.spring(chipScale, {
-        toValue: 1,
-        speed: 40,
-        bounciness: 9,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [labelVisible, chipScale]);
+    if (labelVisible) pop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [labelVisible]);
   const activeBg = tint === 'gold' ? 'rgba(252,163,17,0.14)' : 'rgba(74,222,128,0.14)';
   const activeBorder = tint === 'gold' ? 'rgba(252,163,17,0.35)' : 'rgba(74,222,128,0.36)';
   return (
@@ -147,6 +154,12 @@ function StubButton({
           style={{
             position: 'absolute',
             bottom: 33,
+            // Right-anchored to the button, growing leftward over the card
+            // interior: buttons live at the card's right boundary and the
+            // card clips at overflow:hidden, so a center-anchored chip cut
+            // off ("I'm going" on the rightmost button). -6 keeps short
+            // chips near-centered while the right edge stays inside.
+            right: -6,
             zIndex: 10,
             backgroundColor: brand.deepNavy,
             borderWidth: 1,
@@ -171,10 +184,15 @@ function StubButton({
       )}
       <Pressable
         onPress={onPress}
-        onHoverIn={() => setLabelVisible(true)}
-        onHoverOut={() => setLabelVisible(false)}
-        onPressIn={() => setLabelVisible(true)}
-        onPressOut={() => setLabelVisible(false)}
+        onHoverIn={() => setHovered(true)}
+        onHoverOut={() => setHovered(false)}
+        onPressIn={() => {
+          // Desktop clicks happen while hover already shows the chip, so the
+          // appearance effect won't re-fire — pop explicitly on every press.
+          setPressed(true);
+          pop();
+        }}
+        onPressOut={() => setPressed(false)}
         accessibilityLabel={label}
         accessibilityState={{ selected: active }}
         hitSlop={6}
