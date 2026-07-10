@@ -16,6 +16,7 @@ import { useEffect } from 'react';
 import { Platform } from 'react-native';
 
 import { AuthProvider, createSessionFromUrl } from '../lib/auth';
+import { EngagementProvider } from '../lib/engagement';
 import { ThemeProvider, useTheme } from '../theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -70,8 +71,10 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <AuthDeepLinkHandler />
-        <ThemedStack />
+        <EngagementProvider>
+          <AuthDeepLinkHandler />
+          <ThemedStack />
+        </EngagementProvider>
       </AuthProvider>
     </ThemeProvider>
   );

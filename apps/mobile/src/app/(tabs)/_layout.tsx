@@ -1,6 +1,6 @@
-// Tab shell — Explore + Me only at this stage (Saved lands with saves/RSVPs).
-// Browsing is anonymous by default: no auth checks here or in Explore; the Me
-// tab is the single place auth is ever invoked (architecture lock #2).
+// Tab shell — Explore + Saved + Me. Browsing is anonymous by default: no
+// auth checks here or in Explore; auth is invoked only from Me and from
+// engagement taps (save/going), never as a wall (architecture lock #2).
 
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
@@ -32,6 +32,15 @@ export default function TabsLayout() {
           title: 'Explore',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="search" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="saved"
+        options={{
+          title: 'Saved',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="bookmark-outline" size={size} color={color} />
           ),
         }}
       />

@@ -1,10 +1,13 @@
-// Explore — the anonymous distance-pure feed. Read path only at this stage:
-// no auth, no saving, no detail screen, no filters.
+// Explore — the anonymous distance-pure feed, now with save/going toggles on
+// each card. Anonymous taps on either route to the auth screen (progressive
+// gating); the feed itself never gates.
 // Location is HARDCODED to Sahuarita, AZ for now — device geolocation is a
-// later stage. Refetch on pull-to-refresh only (no polling; architecture
-// lock #4).
+// later stage. Refetch on pull-to-refresh + screen focus only (no polling;
+// architecture lock #4) — focus refetch keeps rsvp_count and saved state
+// current after actions elsewhere.
 
-import React, { useCallback, useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -15,6 +18,8 @@ import {
 
 import EventStub, { type FeedEvent } from '../../components/EventStub';
 import SparkedLogo from '../../components/SparkedLogo';
+import { useAuth } from '../../lib/auth';
+import { useEngagement } from '../../lib/engagement';
 import { supabase } from '../../lib/supabase';
 import { brand, tracking, trackingEm, useTheme } from '../../theme';
 
@@ -24,6 +29,8 @@ const RADIUS_MILES = 25;
 
 export default function Explore() {
   const theme = useTheme();
+  const { session } = useAuth();
+  const { savedIds, goingIds, toggleSave, toggleRsvp, refresh } = useEngagement();
   const [events, setEvents] = useState<FeedEvent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -42,15 +49,30 @@ export default function Explore() {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // Focus = initial mount + every return to this tab (covers RSVP counts and
+  // saved state changed elsewhere). Never a poll.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+      refresh();
+    }, [load, refresh]),
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await load();
+    await Promise.all([load(), refresh()]);
     setRefreshing(false);
-  }, [load]);
+  }, [load, refresh]);
+
+  // Progressive gating: anonymous engagement taps invite an account; the
+  // auth screen is a modal, so dismissing/finishing lands right back here.
+  const gated = useCallback(
+    (action: () => void) => () => {
+      if (session) action();
+      else router.push({ pathname: '/auth', params: { mode: 'signup' } });
+    },
+    [session],
+  );
 
   const header = (
     <View style={{ paddingTop: 24, paddingBottom: 16, gap: 14 }}>
@@ -99,7 +121,15 @@ export default function Explore() {
       <FlatList
         data={events ?? []}
         keyExtractor={(e) => e.id}
-        renderItem={({ item }) => <EventStub event={item} />}
+        renderItem={({ item }) => (
+          <EventStub
+            event={item}
+            saved={savedIds.has(item.id)}
+            going={goingIds.has(item.id)}
+            onToggleSave={gated(() => toggleSave(item.id))}
+            onToggleGoing={gated(() => toggleRsvp(item.id))}
+          />
+        )}
         ListHeaderComponent={header}
         ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
         contentContainerStyle={{

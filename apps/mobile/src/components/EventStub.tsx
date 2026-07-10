@@ -1,4 +1,4 @@
-// EventStub — the universal event card (photo variant only at this stage).
+// EventStub — the universal event card (photo + compact variants).
 // Rebuilt native from the design-reference visual spec, with the LOCKED rules:
 //   • category stripe (left edge) = category color, all variants
 //   • perforated divider + right utility column with Montserrat countdown
@@ -6,8 +6,11 @@
 //     location row: Free = green semantic pill; paid = green $ icon +
 //     bright #eef0ff amount at 600, ONE $ only, never gradient
 //   • category badges = informational, outlined/tinted, never gradient
+//   • Going chip/button = SEMANTIC green; Saved = gold bookmark tint
 // No photos table yet — the photo header renders a category-tinted gradient
 // placeholder until real uploads land (stage 5).
+// Save/Going buttons only render when handlers are passed; anonymous gating
+// (route to auth) is the calling screen's decision.
 
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -26,7 +29,19 @@ export interface FeedEvent {
   venue_name: string | null;
   entry_fee_cents: number;
   categories: string[] | null;
-  distance_miles: number;
+  /** Present on feed RPC rows; absent on Saved-screen fetches (no origin). */
+  distance_miles?: number;
+  rsvp_count?: number;
+}
+
+export interface EventStubProps {
+  event: FeedEvent;
+  variant?: 'photo' | 'compact';
+  saved?: boolean;
+  going?: boolean;
+  onToggleSave?: () => void;
+  onToggleGoing?: () => void;
+  onTap?: () => void;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -61,6 +76,97 @@ function CategoryBadges({ categories }: { categories: string[] }) {
           <Text style={[styles.badgeText, { color: '#eef0ff', letterSpacing: 0.4 }]}>+{extra}</Text>
         </View>
       )}
+    </View>
+  );
+}
+
+/** Bookmark / check icons — prototype's icon paths (event-stub.jsx _SIcon). */
+function BookmarkIcon({ size = 13, color, fill = false }: { size?: number; color: string; fill?: boolean }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill ? color : 'none'}>
+      <Path
+        d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+function CheckIcon({ size = 13, color }: { size?: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M20 6 9 17l-5-5" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+/** 28×28 utility-column action button (prototype _stubBtn). `tint` colors the
+ * active state: gold for save, semantic green for going. */
+function StubButton({
+  active,
+  tint,
+  label,
+  onPress,
+  children,
+}: {
+  active: boolean;
+  tint: 'gold' | 'green';
+  label: string;
+  onPress: () => void;
+  children: React.ReactNode;
+}) {
+  const activeBg = tint === 'gold' ? 'rgba(252,163,17,0.14)' : 'rgba(74,222,128,0.14)';
+  const activeBorder = tint === 'gold' ? 'rgba(252,163,17,0.35)' : 'rgba(74,222,128,0.36)';
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
+      hitSlop={6}
+      style={{
+        width: 28,
+        height: 28,
+        borderRadius: 9,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: active ? activeBg : 'rgba(255,255,255,0.07)',
+        borderWidth: 1,
+        borderColor: active ? activeBorder : 'rgba(255,255,255,0.12)',
+      }}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
+/** Going (semantic green) / Saved (muted) status chip — compact variant. */
+function StatusChip({ going, saved }: { going: boolean; saved: boolean }) {
+  const theme = useTheme();
+  if (!going && !saved) return null;
+  const c = going ? theme.colors.green : 'rgba(238,240,255,0.62)';
+  const bg = going ? 'rgba(74,222,128,0.12)' : 'rgba(255,255,255,0.05)';
+  const bd = going ? 'rgba(74,222,128,0.36)' : 'rgba(238,240,255,0.16)';
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        paddingHorizontal: 9,
+        paddingVertical: 4,
+        borderRadius: 9999,
+        backgroundColor: bg,
+        borderWidth: 1,
+        borderColor: bd,
+      }}
+    >
+      {going ? <CheckIcon size={11} color={c} /> : <BookmarkIcon size={11} color={c} fill />}
+      <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 10.5, fontWeight: '800', color: c }}>
+        {going ? 'Going' : 'Saved'}
+      </Text>
     </View>
   );
 }
@@ -118,7 +224,15 @@ function PriceLine({ cents }: { cents: number }) {
   );
 }
 
-export default function EventStub({ event, onTap }: { event: FeedEvent; onTap?: () => void }) {
+export default function EventStub({
+  event,
+  variant = 'photo',
+  saved = false,
+  going = false,
+  onToggleSave,
+  onToggleGoing,
+  onTap,
+}: EventStubProps) {
   const theme = useTheme();
   // Minute tick so the countdown stays current — local re-render only, never
   // a backend poll (architecture lock #4).
@@ -131,6 +245,109 @@ export default function EventStub({ event, onTap }: { event: FeedEvent; onTap?: 
   const cats = event.categories ?? [];
   const stripe = categoryColor(cats);
   const cd = eventCountdown(event.starts_at, event.ends_at);
+
+  const actionButtons = (onToggleSave || onToggleGoing) && (
+    <View style={{ flexDirection: 'row', gap: 6 }}>
+      {onToggleSave && (
+        <StubButton active={saved} tint="gold" label={saved ? 'Saved' : 'Save'} onPress={onToggleSave}>
+          <BookmarkIcon color={saved ? brand.brightOrange : '#ffffff'} fill={saved} />
+        </StubButton>
+      )}
+      {onToggleGoing && (
+        <StubButton active={going} tint="green" label={going ? 'Going' : "I'm going"} onPress={onToggleGoing}>
+          <CheckIcon color={going ? theme.colors.green : '#ffffff'} />
+        </StubButton>
+      )}
+    </View>
+  );
+
+  if (variant === 'compact') {
+    return (
+      <Pressable
+        onPress={onTap}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'stretch',
+          backgroundColor: theme.colors.cardBg,
+          borderWidth: 1,
+          borderColor: theme.colors.cardBorder,
+          borderRadius: theme.radii.xl,
+          overflow: 'hidden',
+          boxShadow: theme.shadows.card,
+        }}
+      >
+        <View style={{ width: 5, backgroundColor: stripe }} />
+        <View style={{ flex: 1, minWidth: 0, paddingHorizontal: 15, paddingVertical: 13 }}>
+          <CategoryBadges categories={cats} />
+          <Text
+            numberOfLines={1}
+            style={{
+              fontFamily: theme.fonts.displayBlack,
+              fontWeight: '900',
+              fontSize: 16,
+              letterSpacing: -0.16,
+              color: theme.colors.text,
+              marginTop: 9,
+            }}
+          >
+            {event.title}
+          </Text>
+          <Text numberOfLines={1} style={[styles.metaLine, { color: theme.colors.textMuted, fontFamily: theme.fonts.bodyMedium }]}>
+            {eventDateLabel(event.starts_at)} · {eventTimeLabel(event.starts_at, event.ends_at)}
+          </Text>
+          <Text numberOfLines={1} style={[styles.metaLine, { color: theme.colors.textMuted, fontFamily: theme.fonts.bodyMedium }]}>
+            {event.venue_name ?? event.organizer_name}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 10 }}>
+            <StatusChip going={going} saved={saved} />
+            {typeof event.rsvp_count === 'number' && event.rsvp_count > 0 && (
+              <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 11, color: theme.colors.textFaint }}>
+                {event.rsvp_count} {event.rsvp_count === 1 ? 'RSVP' : 'RSVPs'}
+              </Text>
+            )}
+          </View>
+        </View>
+        <Perforation />
+        <View
+          style={{
+            width: 78,
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 12,
+            paddingHorizontal: 6,
+            paddingVertical: 12,
+          }}
+        >
+          <View style={{ alignItems: 'center' }}>
+            <Text
+              style={{
+                fontFamily: theme.fonts.displayBlack,
+                fontWeight: '900',
+                fontSize: 22,
+                lineHeight: 24,
+                color: cd.live ? brand.flameRed : brand.sparkGold,
+              }}
+            >
+              {cd.big}
+            </Text>
+            <Text
+              style={{
+                fontFamily: theme.fonts.bodySemiBold,
+                fontSize: 8,
+                letterSpacing: 1,
+                textTransform: 'uppercase',
+                color: theme.colors.textMuted,
+                marginTop: 4,
+              }}
+            >
+              {cd.label}
+            </Text>
+          </View>
+          {actionButtons}
+        </View>
+      </Pressable>
+    );
+  }
 
   return (
     <Pressable
@@ -184,38 +401,50 @@ export default function EventStub({ event, onTap }: { event: FeedEvent; onTap?: 
               {eventDateLabel(event.starts_at)} · {eventTimeLabel(event.starts_at, event.ends_at)}
             </Text>
             <Text numberOfLines={1} style={[styles.metaLine, { color: theme.colors.textMuted, fontFamily: theme.fonts.bodyMedium }]}>
-              {event.venue_name ?? event.organizer_name} · {event.distance_miles.toFixed(1)} mi
+              {event.venue_name ?? event.organizer_name}
+              {typeof event.distance_miles === 'number' ? ` · ${event.distance_miles.toFixed(1)} mi` : ''}
             </Text>
             <PriceLine cents={event.entry_fee_cents} />
           </View>
 
           <Perforation />
 
-          {/* right utility column — Montserrat countdown */}
-          <View style={{ width: 78, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 }}>
-            <Text
-              style={{
-                fontFamily: theme.fonts.displayBlack,
-                fontWeight: '900',
-                fontSize: 24,
-                lineHeight: 26,
-                color: cd.live ? brand.flameRed : brand.sparkGold,
-              }}
-            >
-              {cd.big}
-            </Text>
-            <Text
-              style={{
-                fontFamily: theme.fonts.bodySemiBold,
-                fontSize: 8,
-                letterSpacing: 1,
-                textTransform: 'uppercase',
-                color: theme.colors.textMuted,
-                marginTop: 4,
-              }}
-            >
-              {cd.label}
-            </Text>
+          {/* right utility column — Montserrat countdown + save/going actions */}
+          <View
+            style={{
+              width: 78,
+              alignItems: 'center',
+              justifyContent: actionButtons ? 'space-between' : 'center',
+              paddingHorizontal: 6,
+              paddingVertical: actionButtons ? 12 : 0,
+            }}
+          >
+            <View style={{ alignItems: 'center' }}>
+              <Text
+                style={{
+                  fontFamily: theme.fonts.displayBlack,
+                  fontWeight: '900',
+                  fontSize: 24,
+                  lineHeight: 26,
+                  color: cd.live ? brand.flameRed : brand.sparkGold,
+                }}
+              >
+                {cd.big}
+              </Text>
+              <Text
+                style={{
+                  fontFamily: theme.fonts.bodySemiBold,
+                  fontSize: 8,
+                  letterSpacing: 1,
+                  textTransform: 'uppercase',
+                  color: theme.colors.textMuted,
+                  marginTop: 4,
+                }}
+              >
+                {cd.label}
+              </Text>
+            </View>
+            {actionButtons}
           </View>
         </View>
       </View>

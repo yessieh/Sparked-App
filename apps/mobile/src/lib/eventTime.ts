@@ -33,6 +33,32 @@ export function eventCountdown(
   return { big: `${days}`, label: days === 1 ? 'DAY' : 'DAYS', live: false };
 }
 
+export type SavedBucket = 'tonight' | 'weekend' | 'coming';
+
+/**
+ * Saved-screen grouping (ported from the prototype's SavedScreen):
+ * Tonight = starts today; This Weekend = the coming Sat/Sun; Coming Up =
+ * everything later. Computed on-device from starts_at (architecture lock #4).
+ */
+export function savedBucket(startsAtISO: string, now: Date = new Date()): SavedBucket {
+  const s = new Date(startsAtISO);
+  const sameDay =
+    s.getFullYear() === now.getFullYear() &&
+    s.getMonth() === now.getMonth() &&
+    s.getDate() === now.getDate();
+  if (sameDay) return 'tonight';
+  const satOffset = (6 - now.getDay() + 7) % 7; // days until the coming Saturday (0 if today)
+  const satStart = new Date(now);
+  satStart.setDate(now.getDate() + satOffset);
+  satStart.setHours(0, 0, 0, 0);
+  const sunEnd = new Date(satStart);
+  sunEnd.setDate(satStart.getDate() + 1);
+  sunEnd.setHours(23, 59, 59, 999);
+  const t = s.getTime();
+  if (t >= satStart.getTime() && t <= sunEnd.getTime()) return 'weekend';
+  return 'coming';
+}
+
 /** "Sat, Jul 12" — device-local. */
 export function eventDateLabel(startsAtISO: string): string {
   return new Date(startsAtISO).toLocaleDateString(undefined, {

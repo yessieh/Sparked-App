@@ -37,6 +37,13 @@ import { brand, useTheme } from '../theme';
 
 type Mode = 'signup' | 'login' | 'forgot';
 
+/** Pop back to wherever auth was invoked from; fall back to the Me tab when
+ * this screen is the whole history (direct load / post-reload). */
+const dismiss = () => {
+  if (router.canGoBack()) router.back();
+  else router.replace('/(tabs)/me');
+};
+
 export default function AuthScreen() {
   const theme = useTheme();
   const { session } = useAuth();
@@ -58,9 +65,11 @@ export default function AuthScreen() {
     }
   }, [linkUrl]);
 
-  // Signed in (any path) → this screen is done.
+  // Signed in (any path) → this screen is done. When there's no history to
+  // pop (page reloaded straight onto /auth), land on Me instead of looping
+  // failed GO_BACKs.
   useEffect(() => {
-    if (session) router.back();
+    if (session) dismiss();
   }, [session]);
 
   const run = async (kind: 'google' | 'email', fn: () => Promise<void>) => {
@@ -144,7 +153,7 @@ export default function AuthScreen() {
         />
 
         <Pressable
-          onPress={() => router.back()}
+          onPress={dismiss}
           accessibilityLabel="Back"
           style={{
             width: 36,
@@ -362,7 +371,7 @@ export default function AuthScreen() {
             </Text>
           </Pressable>
         ) : (
-          <Pressable onPress={() => router.back()} style={{ marginTop: 18 }}>
+          <Pressable onPress={dismiss} style={{ marginTop: 18 }}>
             <Text
               style={{
                 fontFamily: theme.fonts.bodySemiBold,
