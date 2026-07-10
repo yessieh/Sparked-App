@@ -60,9 +60,10 @@ const CATEGORY_LABELS: Record<string, string> = {
   tech: 'Tech',
 };
 
-/** Outlined informational category badges — max 2 + "+N", never gradient. */
-function CategoryBadges({ categories }: { categories: string[] }) {
-  const shown = categories.slice(0, 2);
+/** Outlined informational category badges — never gradient. Cards cap at 2
+ * (+N); Event Detail passes a higher max. */
+export function CategoryBadges({ categories, max = 2 }: { categories: string[]; max?: number }) {
+  const shown = categories.slice(0, max);
   const extra = categories.length - shown.length;
   return (
     <View style={{ flexDirection: 'row', gap: 5 }}>
@@ -183,7 +184,13 @@ function StubButton({
         </Animated.View>
       )}
       <Pressable
-        onPress={onPress}
+        onPress={(e) => {
+          // Cards are whole-surface tap targets (detail navigation) — the
+          // action buttons must never bubble a click into that navigation
+          // (RN-web clicks propagate to parent Pressables; native doesn't).
+          e?.stopPropagation?.();
+          onPress();
+        }}
         onHoverIn={() => setHovered(true)}
         onHoverOut={() => setHovered(false)}
         onPressIn={() => {
@@ -243,7 +250,7 @@ function StatusChip({ going, saved }: { going: boolean; saved: boolean }) {
 }
 
 /** Dashed perforation with the ticket notches biting top & bottom edges. */
-function Perforation() {
+export function Perforation() {
   const theme = useTheme();
   return (
     <View style={{ width: 2, marginVertical: 14, alignItems: 'center' }}>
@@ -263,7 +270,7 @@ function Perforation() {
 }
 
 /** Entry-fee line per the LOCKED price spec. */
-function PriceLine({ cents }: { cents: number }) {
+export function PriceLine({ cents }: { cents: number }) {
   const theme = useTheme();
   if (cents <= 0) {
     return (

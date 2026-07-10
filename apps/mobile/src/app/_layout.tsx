@@ -47,6 +47,7 @@ function ThemedStack() {
     >
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="auth" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="event/[id]" />
       <Stack.Screen name="reset-password" />
     </Stack>
   );

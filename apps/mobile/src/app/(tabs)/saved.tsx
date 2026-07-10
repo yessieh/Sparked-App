@@ -357,6 +357,7 @@ export default function Saved() {
                     going={goingIds.has(e.id)}
                     onToggleSave={() => toggleSave(e.id)}
                     onToggleGoing={() => toggleRsvp(e.id)}
+                    onTap={() => router.push({ pathname: '/event/[id]', params: { id: e.id } })}
                   />
                 ))}
               </View>

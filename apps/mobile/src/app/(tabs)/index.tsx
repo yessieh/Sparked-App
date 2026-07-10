@@ -19,12 +19,11 @@ import {
 import EventStub, { type FeedEvent } from '../../components/EventStub';
 import SparkedLogo from '../../components/SparkedLogo';
 import { useAuth } from '../../lib/auth';
+import { TEST_ORIGIN } from '../../lib/devOrigin';
 import { useEngagement } from '../../lib/engagement';
 import { supabase } from '../../lib/supabase';
 import { brand, tracking, trackingEm, useTheme } from '../../theme';
 
-// Dev test location: Sahuarita, AZ. Device geolocation lands at a later stage.
-const TEST_ORIGIN = { lat: 31.9576, lng: -110.9556 };
 const RADIUS_MILES = 25;
 
 export default function Explore() {
@@ -132,6 +131,7 @@ export default function Explore() {
             going={goingIds.has(item.id)}
             onToggleSave={gated(() => toggleSave(item.id))}
             onToggleGoing={gated(() => toggleRsvp(item.id))}
+            onTap={() => router.push({ pathname: '/event/[id]', params: { id: item.id } })}
           />
         )}
         ListHeaderComponent={header}
