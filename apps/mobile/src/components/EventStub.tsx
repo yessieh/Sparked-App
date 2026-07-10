@@ -104,7 +104,10 @@ function CheckIcon({ size = 13, color }: { size?: number; color: string }) {
 }
 
 /** 28×28 utility-column action button (prototype _stubBtn). `tint` colors the
- * active state: gold for save, semantic green for going. */
+ * active state: gold for save, semantic green for going.
+ * Pre-use affordance (locked): a small label chip appears on hover (desktop)
+ * or press (mobile) naming the action — label only, NO animation; the stamp
+ * celebration stays reserved for Event Detail. */
 function StubButton({
   active,
   tint,
@@ -118,27 +121,62 @@ function StubButton({
   onPress: () => void;
   children: React.ReactNode;
 }) {
+  const theme = useTheme();
+  const [labelVisible, setLabelVisible] = useState(false);
   const activeBg = tint === 'gold' ? 'rgba(252,163,17,0.14)' : 'rgba(74,222,128,0.14)';
   const activeBorder = tint === 'gold' ? 'rgba(252,163,17,0.35)' : 'rgba(74,222,128,0.36)';
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityLabel={label}
-      accessibilityState={{ selected: active }}
-      hitSlop={6}
-      style={{
-        width: 28,
-        height: 28,
-        borderRadius: 9,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: active ? activeBg : 'rgba(255,255,255,0.07)',
-        borderWidth: 1,
-        borderColor: active ? activeBorder : 'rgba(255,255,255,0.12)',
-      }}
-    >
-      {children}
-    </Pressable>
+    <View style={{ alignItems: 'center' }}>
+      {labelVisible && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            bottom: 33,
+            zIndex: 10,
+            backgroundColor: brand.deepNavy,
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.14)',
+            borderRadius: 7,
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+          }}
+        >
+          <Text
+            numberOfLines={1}
+            style={{
+              fontFamily: theme.fonts.bodySemiBold,
+              fontSize: 10,
+              color: '#eef0ff',
+            }}
+          >
+            {label}
+          </Text>
+        </View>
+      )}
+      <Pressable
+        onPress={onPress}
+        onHoverIn={() => setLabelVisible(true)}
+        onHoverOut={() => setLabelVisible(false)}
+        onPressIn={() => setLabelVisible(true)}
+        onPressOut={() => setLabelVisible(false)}
+        accessibilityLabel={label}
+        accessibilityState={{ selected: active }}
+        hitSlop={6}
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: 9,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: active ? activeBg : 'rgba(255,255,255,0.07)',
+          borderWidth: 1,
+          borderColor: active ? activeBorder : 'rgba(255,255,255,0.12)',
+        }}
+      >
+        {children}
+      </Pressable>
+    </View>
   );
 }
 
@@ -404,7 +442,22 @@ export default function EventStub({
               {event.venue_name ?? event.organizer_name}
               {typeof event.distance_miles === 'number' ? ` · ${event.distance_miles.toFixed(1)} mi` : ''}
             </Text>
-            <PriceLine cents={event.entry_fee_cents} />
+            {/* price + quiet social proof — "N going" only when N > 0 */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <PriceLine cents={event.entry_fee_cents} />
+              {typeof event.rsvp_count === 'number' && event.rsvp_count > 0 && (
+                <Text
+                  style={{
+                    fontFamily: theme.fonts.bodyMedium,
+                    fontSize: 11,
+                    color: theme.colors.textFaint,
+                    marginTop: 5,
+                  }}
+                >
+                  {event.rsvp_count} going
+                </Text>
+              )}
+            </View>
           </View>
 
           <Perforation />

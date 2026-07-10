@@ -9,9 +9,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
-import { GradientButton } from '../../components/AuthControls';
+import { GradientButton, GradientFill } from '../../components/AuthControls';
 import EventStub, { type FeedEvent } from '../../components/EventStub';
 import SparkedLogo from '../../components/SparkedLogo';
 import { useAuth } from '../../lib/auth';
@@ -37,6 +37,46 @@ interface SavedEventRow {
   rsvp_count: number;
   workspaces: { name: string } | null;
   event_categories: { category_id: string }[];
+}
+
+/** Filter pill per the locked pill language — gradient when active. */
+function FilterPill({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityState={{ selected: active }}
+      style={{
+        borderRadius: theme.radii.pill,
+        overflow: 'hidden',
+        paddingHorizontal: 16,
+        paddingVertical: 7,
+        backgroundColor: active ? undefined : theme.colors.iconChipBg,
+        borderWidth: active ? 0 : 1,
+        borderColor: theme.colors.cardBorder,
+      }}
+    >
+      {active && <GradientFill />}
+      <Text
+        style={{
+          fontFamily: theme.fonts.bodySemiBold,
+          fontWeight: '800',
+          fontSize: theme.fontSizes.caption,
+          color: active ? brand.navy : theme.colors.textMuted,
+        }}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
 }
 
 function SignedOutSaved() {
@@ -94,23 +134,32 @@ export default function Saved() {
   const { savedIds, goingIds, toggleSave, refresh } = useEngagement();
   const [rows, setRows] = useState<SavedEventRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // All is the default — nothing is ever hidden by default (locked ruling).
+  const [filter, setFilter] = useState<'all' | 'going'>('all');
 
   const userId = session?.user.id ?? null;
 
   const load = useCallback(async () => {
     if (!userId) return;
-    // Own saves via engagement refresh, then the event rows by id. Saved
-    // events may sit outside the feed radius, so this reads events directly
+    // UNION of saved OR going (ruling: unsaving an event you're still Going
+    // to must never remove it — a commitment outranks a tidied bookmark).
+    // Events may sit outside the feed radius, so this reads events directly
     // (published-only per RLS) rather than the feed RPC.
     await refresh();
-    const { data: saveRows, error: savesError } = await supabase
-      .from('saves')
-      .select('event_id');
-    if (savesError) {
-      setError(savesError.message);
+    const [saveRows, rsvpRows] = await Promise.all([
+      supabase.from('saves').select('event_id'),
+      supabase.from('rsvps').select('event_id'),
+    ]);
+    const fetchError = saveRows.error ?? rsvpRows.error;
+    if (fetchError) {
+      setError(fetchError.message);
       return;
     }
-    const ids = saveRows.map((r) => r.event_id);
+    const ids = [
+      ...new Set(
+        [...(saveRows.data ?? []), ...(rsvpRows.data ?? [])].map((r) => r.event_id),
+      ),
+    ];
     if (ids.length === 0) {
       setError(null);
       setRows([]);
@@ -137,11 +186,16 @@ export default function Saved() {
     }, [load]),
   );
 
-  // savedIds drives the visible list so an unsave hides the card instantly
-  // (optimistic), without refetching.
+  // The live sets drive visibility so toggles reflect instantly without a
+  // refetch: a card stays while EITHER state holds and drops only at neither.
+  // Within each time bucket, Going events sort first (structural priority —
+  // rows arrive starts_at-ordered, and the stable partition preserves that
+  // inside each half). The Going pill narrows the list; All hides nothing.
   const sections = useMemo(() => {
     if (!rows) return null;
-    const visible = rows.filter((r) => savedIds.has(r.id));
+    const visible = rows.filter((r) =>
+      filter === 'going' ? goingIds.has(r.id) : savedIds.has(r.id) || goingIds.has(r.id),
+    );
     const buckets: Record<SavedBucket, FeedEvent[]> = { tonight: [], weekend: [], coming: [] };
     for (const r of visible) {
       buckets[savedBucket(r.starts_at)].push({
@@ -156,13 +210,23 @@ export default function Saved() {
         categories: r.event_categories.map((c) => c.category_id),
       });
     }
-    return BUCKET_ORDER.map((key) => ({ key, label: BUCKET_LABELS[key], items: buckets[key] })).filter(
-      (s) => s.items.length > 0,
-    );
-  }, [rows, savedIds]);
+    return BUCKET_ORDER.map((key) => ({
+      key,
+      label: BUCKET_LABELS[key],
+      items: [
+        ...buckets[key].filter((e) => goingIds.has(e.id)),
+        ...buckets[key].filter((e) => !goingIds.has(e.id)),
+      ],
+    })).filter((s) => s.items.length > 0);
+  }, [rows, savedIds, goingIds, filter]);
 
   if (!session) return <SignedOutSaved />;
 
+  // Union count = the screen's inventory (subtitle + pill visibility);
+  // total = what the active filter currently shows.
+  const unionTotal = rows
+    ? rows.filter((r) => savedIds.has(r.id) || goingIds.has(r.id)).length
+    : 0;
   const total = sections?.reduce((n, s) => n + s.items.length, 0) ?? 0;
 
   return (
@@ -199,10 +263,21 @@ export default function Saved() {
           marginBottom: 22,
         }}
       >
-        {total === 0
+        {unionTotal === 0
           ? 'Bookmark events from the feed to see them here.'
-          : `${total} ${total === 1 ? 'event' : 'events'}, sorted by when they happen.`}
+          : `${unionTotal} ${unionTotal === 1 ? 'event' : 'events'}, sorted by when they happen.`}
       </Text>
+
+      {unionTotal > 0 && (
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
+          <FilterPill label="All" active={filter === 'all'} onPress={() => setFilter('all')} />
+          <FilterPill
+            label="Going"
+            active={filter === 'going'}
+            onPress={() => setFilter('going')}
+          />
+        </View>
+      )}
 
       {error ? (
         <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 13, color: theme.colors.danger }}>
@@ -225,7 +300,11 @@ export default function Saved() {
             gap: 10,
           }}
         >
-          <Ionicons name="bookmark-outline" size={22} color={theme.colors.textFaint} />
+          <Ionicons
+            name={filter === 'going' ? 'checkmark-circle-outline' : 'bookmark-outline'}
+            size={22}
+            color={theme.colors.textFaint}
+          />
           <Text
             style={{
               fontFamily: theme.fonts.bodyMedium,
@@ -235,7 +314,9 @@ export default function Saved() {
               textAlign: 'center',
             }}
           >
-            Tap the bookmark icon on any event to save it.
+            {filter === 'going'
+              ? "Nothing marked Going yet — tap the check on any event you're attending."
+              : 'Tap the bookmark icon on any event to save it.'}
           </Text>
         </View>
       ) : (
