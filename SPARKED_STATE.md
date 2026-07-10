@@ -334,8 +334,20 @@ dashboard, never in repo/chat); redirect allowlist = `sparked://**` (app.json
 scheme, standalone builds), `exp://127.0.0.1:8081/--/**` +
 `exp://192.168.*.*:8081/--/**` (Expo Go dev), `http://localhost:8081/**`
 (Expo web dev). Rate limits left at defaults — NOTE: built-in mailer caps at
-2 emails/hr until custom SMTP lands with the email-provider pick. App-side
-auth (login screen, session handling, profile rows) = next session.
+2 emails/hr until custom SMTP lands with the email-provider pick.
+
+**App-side auth built (2026-07-09):** tab shell (Explore + Me; Me = the only
+auth entry, browsing fully anonymous), persisted sessions (AsyncStorage /
+localStorage + AppState token refresh), Google OAuth (web redirect + native
+in-app browser w/ deep-link session exchange), auth screen
+(signup/login/forgot per design reference), reset-password route, logged-out
+Me invitation + signed-in hub (profile name from DB, STATIC workspace
+invitation — creation = stage 5). Verified live: Google end-to-end (profiles
+trigger fired, 4 real users), persistence across reload, sign-out.
+Gotcha for reuse: SVG gradient ids must be useId-generated — url(#id) is
+document-global on web and screens stay mounted behind modals.
+**Pending: email-confirmation in-app return test** (2/hr built-in mailer cap
+hit during testing; retest when the window resets).
 
 ## SCREENS ADDED SINCE THE TABLE ABOVE (all Design-proven)
 - **Organizer Profile (public, workspace-owned):** logo/name/bio/location, website + social
