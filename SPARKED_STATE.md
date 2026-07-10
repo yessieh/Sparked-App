@@ -126,8 +126,10 @@ Constant across ALL variants:
 - **Card action-button affordance:** bookmark + going buttons show a small
   label chip pre-use — hover on desktop, press on mobile ("Save" /
   "I'm going"; "Saved" / "Going" when active). AMENDED same day: the chip
-  gets a small pop on appearance (~180ms scale-in, settles fast) — chip
-  feedback ONLY; the stamp celebration stays reserved for Event Detail.
+  gets a small pop (~180ms scale-in, settles fast) on appearance AND on
+  every click/tap — chip feedback ONLY; the stamp celebration stays
+  reserved for Event Detail. Chips right-anchor to their button (buttons
+  sit at the card's clipping edge; center-anchoring cut off wider labels).
   Both buttons render on BOTH variants (Saved is where plans firm up —
   promoting to Going must work there). Going-count is optimistic: it moves
   with the toggle, never waits for a focus change, vanishes entirely at 0.
