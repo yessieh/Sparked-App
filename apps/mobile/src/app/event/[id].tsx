@@ -4,9 +4,9 @@
 // name derived from the workspace; consumer-facing data only).
 // Public to anonymous users (architecture lock #2); only the RSVP write is
 // gated to auth. Distance is PostGIS-computed by the event_detail RPC.
-// Session B adds: swipeable gallery (inside HeroSlot), RSVP stamp
-// celebration, report sheet. Organizer tap-through lands with the Organizer
-// Profile stage — name renders as plain text here.
+// Session B (this session): 1–3 photo gallery (EventGallery) + the RSVP
+// stamp interaction. Still later: report sheet; organizer tap-through lands
+// with the Organizer Profile stage — name renders as plain text here.
 
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
@@ -22,9 +22,10 @@ import {
   Text,
   View,
 } from 'react-native';
-import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
+import Svg, { Path, Rect } from 'react-native-svg';
 
 import { GradientButton, GradientFill, SecondaryButton } from '../../components/AuthControls';
+import EventGallery, { type GalleryPhoto } from '../../components/EventGallery';
 import { CategoryBadges, Perforation, PriceLine } from '../../components/EventStub';
 import { useAuth } from '../../lib/auth';
 import { TEST_ORIGIN } from '../../lib/devOrigin';
@@ -79,23 +80,12 @@ function RowIcon({ kind, color }: { kind: 'cal' | 'clock' | 'pin'; color: string
   );
 }
 
-/** Hero slot — the swipeable gallery (session B) replaces THIS component's
- * internals only; nothing outside restructures. Until real uploads, it's the
- * same category-tinted gradient placeholder the feed cards use. */
-function HeroSlot({ eventId, stripe }: { eventId: string; stripe: string }) {
-  return (
-    <View style={{ height: 240 }}>
-      <Svg width="100%" height="240">
-        <Defs>
-          <LinearGradient id={`hero-${eventId}`} x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor={brand.deepNavy} />
-            <Stop offset="1" stopColor={stripe} stopOpacity={0.6} />
-          </LinearGradient>
-        </Defs>
-        <Rect x="0" y="0" width="100%" height="240" fill={`url(#hero-${eventId})`} />
-      </Svg>
-    </View>
-  );
+/** Placeholder photo set until real uploads (Code-stage item): Curbside
+ * carries 1 image, paid tiers demo the full 3-image gallery. Real rows from
+ * event_photos will map to the same GalleryPhoto shape with url set. */
+function placeholderPhotos(eventId: string, tierId: string, tint: string): GalleryPhoto[] {
+  const count = tierId === 'curbside' ? 1 : 3;
+  return Array.from({ length: count }, (_, i) => ({ key: `${eventId}-${i}`, tint }));
 }
 
 /** Translucent 40×40 header icon chip (back / bookmark). */
@@ -231,12 +221,13 @@ export default function EventDetailScreen() {
   const stripe = categoryColor(cats);
   const cd = eventCountdown(event.starts_at, event.ends_at);
   const goingCount = event.rsvp_count + rsvpDelta(event.id);
+  const photos = placeholderPhotos(event.id, event.tier_id, stripe);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
       <ScrollView contentContainerStyle={{ paddingBottom: 48 }}>
         <View style={{ maxWidth: 640, width: '100%', alignSelf: 'center' }}>
-          <HeroSlot eventId={event.id} stripe={stripe} />
+          <EventGallery photos={photos} bg={theme.colors.bg} showArrows={Platform.OS === 'web'} />
 
           <View style={{ paddingHorizontal: 24, marginTop: 16 }}>
             <CategoryBadges categories={cats} max={3} />
