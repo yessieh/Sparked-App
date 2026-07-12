@@ -12,10 +12,11 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as Linking from 'expo-linking';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  Easing,
   Platform,
   Pressable,
   ScrollView,
@@ -32,6 +33,7 @@ import { TEST_ORIGIN } from '../../lib/devOrigin';
 import { useEngagement } from '../../lib/engagement';
 import { eventCountdown, eventDateLabel, eventTimeLabel } from '../../lib/eventTime';
 import { supabase } from '../../lib/supabase';
+import { useReducedMotion } from '../../lib/useReducedMotion';
 import { brand, useTheme } from '../../theme';
 import { categoryColor } from '../../theme/categoryColors';
 
@@ -132,6 +134,18 @@ export default function EventDetailScreen() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastOpacity = useRef(new Animated.Value(1)).current;
 
+  // ---- RSVP stamp (the signature moment — fires ONLY on this screen) ----
+  // stampAnim drives stripe color (category → semantic green) and the Going
+  // chip; the STAMPED mark slams in with a back-eased scale. The animation
+  // plays only on a user press: arriving already-going (reload, deep link)
+  // renders the stamped state statically, and un-RSVP is an instant state
+  // return — no reverse celebration. Reduced motion: everything instant.
+  const reducedMotion = useReducedMotion();
+  const stampPressed = useRef(false);
+  const stampAnim = useRef(new Animated.Value(0)).current;
+  const markScale = useRef(new Animated.Value(1)).current;
+  const markOpacity = useRef(new Animated.Value(0)).current;
+
   const load = useCallback(async () => {
     if (!id) return;
     const { data, error: rpcError } = await supabase.rpc('event_detail', {
@@ -155,6 +169,46 @@ export default function EventDetailScreen() {
 
   const saved = id ? savedIds.has(id) : false;
   const going = id ? goingIds.has(id) : false;
+
+  useEffect(() => {
+    if (going) {
+      if (stampPressed.current && !reducedMotion) {
+        stampAnim.setValue(0);
+        markOpacity.setValue(0);
+        markScale.setValue(1.6);
+        // Decisive, ≤600ms total: stripe/chip sweep 300ms; the mark lands
+        // harder — 260ms scale with a back overshoot, like a rubber stamp.
+        Animated.parallel([
+          Animated.timing(stampAnim, {
+            toValue: 1,
+            duration: 300,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: false,
+          }),
+          Animated.timing(markOpacity, {
+            toValue: 1,
+            duration: 160,
+            useNativeDriver: false,
+          }),
+          Animated.timing(markScale, {
+            toValue: 1,
+            duration: 260,
+            easing: Easing.out(Easing.back(2.4)),
+            useNativeDriver: false,
+          }),
+        ]).start();
+      } else {
+        stampAnim.setValue(1);
+        markOpacity.setValue(1);
+        markScale.setValue(1);
+      }
+    } else {
+      stampAnim.setValue(0);
+      markOpacity.setValue(0);
+      markScale.setValue(1);
+    }
+    stampPressed.current = false;
+  }, [going, reducedMotion, stampAnim, markOpacity, markScale]);
 
   const gated = (action: () => void) => () => {
     if (session) action();
@@ -222,6 +276,10 @@ export default function EventDetailScreen() {
   const cd = eventCountdown(event.starts_at, event.ends_at);
   const goingCount = event.rsvp_count + rsvpDelta(event.id);
   const photos = placeholderPhotos(event.id, event.tier_id, stripe);
+  const stripeColor = stampAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [stripe, theme.colors.green],
+  });
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
@@ -263,7 +321,8 @@ export default function EventDetailScreen() {
                 marginBottom: 22,
               }}
             >
-              <View style={{ width: 5, backgroundColor: stripe }} />
+              {/* stripe sweeps category color → semantic green on stamp */}
+              <Animated.View style={{ width: 5, backgroundColor: stripeColor }} />
               <View style={{ flex: 1, minWidth: 0, paddingHorizontal: 14, paddingVertical: 17, gap: 11, justifyContent: 'center' }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
                   <RowIcon kind="cal" color={brand.flameRed} />
@@ -319,7 +378,99 @@ export default function EventDetailScreen() {
                   {cd.label}
                 </Text>
               </View>
+
+              {/* STAMPED mark — rubber-stamp slam over the ticket. */}
+              {going && (
+                <Animated.View
+                  pointerEvents="none"
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: markOpacity,
+                    transform: [{ rotate: '-8deg' }, { scale: markScale }],
+                  }}
+                >
+                  <View
+                    style={{
+                      borderWidth: 2.5,
+                      borderColor: theme.colors.green,
+                      borderRadius: 9,
+                      paddingHorizontal: 12,
+                      paddingVertical: 5,
+                      backgroundColor: 'rgba(74,222,128,0.10)',
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontFamily: theme.fonts.displayBlack,
+                        fontWeight: '900',
+                        fontSize: 15,
+                        letterSpacing: 3,
+                        color: theme.colors.green,
+                      }}
+                    >
+                      STAMPED
+                    </Text>
+                  </View>
+                </Animated.View>
+              )}
             </View>
+
+            {/* Going chip + count — arrives with the stamp, holds while going. */}
+            {going && (
+              <Animated.View
+                style={{
+                  opacity: stampAnim,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 9,
+                  marginTop: -10,
+                  marginBottom: 22,
+                }}
+              >
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 5,
+                    paddingHorizontal: 9,
+                    paddingVertical: 4,
+                    borderRadius: 9999,
+                    backgroundColor: 'rgba(74,222,128,0.12)',
+                    borderWidth: 1,
+                    borderColor: 'rgba(74,222,128,0.36)',
+                  }}
+                >
+                  <Ionicons name="checkmark" size={11} color={theme.colors.green} />
+                  <Text
+                    style={{
+                      fontFamily: theme.fonts.bodySemiBold,
+                      fontSize: 10.5,
+                      fontWeight: '800',
+                      color: theme.colors.green,
+                    }}
+                  >
+                    Going
+                  </Text>
+                </View>
+                {goingCount > 0 && (
+                  <Text
+                    style={{
+                      fontFamily: theme.fonts.bodyMedium,
+                      fontSize: 11.5,
+                      color: theme.colors.textFaint,
+                    }}
+                  >
+                    {goingCount} going
+                  </Text>
+                )}
+              </Animated.View>
+            )}
 
             {event.description && (
               <Text
@@ -387,11 +538,50 @@ export default function EventDetailScreen() {
             </View>
 
             {/* Action row — locked CTA hierarchy: gradient primary +
-                secondary outline. Plain state change; stamp = session B. */}
-            <GradientButton onPress={gated(() => toggleRsvp(event.id))}>
-              {going ? 'Going ✓' : "I'm Going"}
-            </GradientButton>
-            {goingCount > 0 && (
+                secondary outline. Going flips the CTA to its confirmed
+                state (semantic green — the one green exception); pressing
+                it un-RSVPs as a plain state return. */}
+            {going ? (
+              <Pressable
+                onPress={gated(() => toggleRsvp(event.id))}
+                accessibilityLabel="You're going — tap to undo"
+                style={({ pressed }) => ({
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 9,
+                  borderRadius: theme.radii.lg,
+                  borderWidth: 1.5,
+                  borderColor: 'rgba(74,222,128,0.45)',
+                  backgroundColor: pressed ? 'rgba(74,222,128,0.20)' : 'rgba(74,222,128,0.12)',
+                  paddingVertical: 16,
+                  paddingHorizontal: 20,
+                })}
+              >
+                <Ionicons name="checkmark-circle" size={18} color={theme.colors.green} />
+                <Text
+                  style={{
+                    fontFamily: theme.fonts.displayBlack,
+                    fontWeight: '900',
+                    fontSize: 16,
+                    letterSpacing: -0.16,
+                    color: theme.colors.green,
+                  }}
+                >
+                  You're going
+                </Text>
+              </Pressable>
+            ) : (
+              <GradientButton
+                onPress={gated(() => {
+                  stampPressed.current = true;
+                  toggleRsvp(event.id);
+                })}
+              >
+                I'm Going
+              </GradientButton>
+            )}
+            {!going && goingCount > 0 && (
               <Text
                 style={{
                   fontFamily: theme.fonts.bodyMedium,
