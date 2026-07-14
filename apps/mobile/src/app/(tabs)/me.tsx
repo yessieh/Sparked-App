@@ -19,6 +19,7 @@ import {
 import SparkedLogo from '../../components/SparkedLogo';
 import { useAuth } from '../../lib/auth';
 import { supabase } from '../../lib/supabase';
+import { getOrCreateWorkspace } from '../../lib/workspace';
 import { brand, useTheme } from '../../theme';
 
 // What an account unlocks — copy from the proven design.
@@ -195,6 +196,25 @@ function SignedInMe() {
   const { session, signOut } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const startCreate = async () => {
+    if (!session) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      await getOrCreateWorkspace(
+        session.user.id,
+        profile?.display_name ?? session.user.email ?? 'My workspace',
+      );
+      router.push('/create');
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const userId = session?.user.id;
   useEffect(() => {
@@ -301,11 +321,15 @@ function SignedInMe() {
         </Text>
       )}
 
-      {/* Workspace slot — static dashed invitation. Tapping does nothing yet:
-          the creation flow (and silent workspace spin-up) is stage 5. */}
-      <View
-        style={{
-          backgroundColor: 'rgba(255,140,56,0.04)',
+      {/* Workspace slot — dashed invitation, now LIVE: the tap silently
+          ensures the workspace (one owner membership, invisible to the UI —
+          locked architecture) and opens the create fork. */}
+      <Pressable
+        onPress={startCreate}
+        disabled={creating}
+        accessibilityLabel="Create your first event"
+        style={({ pressed }) => ({
+          backgroundColor: pressed ? 'rgba(255,140,56,0.09)' : 'rgba(255,140,56,0.04)',
           borderWidth: 1.5,
           borderStyle: 'dashed',
           borderColor: 'rgba(255,140,56,0.50)',
@@ -313,19 +337,24 @@ function SignedInMe() {
           paddingVertical: 22,
           paddingHorizontal: 18,
           alignItems: 'center',
-        }}
+          opacity: creating ? 0.6 : 1,
+        })}
       >
-        <Text
-          style={{
-            fontFamily: theme.fonts.displayBlack,
-            fontWeight: '900',
-            fontSize: 17,
-            letterSpacing: -0.17,
-            color: brand.sparkOrange,
-          }}
-        >
-          + Create your first event
-        </Text>
+        {creating ? (
+          <ActivityIndicator color={brand.sparkOrange} />
+        ) : (
+          <Text
+            style={{
+              fontFamily: theme.fonts.displayBlack,
+              fontWeight: '900',
+              fontSize: 17,
+              letterSpacing: -0.17,
+              color: brand.sparkOrange,
+            }}
+          >
+            + Create your first event
+          </Text>
+        )}
         <Text
           style={{
             fontFamily: theme.fonts.bodyMedium,
@@ -339,7 +368,19 @@ function SignedInMe() {
         >
           Host your own events and reach people nearby.
         </Text>
-      </View>
+      </Pressable>
+      {createError && (
+        <Text
+          style={{
+            fontFamily: theme.fonts.bodyMedium,
+            fontSize: theme.fontSizes.caption,
+            color: theme.colors.danger,
+            marginTop: 10,
+          }}
+        >
+          Couldn't start: {createError}
+        </Text>
+      )}
 
       <View style={{ marginTop: 30 }}>
         <SecondaryButton onPress={() => signOut()}>Sign out</SecondaryButton>
