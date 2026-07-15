@@ -26,6 +26,7 @@ import {
 } from 'react-native';
 
 import { FormField, GradientButton, SecondaryButton } from '../../components/AuthControls';
+import { DateField, TimeField, format12h } from '../../components/pickers';
 import { useAuth } from '../../lib/auth';
 import { supabase } from '../../lib/supabase';
 import {
@@ -329,18 +330,12 @@ export default function CurbsideForm() {
             style={{ minHeight: 84, textAlignVertical: 'top' }}
           />
           <FormField label="Address" value={address} onChangeText={setAddress} placeholder="Street address" autoComplete="street-address" />
-          <FormField
-            label="Date · single day only"
-            value={date}
-            onChangeText={setDate}
-            placeholder={todayYMD()}
-            autoCapitalize="none"
-          />
-          {!dateValid && date.length >= 10 && (
-            <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: theme.fontSizes.caption, color: theme.colors.danger, marginTop: -8, marginBottom: 12 }}>
-              Use YYYY-MM-DD, today or later.
+          <View style={{ marginBottom: 14 }}>
+            <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: theme.fontSizes.caption, color: theme.colors.textMuted, marginBottom: 7 }}>
+              Date · single day only
             </Text>
-          )}
+            <DateField value={date} onChange={setDate} min={todayYMD()} />
+          </View>
 
           <View style={{ marginBottom: 14 }}>
             <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: theme.fontSizes.caption, color: theme.colors.textMuted, marginBottom: 7 }}>
@@ -354,18 +349,16 @@ export default function CurbsideForm() {
                 thumbColor="#ffffff"
               />
               {timeOn ? (
-                <View style={{ flex: 1 }}>
-                  <FormField label="" value={time} onChangeText={setTime} placeholder="18:00" autoCapitalize="none" />
-                </View>
+                <TimeField value={time} onChange={setTime} />
               ) : (
                 <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 12.5, color: theme.colors.textFaint }}>
                   All-day post
                 </Text>
               )}
             </View>
-            {timeOn && !timeValid && time.length >= 4 && (
-              <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: theme.fontSizes.caption, color: theme.colors.danger, marginTop: 4 }}>
-                Use 24h HH:MM, e.g. 18:00.
+            {timeOn && (
+              <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: theme.fontSizes.caption, color: theme.colors.textFaint, marginTop: 6 }}>
+                Starts {format12h(time)}
               </Text>
             )}
           </View>
