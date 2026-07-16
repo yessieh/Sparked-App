@@ -41,7 +41,8 @@ interface EventDetail {
   id: string;
   title: string;
   description: string | null;
-  organizer_name: string;
+  /** Masked (null) server-side when the poster chose "Post without my name". */
+  organizer_name: string | null;
   tier_id: string;
   status: string;
   starts_at: string;
@@ -344,12 +345,25 @@ export default function EventDetailScreen() {
                     style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 13, lineHeight: 17.5, color: theme.colors.textMuted, flex: 1 }}
                     numberOfLines={2}
                   >
-                    {event.venue_name ?? event.organizer_name}
+                    {event.venue_name ?? event.organizer_name ?? event.address ?? ''}
                     {typeof event.distance_miles === 'number'
                       ? ` · ${event.distance_miles.toFixed(1)} mi`
                       : ''}
                   </Text>
                 </View>
+                {/* Curbside attribution lives IN the ticket — minimized
+                    display, full internal accountability (ruling 2026-07-15).
+                    Paid tiers keep the ORGANIZER block below instead. */}
+                {event.tier_id === 'curbside' && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
+                    <Ionicons name="person-circle-outline" size={15} color={theme.colors.textFaint} />
+                    <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 12, color: theme.colors.textFaint }}>
+                      {event.organizer_name
+                        ? `Posted by ${event.organizer_name.split(/\s+/)[0]} · community member`
+                        : 'Posted by a verified neighbor'}
+                    </Text>
+                  </View>
+                )}
                 <PriceLine cents={event.entry_fee_cents} />
               </View>
               <Perforation />
@@ -520,8 +534,10 @@ export default function EventDetailScreen() {
               </View>
             )}
 
-            {/* Organizer — name derived from the workspace; plain text this
-                session (tap-through arrives with the Organizer Profile stage). */}
+            {/* Organizer — PAID tiers only (curbside attribution lives in the
+                ticket). Name derived from the workspace; plain text until the
+                Organizer Profile stage brings tap-through. */}
+            {event.tier_id !== 'curbside' && event.organizer_name && (
             <View style={{ borderTopWidth: 1, borderTopColor: theme.colors.divider, paddingTop: 18, marginBottom: 26 }}>
               <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: theme.fontSizes.eyebrow, fontWeight: '900', letterSpacing: 2.2, textTransform: 'uppercase', color: brand.ignitionGold }}>
                 Organizer
@@ -536,6 +552,7 @@ export default function EventDetailScreen() {
                 </Text>
               </View>
             </View>
+            )}
 
             {/* Action row — locked CTA hierarchy: gradient primary +
                 secondary outline. Going flips the CTA to its confirmed

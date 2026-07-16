@@ -23,7 +23,8 @@ import { categoryColor } from '../theme/categoryColors';
 export interface FeedEvent {
   id: string;
   title: string;
-  organizer_name: string;
+  /** Null when a curbside poster chose "Post without my name" (0009 mask). */
+  organizer_name: string | null;
   starts_at: string;
   ends_at: string | null;
   venue_name: string | null;
@@ -374,7 +375,7 @@ export default function EventStub({
             {eventDateLabel(event.starts_at)} · {eventTimeLabel(event.starts_at, event.ends_at)}
           </Text>
           <Text numberOfLines={1} style={[styles.metaLine, { color: theme.colors.textMuted, fontFamily: theme.fonts.bodyMedium }]}>
-            {event.venue_name ?? event.organizer_name}
+            {event.venue_name ?? event.organizer_name ?? 'Verified neighbor'}
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 10 }}>
             <StatusChip going={going} saved={saved} />
@@ -479,7 +480,7 @@ export default function EventStub({
               {eventDateLabel(event.starts_at)} · {eventTimeLabel(event.starts_at, event.ends_at)}
             </Text>
             <Text numberOfLines={1} style={[styles.metaLine, { color: theme.colors.textMuted, fontFamily: theme.fonts.bodyMedium }]}>
-              {event.venue_name ?? event.organizer_name}
+              {event.venue_name ?? event.organizer_name ?? 'Verified neighbor'}
               {typeof event.distance_miles === 'number' ? ` · ${event.distance_miles.toFixed(1)} mi` : ''}
             </Text>
             {/* price + quiet social proof — "N going" only when N > 0 */}

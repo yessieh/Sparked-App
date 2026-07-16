@@ -35,6 +35,7 @@ interface SavedEventRow {
   venue_name: string | null;
   entry_fee_cents: number;
   rsvp_count: number;
+  curbside_anonymous: boolean;
   workspaces: { name: string } | null;
   event_categories: { category_id: string }[];
 }
@@ -168,7 +169,7 @@ export default function Saved() {
     const { data, error: eventsError } = await supabase
       .from('events')
       .select(
-        'id,title,starts_at,ends_at,venue_name,entry_fee_cents,rsvp_count,workspaces(name),event_categories(category_id)',
+        'id,title,starts_at,ends_at,venue_name,entry_fee_cents,rsvp_count,curbside_anonymous,workspaces(name),event_categories(category_id)',
       )
       .in('id', ids)
       .eq('status', 'published')
@@ -201,7 +202,9 @@ export default function Saved() {
       buckets[savedBucket(r.starts_at)].push({
         id: r.id,
         title: r.title,
-        organizer_name: r.workspaces?.name ?? '',
+        // Same mask the RPCs apply server-side (this path reads the table
+        // directly, so the client honors the display-only anonymity here).
+        organizer_name: r.curbside_anonymous ? null : (r.workspaces?.name ?? ''),
         starts_at: r.starts_at,
         ends_at: r.ends_at,
         venue_name: r.venue_name,

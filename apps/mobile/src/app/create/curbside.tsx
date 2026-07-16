@@ -184,6 +184,7 @@ export default function CurbsideForm() {
   const [date, setDate] = useState(todayYMD());
   const [timeOn, setTimeOn] = useState(false);
   const [time, setTime] = useState('18:00');
+  const [anonPost, setAnonPost] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -235,6 +236,9 @@ export default function CurbsideForm() {
         ends_at,
         address: address.trim(),
         location: `SRID=4326;POINT(${lon} ${lat})`,
+        // Display-only anonymity (0009): the row stays attributed to the
+        // workspace — quota, moderation, reports unchanged.
+        curbside_anonymous: anonPost,
       });
       if (insertError) {
         // The DB gate is the real quota layer — flip to conversion, not error.
@@ -361,6 +365,27 @@ export default function CurbsideForm() {
                 Starts {format12h(time)}
               </Text>
             )}
+          </View>
+
+          <View style={{ marginBottom: 14 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <Switch
+                value={anonPost}
+                onValueChange={setAnonPost}
+                trackColor={{ false: 'rgba(255,255,255,0.10)', true: brand.sparkOrange }}
+                thumbColor="#ffffff"
+              />
+              <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 12.5, color: theme.colors.text }}>
+                Post without my name
+              </Text>
+            </View>
+            <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: theme.fontSizes.caption, lineHeight: 16, color: theme.colors.textFaint, marginTop: 6 }}>
+              {anonPost
+                ? 'Your post will show "Posted by a verified neighbor."'
+                : 'Your post shows your first name.'}{' '}
+              Either way it stays tied to your account — free-post count and accountability
+              don't change.
+            </Text>
           </View>
 
           {error && (
