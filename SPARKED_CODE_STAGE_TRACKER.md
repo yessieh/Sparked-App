@@ -137,6 +137,14 @@ and verified in Cursor/Claude Code.
 - [ ] **Replace hardcoded `mi` distances with PostGIS-computed distance** from
       real user location. All demo distances (Art Walk 1.2mi, etc.) are
       illustrative. Feed = strict in-radius; search = radius-overflow rules.
+- [ ] **Geocoder: Nominatim → paid provider at scale.** Curbside address
+      geocoding uses OpenStreetMap Nominatim (no key, ~1 req/s usage policy,
+      identify via User-Agent) — fine for dev/MVP volume. Swap to a paid
+      geocoder (Google/Mapbox) before real traffic; the mini-form's `geocode`
+      helper is the single swap point.
+- [ ] **Check-in / geofence (ROADMAP).** On-site check-in / proximity arrival
+      confirmation for events. Not MVP — parked as a distinct capability that
+      builds on the PostGIS point already stored per event.
 
 ---
 
@@ -160,6 +168,36 @@ and verified in Cursor/Claude Code.
 - [ ] **Notification prefs stored structured** (category, channel, frequency),
       NOT as loose booleans — anticipates the channel×category grid without a
       later migration.
+
+---
+
+## CREATE EVENT — SESSION 1 (applied 2026-07-15)
+
+- [x] **Curbside quota gate — migration 0008.** SCHEMA_PLAN §6.4; the plan
+      batched this under `0003_host_content`, which was NEVER applied, so
+      Create session 1 pulled it forward as 0008. Computed rolling-100-day
+      count (never a stored counter), before-insert trigger rejects the 4th
+      post, member-scoped UI-count RPC. Behavioral suite **9/9 PASS**. At
+      quota the form shows the CONVERSION screen (invitation, not an error).
+- [x] **Curbside attribution — migration 0009.** `events.curbside_anonymous`
+      display-only flag; feed + detail RPCs mask `organizer_name` server-side.
+      Full model in SPARKED_STATE "CREATE EVENT — CURBSIDE" lock.
+- [x] **Entry fork + Curbside mini-form + typeable pickers built** (Event
+      lane = next-build stub). Silent workspace creation on first post.
+
+## MEDIA & REAL-DEVICE (pre-store)
+
+- [ ] **Real-device test pass (Expo Go) before store prep.** Exercise the
+      touch/native paths automation can't reach: gallery swipe + edge-peek +
+      dots + thumbnails, the RSVP stamp motion, and the Google auth
+      deep-link return — on a PHYSICAL device. Web preview + machine checks
+      do not cover these; they are the standing human feel-list carried
+      across sessions.
+- [ ] **Image-delivery egress strategy.** Real event photos (Code-stage
+      uploads) pull image bytes on every feed scroll — decide the delivery
+      path (Supabase Storage CDN vs. a transform/resize layer vs. external
+      CDN) and its egress cost model BEFORE uploads ship. Feed is
+      read-heavy; unbounded full-size delivery is the cost risk.
 
 ---
 

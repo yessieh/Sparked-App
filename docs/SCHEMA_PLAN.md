@@ -313,6 +313,25 @@ null when unpinned). Index `(event_id)`. RLS mirrors `event_photos`.
   display AND used by a `before insert` trigger that rejects the 4th post
   (client renders the conversion screen on that error).
 - Supporting index already created in 0001 (§3.4).
+- **APPLIED as migration 0008 (2026-07-15)** — pulled forward from this
+  planned `0003_host_content` batch (which was never applied) because the
+  Curbside mini-form shipped in Create session 1. Definer
+  `app.curbside_posts_used` backs both the trigger and a member-scoped
+  public wrapper `public.curbside_posts_used` (null for non-members).
+  Behavioral suite **9/9 PASS** (fills to 3 via the RLS path, 4th rejected
+  with `curbside_quota_exhausted`, paid tiers unaffected, auto-tag intact,
+  post visible in the anon feed RPC, member/non-member UI counts, net-zero
+  cleanup).
+
+### 6.6 Curbside attribution — display-only anonymity (APPLIED 0009)
+- `events.curbside_anonymous boolean not null default false` (additive).
+- The feed RPC (0005) and detail RPC (0007) mask `organizer_name` →
+  `null` when the flag is set, so an anonymized poster's workspace name
+  never leaves the DB through a read path. Display only: the row stays
+  fully attributed to the workspace — quota, moderation, reports unchanged.
+- Accepted limit: the `events.workspace_id` → `workspaces` join is still
+  API-visible; column-level privacy is later hardening. Full display rules
+  in SPARKED_STATE "CREATE EVENT — CURBSIDE" lock.
 
 ### 6.5 Storage buckets (declared alongside)
 `event-photos`, `workspace-logos`, `avatars` — public read; write policies keyed

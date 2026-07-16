@@ -138,6 +138,42 @@ Constant across ALL variants:
 
 ---
 
+## CREATE EVENT — CURBSIDE + SHARED FORM PATTERNS (LOCKED 2026-07-15)
+
+- **US-first formatting, ALL user-facing surfaces.** Dates display as
+  "Jul 15, 2026" (or MM/DD/YYYY in compact contexts); times as 12-hour
+  "h:mm am/pm". NEVER ISO or 24-hour/military in front of the user. Storage
+  is unchanged — a single UTC `starts_at`/`ends_at`; formatting is
+  display-only (`formatUSDate` / `format12h` in components/pickers.tsx).
+- **Typeable time input = THE shared time-entry pattern.** A forgiving text
+  field ("1" / "130" / "9:30" / "18" → normalized to h:mm on blur; AM/PM
+  chips; unparseable reverts to last-good) + a "Starts h:mm am/pm"
+  confirmation line. Built on the Curbside form; the paid wizard's
+  When/Where step INHERITS this exact input when built — it SUPERSEDES the
+  design-reference's segment-highlight time picker (that pending reference
+  fix is closed by this decision). The calendar date picker (month grid,
+  gradient-selected day, min=today) is the parallel shared date pattern.
+  Both live in `components/pickers.tsx` for reuse.
+- **Curbside attribution — minimized display, full internal accountability.**
+  Curbside events show NO ORGANIZER section; attribution folds into the
+  ticket info card as "Posted by {first name} · community member" (first
+  name = first token of the profile display name). The Curbside form carries
+  a "Post without my name" toggle: ON → public surfaces read "Posted by a
+  verified neighbor" and cards fall back to "Verified neighbor". DISPLAY
+  ONLY — the row stays fully attributed to the workspace/account internally;
+  quota, moderation, and reports NEVER change. Implemented via
+  `events.curbside_anonymous` (0009) with server-side name-masking in the
+  feed + detail RPCs (an anonymized name never leaves the DB). Accepted
+  limit: the workspace_id→workspaces join is still API-visible; true
+  column-level privacy is later hardening.
+- **Paid events keep the full ORGANIZER block** (name, avatar, tap-through
+  when the Organizer Profile stage lands) — the minimized attribution model
+  is Curbside-ONLY.
+- **Curbside address geocoding = Nominatim** (OpenStreetMap, no key, plain
+  fetch) for dev/MVP. Swap to a paid geocoder at scale — tracked.
+
+---
+
 ## ARCHITECTURE DECISIONS (locked — protect these)
 
 ### 1. Workspace-owns-events data model (THE most important decision)
@@ -354,7 +390,11 @@ Create Event's tier step (per-day model is DEAD everywhere):
    applies to every future extension.
 
 **Applied migrations (Sparked-App project):** 0001 core spine (+0002 grants),
-0003 PostGIS → extensions schema, 0004 search_path pin. Advisor baseline:
+0003 PostGIS → extensions schema, 0004 search_path pin, 0005 feed RPC,
+0006 saves+rsvps (13/13 behavioral), 0007 event_detail RPC, 0008 curbside
+quota gate (9/9 behavioral — SCHEMA_PLAN §6.4, pulled forward from the plan's
+never-applied 0003_host_content batch), 0009 curbside attribution
+(`curbside_anonymous` flag + RPC name-masking). Advisor baseline steady at
 0 errors / 3 accepted warnings (SCHEMA_PLAN §10.7 — two rls_auto_enable
 platform warnings + leaked-password protection, Pro-gated on the Free plan;
 DECIDED 2026-07-09: enable with the launch-prep Pro upgrade).
