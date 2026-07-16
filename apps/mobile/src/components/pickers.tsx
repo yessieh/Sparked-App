@@ -8,7 +8,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { useTheme } from '../theme';
 import { GradientFill } from './AuthControls';
@@ -221,16 +221,20 @@ export function DateField({
 }
 
 /**
- * 12-hour segmented time picker (reference _TimePicker): hour / minute
- * segments highlight with the spark gradient while being edited; AM/PM pair.
- * Emits 24h 'HH:MM'.
+ * 12-hour time picker. Keeps the reference _TimePicker's segment VISUALS
+ * (hour : minutes + AM/PM pair, gradient on the active piece) but the
+ * interaction is tap-to-pick: tapping a segment opens a value grid below —
+ * no keyboard. (The reference's typed segments failed QA on RN-web: the
+ * gradient overlay painted over the input and free typing fought the 1–12
+ * clamp — deliberate interaction deviation, visuals preserved.)
+ * Emits 24h 'HH:MM'; minutes in 5-minute steps.
  */
 export function TimeField({ value, onChange }: { value: string; onChange: (hhmm: string) => void }) {
   const theme = useTheme();
   const [h24, m] = (value || '18:00').split(':').map(Number);
   const ampm: 'AM' | 'PM' = h24 >= 12 ? 'PM' : 'AM';
   const h12 = h24 % 12 || 12;
-  const [editing, setEditing] = useState<'hour' | 'min' | null>(null);
+  const [picking, setPicking] = useState<'hour' | 'min' | null>(null);
 
   const emit = (nh12: number, nm: number, nap: 'AM' | 'PM') => {
     let h = nh12 % 12;
@@ -238,92 +242,133 @@ export function TimeField({ value, onChange }: { value: string; onChange: (hhmm:
     onChange(`${pad(h)}:${pad(nm)}`);
   };
 
-  const setHour = (v: string) => {
-    let n = parseInt(v.replace(/\D/g, ''), 10);
-    if (Number.isNaN(n)) n = 12;
-    emit(Math.max(1, Math.min(12, n)), m, ampm);
-  };
-  const setMin = (v: string) => {
-    let n = parseInt(v.replace(/\D/g, ''), 10);
-    if (Number.isNaN(n)) n = 0;
-    emit(h12, Math.max(0, Math.min(59, n)), ampm);
-  };
-
-  const seg = (which: 'hour' | 'min', text: string, onText: (v: string) => void, accessibilityLabel: string) => {
-    const on = editing === which;
+  const segment = (which: 'hour' | 'min', text: string, label: string) => {
+    const on = picking === which;
     return (
-      <View style={{ borderRadius: 7, overflow: 'hidden', paddingHorizontal: 2, paddingVertical: 2 }}>
+      <Pressable
+        onPress={() => setPicking((p) => (p === which ? null : which))}
+        accessibilityLabel={label}
+        accessibilityState={{ expanded: on }}
+        style={{ borderRadius: 7, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 2, alignItems: 'center' }}
+      >
         {on && <GradientFill />}
-        <TextInput
-          value={text}
-          onChangeText={onText}
-          onFocus={() => setEditing(which)}
-          onBlur={() => setEditing(null)}
-          inputMode="numeric"
-          maxLength={2}
-          selectTextOnFocus
-          accessibilityLabel={accessibilityLabel}
+        <Text
           style={{
-            width: 30,
-            textAlign: 'center',
             fontFamily: theme.fonts.displayBlack,
             fontWeight: '900',
             fontSize: 17,
-            color: on ? '#14213D' : theme.colors.textMuted,
-            padding: 0,
+            color: on ? '#14213D' : theme.colors.text,
           }}
-        />
-      </View>
+        >
+          {text}
+        </Text>
+      </Pressable>
     );
   };
 
+  const options = picking === 'hour'
+    ? Array.from({ length: 12 }, (_, i) => i + 1)
+    : Array.from({ length: 12 }, (_, i) => i * 5);
+
   return (
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        backgroundColor: theme.colors.iconChipBg,
-        borderWidth: 1,
-        borderColor: theme.colors.cardBorder,
-        borderRadius: 14,
-        paddingHorizontal: 12,
-        paddingVertical: 9,
-        flex: 1,
-      }}
-    >
-      <Ionicons name="time-outline" size={15} color={theme.colors.textFaint} />
-      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 2 }}>
-        {seg('hour', String(h12), setHour, 'Hour')}
-        <Text style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 17, color: theme.colors.textFaint }}>:</Text>
-        {seg('min', pad(m), setMin, 'Minutes')}
-      </View>
-      <View style={{ flexDirection: 'row', gap: 3, padding: 3, borderRadius: 9, backgroundColor: 'rgba(0,0,0,0.22)' }}>
-        {(['AM', 'PM'] as const).map((p) => {
-          const active = ampm === p;
-          return (
-            <Pressable
-              key={p}
-              onPress={() => emit(h12, m, p)}
-              accessibilityLabel={p}
-              accessibilityState={{ selected: active }}
-              style={{ borderRadius: 6, overflow: 'hidden', paddingHorizontal: 9, paddingVertical: 4 }}
-            >
-              {active && <GradientFill />}
-              <Text
-                style={{
-                  fontFamily: theme.fonts.displayBlack,
-                  fontWeight: '900',
-                  fontSize: 11,
-                  color: active ? '#14213D' : theme.colors.textMuted,
-                }}
+    <View style={{ flex: 1 }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+          backgroundColor: theme.colors.iconChipBg,
+          borderWidth: 1,
+          borderColor: theme.colors.cardBorder,
+          borderRadius: 14,
+          paddingHorizontal: 12,
+          paddingVertical: 9,
+        }}
+      >
+        <Ionicons name="time-outline" size={15} color={theme.colors.textFaint} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 2 }}>
+          {segment('hour', String(h12), 'Hour')}
+          <Text style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 17, color: theme.colors.textFaint }}>:</Text>
+          {segment('min', pad(m), 'Minutes')}
+        </View>
+        <View style={{ flexDirection: 'row', gap: 3, padding: 3, borderRadius: 9, backgroundColor: 'rgba(0,0,0,0.22)' }}>
+          {(['AM', 'PM'] as const).map((p) => {
+            const active = ampm === p;
+            return (
+              <Pressable
+                key={p}
+                onPress={() => emit(h12, m, p)}
+                accessibilityLabel={p}
+                accessibilityState={{ selected: active }}
+                style={{ borderRadius: 6, overflow: 'hidden', paddingHorizontal: 9, paddingVertical: 4 }}
               >
-                {p}
-              </Text>
-            </Pressable>
-          );
-        })}
+                {active && <GradientFill />}
+                <Text
+                  style={{
+                    fontFamily: theme.fonts.displayBlack,
+                    fontWeight: '900',
+                    fontSize: 11,
+                    color: active ? '#14213D' : theme.colors.textMuted,
+                  }}
+                >
+                  {p}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
+
+      {picking && (
+        <View
+          style={{
+            marginTop: 8,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: theme.colors.cardBorder,
+            backgroundColor: theme.colors.cardBg,
+            padding: 10,
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+          }}
+        >
+          {options.map((n) => {
+            const selected = picking === 'hour' ? n === h12 : n === m;
+            const optLabel = picking === 'hour' ? `${n} o'clock` : `${pad(n)} minutes`;
+            return (
+              <View key={n} style={{ width: `${100 / 6}%`, padding: 2 }}>
+                <Pressable
+                  onPress={() => {
+                    if (picking === 'hour') emit(n, m, ampm);
+                    else emit(h12, n, ampm);
+                    setPicking(null);
+                  }}
+                  accessibilityLabel={optLabel}
+                  accessibilityState={{ selected }}
+                  style={{
+                    borderRadius: 8,
+                    overflow: 'hidden',
+                    alignItems: 'center',
+                    paddingVertical: 8,
+                  }}
+                >
+                  {selected && <GradientFill />}
+                  <Text
+                    style={{
+                      fontFamily: theme.fonts.bodySemiBold,
+                      fontSize: 12.5,
+                      fontWeight: selected ? '900' : '600',
+                      color: selected ? '#14213D' : theme.colors.text,
+                    }}
+                  >
+                    {picking === 'hour' ? n : pad(n)}
+                  </Text>
+                </Pressable>
+              </View>
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }

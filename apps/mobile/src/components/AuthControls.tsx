@@ -201,8 +201,10 @@ interface FormFieldProps extends TextInputProps {
   label: string;
 }
 
-/** Labeled input matching the prototype's field styling. */
-export function FormField({ label, ...inputProps }: FormFieldProps) {
+/** Labeled input matching the prototype's field styling. Caller `style` is
+ * MERGED on top of the base field style (never replaces it — replacing was
+ * the invisible-Description bug). */
+export function FormField({ label, style, ...inputProps }: FormFieldProps) {
   const theme = useTheme();
   return (
     <View style={{ marginBottom: 14 }}>
@@ -218,18 +220,21 @@ export function FormField({ label, ...inputProps }: FormFieldProps) {
       </Text>
       <TextInput
         placeholderTextColor={theme.colors.textHint}
-        style={{
-          backgroundColor: theme.colors.cardBg,
-          borderWidth: 1,
-          borderColor: theme.colors.cardBorder,
-          borderRadius: theme.radii.lg - 2,
-          paddingVertical: 13,
-          paddingHorizontal: 15,
-          fontFamily: theme.fonts.bodyMedium,
-          fontSize: theme.fontSizes.bodySm,
-          color: theme.colors.text,
-        }}
         {...inputProps}
+        style={[
+          {
+            backgroundColor: theme.colors.cardBg,
+            borderWidth: 1,
+            borderColor: theme.colors.cardBorder,
+            borderRadius: theme.radii.lg - 2,
+            paddingVertical: 13,
+            paddingHorizontal: 15,
+            fontFamily: theme.fonts.bodyMedium,
+            fontSize: theme.fontSizes.bodySm,
+            color: theme.colors.text,
+          },
+          style,
+        ]}
       />
     </View>
   );
