@@ -173,6 +173,61 @@ Constant across ALL variants:
   fetch) for dev/MVP. Swap to a paid geocoder at scale — tracked. Shared by
   both create flows via `lib/geocode.ts` — ONE geocode interface.
 
+### Paid wizard (tier + checkout + publish built 2026-07-16; LOCKED rulings)
+
+- **The wizard is FIVE steps: Basics → When/Where → Tier → Details → Review**
+  → mock checkout. Tier is its own step (ruled 2026-07-16), NOT a field
+  inside Details as the frozen reference has it. Every earlier "4-step
+  wizard" note in this document is superseded by this line.
+  **Tier's position is LOAD-BEARING (session-3 QA fix, same day):** it sits
+  between When/Where and Details because its band price needs the dates
+  behind it AND Details' photo cap needs the tier ahead of it. With Tier
+  after Details, a host picked photos under Standard's cap of 3, upgraded
+  to Plus, and was never shown the 7 slots they just bought.
+- **Tier step shows ONE clean total per tier** for the draft's actual band
+  ("4-day event · $12"). Per-day math appears nowhere.
+- **Standard↔Plus preserves everything, by construction:** all wizard state
+  lives in the parent and `selectTier` writes ONLY `tier` — no field can be
+  lost because nothing else is touched. Photo cap tracks the tier live
+  (Standard 3 / Plus 10).
+- **Plus→Standard over cap: the switch is REFUSED, never a silent drop.**
+  The intent is remembered, a trim panel opens inline, and the switch
+  completes by itself the moment the host is under cap. "Never mind — stay
+  on Plus" backs out with all photos intact.
+- **Plus does NOT advertise "paid entry"** (ruled 2026-07-16). Entry-fee
+  display is ALL-TIER and `tiers.allows_paid_entry_display` is seeded true
+  for every tier, so selling it as a Plus unlock would advertise something
+  Standard already does. Plus sells the 10-photo gallery + site map/vendor
+  pins; socials sit at Standard. The reference's Plus bullet is dropped.
+- **Publish fee is priced SERVER-SIDE (migration 0010, applied).** The
+  client may not write `publish_fee_cents` at all — a guard trigger rejects
+  it — and `publish_paid_event(event_id, tz)` re-derives the band, re-reads
+  `tier_prices`, stamps the fee, and flips status to published. The price on
+  screen is display-only. DECIDED 2026-07-16 over the full `orders` table:
+  pricing authority now, payment rails with real Stripe at stage 6.
+  **Not yet guarded (deliberate, 0004's job):** clients can still set
+  `status='published'` directly on a paid tier; the RPC is the app's only
+  publish path, not the DB's.
+- **Duration band is computed on the HOST'S WALL CLOCK, not UTC** — the
+  client passes its IANA zone to the RPC. A 7pm Fri → 10am Mon event spans 4
+  local days but only 3 UTC days, which would underprice it a whole band.
+  Flagged tradeoff: tz is client-supplied (a locale input, not a fee input —
+  worst case shifts the band one day at a boundary). Revisit at stage 6.
+- **Checkout = mock.** Stripe-style screen (Apple Pay / Google Pay / Link /
+  Card, approximated marks), "Pay to publish · $X", 1.4s settle, no charge.
+  Real SDK buttons + payment intents = stage 6 tracker item.
+- **Address is REQUIRED to publish a paid event** (the reference allows
+  venue-name-only). It's what geocodes, and without coordinates the event
+  can never appear on a distance-ranked feed.
+- **Event Detail is now `components/EventDetailView.tsx`**; the route
+  (`app/event/[id].tsx`) is a data loader over it. The wizard's "Preview
+  full listing" renders THAT component in `preview` mode — same pixels,
+  every consumer action inert, persistent PREVIEW bar. Preview drift is
+  structurally impossible.
+- **Event Detail renders its description through `MarkdownText`** (shared
+  with Review) — landed with publish, since published events now carry
+  markdown.
+
 ### Paid wizard (structure built 2026-07-16; LOCKED rulings)
 
 - **Live preview rail: collapsed by default on steps 1–3** (Basics,
@@ -294,7 +349,7 @@ Constant across ALL variants:
 | **Saved page** | ✅ Proven | Ticket stubs grouped Tonight / This Weekend / Coming Up (section renders only if populated). Compact EventStub variant. Green "Going" / muted "Saved" chips + RSVP count. |
 | **Logged-out "Me"** | ✅ Proven | Signup invitation (not empty shell). Lists what an account unlocks. Browse + share stay open to guests. |
 | **Workspace slot** (Me hub) | ✅ Proven | Two states: non-host = dashed "+ Create your first event" invitation (taps into create flow, workspace created silently); host = solid stats card. Multi-workspace picker built but DORMANT (only shows at 2+ workspaces). "+ Create a workspace" (no "join" — teams not built). |
-| **Create Event** | 🔧 In revision | Mobile-first 4-step wizard (Basics → When/Where → Details → Review → mock Stripe checkout). Live collapsible EventStub preview. Transactional per-event duration-band pricing (NO subscription). See "Create Event — current revision state" below for open fixes. |
+| **Create Event** | 🔧 In revision | Mobile-first **5-step** wizard (Basics → When/Where → **Tier** → Details → Review → mock Stripe checkout). Live collapsible EventStub preview + "Preview full listing" through the real Event Detail. Transactional per-event duration-band pricing (NO subscription), publish fee stamped server-side by 0010. See "Paid wizard" locks above. |
 
 ### Create Event — pricing spine (LOCKED)
 - Transactional, per-event, NO subscription. Price scales by **duration band**: Single-day /
@@ -420,7 +475,10 @@ Create Event's tier step (per-day model is DEAD everywhere):
 0006 saves+rsvps (13/13 behavioral), 0007 event_detail RPC, 0008 curbside
 quota gate (9/9 behavioral — SCHEMA_PLAN §6.4, pulled forward from the plan's
 never-applied 0003_host_content batch), 0009 curbside attribution
-(`curbside_anonymous` flag + RPC name-masking). Advisor baseline steady at
+(`curbside_anonymous` flag + RPC name-masking), 0010 publish pricing
+(`publish_paid_event` definer RPC + `app.duration_band` + the
+publish_fee_cents guard trigger — pricing authority pulled forward from the
+never-applied 0004_payments batch). Advisor baseline steady at
 0 errors / 3 accepted warnings (SCHEMA_PLAN §10.7 — two rls_auto_enable
 platform warnings + leaked-password protection, Pro-gated on the Free plan;
 DECIDED 2026-07-09: enable with the launch-prep Pro upgrade).

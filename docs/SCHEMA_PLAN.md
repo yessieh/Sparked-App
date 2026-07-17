@@ -41,6 +41,7 @@ checked into `supabase/migrations/`.*
 | `0002_engagement_prefs` | `saves` / `rsvps` (open decision §11), `user_interests`, `notification_prefs`, `user_notification_settings`, `reports` | Stage 3 (report write) + Stage 4 |
 | `0003_host_content` | `event_photos`, `event_amenities`, `event_vendors`, curbside quota function + enforcement triggers, storage buckets | Stage 5 |
 | `0004_payments` | `orders`, publish-pipeline status transitions, refund fields | Stage 6 |
+| **`0010_publish_pricing`** *(APPLIED 2026-07-16)* | `app.duration_band`, `publish_paid_event` definer RPC, publish_fee_cents guard trigger — the **pricing-authority half of 0004**, pulled forward for the mock checkout (§7.2) | Stage 5 (mock publish) |
 | `0005_notifications_infra` | `push_tokens`, `notification_sends` (throttle ledger), `notification_event_overrides` | Stage 7 |
 | `0006_moderation_feedback` | `feedback`, report review columns/indexes | Stage 8 |
 
@@ -366,6 +367,48 @@ this migration; object-level rules mirror the tables above.)
 - Also in 0004: definer function `app.mark_event_published(event uuid)` called
   by the payment webhook; client `update` policy on `events` amended to exclude
   direct `status → published` on paid tiers (curbside publishes directly).
+
+### 7.2 Pricing authority landed early — migration 0010 (APPLIED 2026-07-16)
+
+The mock checkout shipped with Create session 3, which forced the question of
+who prices a listing. DECIDED: split 0004 in half and take the pricing side
+now, leaving the payment rails for stage 6.
+
+**Applied in 0010:**
+- `app.duration_band(starts_at, ends_at, tz) → 'single'|'multi'|'extended'`.
+  Computed on the **host's wall clock** via a caller-supplied IANA zone, not
+  UTC: a 7pm Fri → 10am Mon event spans 4 local days and 3 UTC days, and the
+  band is the price. Unknown zone falls back to UTC rather than failing.
+- `public.publish_paid_event(event_id, tz)` — definer. Re-checks membership by
+  hand (definer bypasses RLS), rejects curbside and double-publish, derives the
+  band, reads `tier_prices`, stamps `publish_fee_cents`, sets `published`.
+  Executable by `authenticated` only (verified: anon → 42501).
+- `app.guard_publish_fee()` trigger on `events` — rejects ANY client write to
+  `publish_fee_cents`. Bypassed only by the RPC's transaction-local
+  `app.pricing_context` flag and by postgres/service_role (migrations, seed,
+  and the future webhook).
+
+**Still 0004's job (deliberately NOT in 0010):** the `orders` table, and the
+policy amendment blocking clients from setting `status='published'` directly on
+a paid tier. The RPC is the app's only publish path today, not the DB's.
+
+**Flagged tradeoffs:**
+1. **`tz` is client-supplied.** It is a locale input, not a fee input — the
+   amount always comes from `tier_prices` — and a spoofed zone can shift the
+   band by at most one day at a boundary. Revisit when Stripe prices the intent.
+2. **`events.publish_fee_cents` is readable by `anon` through the Data API**
+   (verified by direct REST probe). No consumer *screen* can show it — the feed
+   and detail RPCs don't select it, and neither does EventDetailView — but the
+   column itself is not column-privacy-protected. Same class as the 0009
+   workspace-join note. One-line fix if wanted:
+   `revoke select (publish_fee_cents) on public.events from anon;` — the
+   feed/detail RPCs are unaffected (neither selects the column). Note this
+   only closes the ANONYMOUS path: `authenticated` must keep the grant so
+   hosts can read their own fee, and the events RLS select policy lets any
+   signed-in user read any published row. Closing it fully means either a
+   column-privacy pass or moving host economics off `events` onto `orders`
+   (workspace-scoped RLS) when 0004 lands — which is the real fix.
+   **OPEN — needs a ruling, not yet applied.**
 
 ---
 

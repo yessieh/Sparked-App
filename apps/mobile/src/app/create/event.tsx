@@ -1,22 +1,34 @@
-// Paid Event wizard — STRUCTURE (Create Event session 2). 4 steps
-// Basics → When/Where → Details → Review, per the design-reference
-// CreateEventScreen with doc-locks applied and the Curbside form's shared
-// inputs (calendar DateField, typeable TimeField — SPARKED_STATE shared spec,
-// US formats). All state lives in this parent, so steps persist both
-// directions and back-navigation never clears (locked Standard↔Plus behavior).
+// Paid Event wizard — 5 steps: Basics → When/Where → Tier → Details → Review
+// → mock checkout. All state lives in this parent, so steps persist both
+// directions and back-navigation never clears. That parent-owned state is also
+// what makes the locked Standard↔Plus rule true by construction: switching
+// tier touches `tier` and nothing else, so no entered field can be lost.
 //
-// Scope this session: NO tier selection (draft defaults to Standard for photo
-// caps only), NO checkout/publish, NO Plus-only site-map/vendors/amenities,
-// NO real uploads. The Review CTA is a "checkout next build" placeholder.
+// STEP ORDER IS LOAD-BEARING (moved 2026-07-16, session-3 QA). Tier sits
+// between When/Where and Details because it is sandwiched by two real
+// dependencies: its band price needs the dates (so it must follow When/Where),
+// and Details' photo cap needs the tier (so it must precede Details). With
+// Tier after Details, a host picked photos under Standard's cap of 3, upgraded
+// to Plus, and was never shown the 7 slots they just bought.
 //
-// Description is markdown (SCHEMA_PLAN §10.6 lock) with a Bold/Italic/bullet
-// toolbar — the RN-faithful realization of the reference's web contentEditable
-// rich text (execCommand doesn't exist in RN; markdown is the storage lock).
+// Pricing: duration-band totals from `tier_prices` (DB), shown as ONE clean
+// total — per-day pricing is dead. The displayed price is DISPLAY ONLY;
+// publish_paid_event (0010) re-reads tier_prices server-side and stamps
+// publish_fee_cents itself.
+//
+// Fee vocabulary, kept distinct everywhere (SCHEMA LOCK 1):
+//   entry_fee_cents   = what ATTENDEES pay. Consumer surfaces show this.
+//   publish_fee_cents = what the HOST pays Sparked. Review + checkout only —
+//                       it never reaches a card, a detail page, or a preview.
+//
+// Scope this session: NO real Stripe, NO site-map/vendors/amenities section,
+// NO refund/cancellation flows, NO Workspace listings screen, NO real uploads.
 
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -27,15 +39,34 @@ import {
 } from 'react-native';
 
 import { FormField, GradientButton, GradientFill, SecondaryButton } from '../../components/AuthControls';
+import EventDetailView, { type EventDetailData, placeholderPhotos } from '../../components/EventDetailView';
 import EventStub, { type FeedEvent } from '../../components/EventStub';
 import MarkdownText from '../../components/MarkdownText';
 import { DateField, TimeField, format12h } from '../../components/pickers';
+import { useAuth } from '../../lib/auth';
+import { geocode, toWktPoint } from '../../lib/geocode';
+import {
+  TIER_COPY,
+  WIZARD_TIERS,
+  type Tier,
+  type TierId,
+  type TierPrice,
+  bandLabel,
+  bandName,
+  eventDays,
+  formatUSD,
+  priceCents,
+} from '../../lib/pricing';
 import { supabase } from '../../lib/supabase';
+import { getOrCreateWorkspace } from '../../lib/workspace';
 import { brand, useTheme } from '../../theme';
+import { categoryColor } from '../../theme/categoryColors';
 import { SubHeader } from './index';
 
-const STEPS = ['Basics', 'When & Where', 'Details', 'Review'] as const;
-const DEFAULT_PHOTO_CAP = 3; // Standard tier fallback until tiers fetch lands
+const STEPS = ['Basics', 'When & Where', 'Tier', 'Details', 'Review'] as const;
+const TIER_STEP = STEPS.indexOf('Tier');
+const DETAILS_STEP = STEPS.indexOf('Details');
+const REVIEW_STEP = STEPS.length - 1;
 const CATEGORY_SOFT_CAP = 4; // gentle warning at the 4th selection (uncapped)
 
 function todayYMD(): string {
@@ -49,24 +80,15 @@ function combine(ymd: string, hhmm: string): string {
   return new Date(`${ymd}T${hhmm}:00`).toISOString();
 }
 
-function eventDays(start: string, end: string): number {
-  const a = new Date(`${start}T00:00:00`).getTime();
-  const b = new Date(`${end || start}T00:00:00`).getTime();
-  if (Number.isNaN(a) || Number.isNaN(b)) return 1;
-  return Math.max(1, Math.round((b - a) / 86400000) + 1);
-}
-const bandLabel = (days: number) => (days <= 1 ? 'Single-day event' : `${days}-day event`);
-
 interface Category {
   id: string;
   label: string;
 }
 
 // ---------------------------------------------------------------------------
-// Step-bar indicator — 4 segments, gradient fill through the current step.
+// Step-bar indicator — gradient fill through the current step.
 // ---------------------------------------------------------------------------
 function StepBar({ step }: { step: number }) {
-  const theme = useTheme();
   return (
     <View style={{ flexDirection: 'row', gap: 6, marginBottom: 16 }}>
       {STEPS.map((s, i) => (
@@ -79,7 +101,7 @@ function StepBar({ step }: { step: number }) {
 }
 
 // ---------------------------------------------------------------------------
-// Collapsible live-preview rail (steps 0–2). Review shows the full stub.
+// Collapsible live-preview rail (steps 0–3). Review shows the full stub.
 // ---------------------------------------------------------------------------
 function PreviewRail({ event }: { event: FeedEvent }) {
   const theme = useTheme();
@@ -111,6 +133,8 @@ function PreviewRail({ event }: { event: FeedEvent }) {
 
 // ---------------------------------------------------------------------------
 // Description — markdown field + Bold / Italic / bullet toolbar (locked spec).
+// Literal **markers** stay visible while typing here (accepted); Review and
+// the full-listing preview render it formatted through MarkdownText.
 // ---------------------------------------------------------------------------
 function DescriptionEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const theme = useTheme();
@@ -260,6 +284,7 @@ function CategoryPicker({
 
 // ---------------------------------------------------------------------------
 // Unified photo section — placeholder slots, first image = cover, tier cap.
+// The cap is passed in, so it tracks the selected tier live.
 // ---------------------------------------------------------------------------
 function PhotoSection({ photos, cap, onChange }: { photos: number[]; cap: number; onChange: (p: number[]) => void }) {
   const theme = useTheme();
@@ -277,7 +302,9 @@ function PhotoSection({ photos, cap, onChange }: { photos: number[]; cap: number
             overflow: 'hidden',
             backgroundColor: 'rgba(129,140,248,0.18)',
             borderWidth: 1,
-            borderColor: i === 0 ? 'rgba(252,163,17,0.45)' : theme.colors.cardBorder,
+            // Over-cap slots read as at-risk rather than normal — the host is
+            // being asked to choose which ones go.
+            borderColor: i >= cap ? 'rgba(239,68,68,0.55)' : i === 0 ? 'rgba(252,163,17,0.45)' : theme.colors.cardBorder,
             justifyContent: 'flex-end',
             padding: 6,
           }}
@@ -317,12 +344,118 @@ function PhotoSection({ photos, cap, onChange }: { photos: number[]; cap: number
   );
 }
 
-function SummaryRow({ label, value }: { label: string; value: string }) {
+// ---------------------------------------------------------------------------
+// Tier card — ONE clean total for the draft's actual band ("4-day event · $20").
+// No per-day math anywhere: the band IS the unit of price.
+// ---------------------------------------------------------------------------
+function TierCard({
+  tier,
+  price,
+  days,
+  selected,
+  onPress,
+}: {
+  tier: Tier;
+  price: number | null;
+  days: number;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  const isPlus = tier.id === 'plus';
+  const copy = TIER_COPY[tier.id as 'standard' | 'plus'];
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      accessibilityLabel={`${tier.label} — ${price === null ? 'price unavailable' : formatUSD(price)}`}
+      style={{
+        padding: 16,
+        borderRadius: 16,
+        borderWidth: 1.5,
+        borderColor: selected
+          ? isPlus
+            ? 'rgba(255,99,72,0.45)'
+            : 'rgba(252,163,17,0.40)'
+          : theme.colors.cardBorder,
+        backgroundColor: selected
+          ? isPlus
+            ? 'rgba(255,99,72,0.08)'
+            : 'rgba(252,163,17,0.07)'
+          : theme.colors.cardBg,
+      }}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Text style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 16, color: selected ? brand.brightOrange : theme.colors.text }}>
+          {tier.label}
+        </Text>
+        {isPlus && <Ionicons name="sparkles" size={13} color={brand.brightOrange} />}
+        <View style={{ flex: 1 }} />
+        <Text style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 18, color: theme.colors.text }}>
+          {price === null ? '—' : formatUSD(price)}
+        </Text>
+        <View
+          style={{
+            width: 20,
+            height: 20,
+            borderRadius: 9999,
+            borderWidth: 2,
+            borderColor: selected ? brand.brightOrange : theme.colors.borderStrong,
+            backgroundColor: selected ? brand.brightOrange : 'transparent',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {selected && <Ionicons name="checkmark" size={11} color={brand.navy} />}
+        </View>
+      </View>
+
+      <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 12, lineHeight: 17.5, color: theme.colors.textMuted, marginTop: 6 }}>
+        {copy.desc}
+      </Text>
+
+      {/* The ONE clean total — band, span, price. No "$5/day" anywhere. */}
+      <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 10.5, fontWeight: '800', letterSpacing: 0.4, color: theme.colors.textFaint, marginTop: 8 }}>
+        {bandName(days)} · {bandLabel(days)}
+        {price === null ? '' : ` · ${formatUSD(price)} total`}
+      </Text>
+
+      <View style={{ marginTop: 12, gap: 6 }}>
+        {copy.inheritsFrom && (
+          <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 11, fontWeight: '800', color: theme.colors.textMuted }}>
+            Everything in {copy.inheritsFrom}, plus:
+          </Text>
+        )}
+        {copy.features.map((f) => (
+          <View key={f} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="checkmark-circle-outline" size={13} color={brand.brightOrange} />
+            <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 11.5, color: theme.colors.textMuted, flex: 1 }}>
+              {f}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </Pressable>
+  );
+}
+
+function SummaryRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   const theme = useTheme();
   return (
     <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 16, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: theme.colors.divider }}>
       <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 12, color: theme.colors.textFaint }}>{label}</Text>
-      <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 12.5, color: theme.colors.text, flex: 1, textAlign: 'right' }} numberOfLines={2}>
+      <Text
+        style={{
+          fontFamily: strong ? theme.fonts.displayBlack : theme.fonts.bodySemiBold,
+          fontWeight: strong ? '900' : '600',
+          fontSize: strong ? 14 : 12.5,
+          color: strong ? brand.brightOrange : theme.colors.text,
+          flex: 1,
+          textAlign: 'right',
+        }}
+        numberOfLines={2}
+      >
         {value}
       </Text>
     </View>
@@ -331,9 +464,10 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 
 export default function EventWizard() {
   const theme = useTheme();
+  const { session, loading } = useAuth();
   const [step, setStep] = useState(0);
 
-  // ---- form state (persists across steps + back navigation) ----
+  // ---- form state (persists across steps, back-nav, AND tier switches) ----
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [cats, setCats] = useState<string[]>([]);
@@ -346,12 +480,53 @@ export default function EventWizard() {
   const [photos, setPhotos] = useState<number[]>([]);
   const [entryFeeOn, setEntryFeeOn] = useState(false);
   const [entryFee, setEntryFee] = useState('10');
+  const [tier, setTier] = useState<TierId>('standard');
   const [catWarn, setCatWarn] = useState(false);
   const catWarnedRef = useRef(false); // fires exactly once per session
-  const [checkoutNote, setCheckoutNote] = useState(false);
 
+  // ---- tier/pricing data (canonical, from the DB) ----
   const [categories, setCategories] = useState<Category[]>([]);
-  const [photoCap, setPhotoCap] = useState(DEFAULT_PHOTO_CAP);
+  const [tiers, setTiers] = useState<Tier[]>([]);
+  const [prices, setPrices] = useState<TierPrice[]>([]);
+
+  // ---- publish plumbing ----
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [workspaceName, setWorkspaceName] = useState<string>('');
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  /** Blocks a Plus→Standard switch that would drop photos. The switch does NOT
+   * happen while this is set — the host trims first (locked: warn and require
+   * trimming, NEVER silently drop). */
+  const [pendingDowngrade, setPendingDowngrade] = useState<TierId | null>(null);
+
+  // Creating events is account territory (architecture lock #2: browsing is
+  // anonymous, creating is not).
+  useEffect(() => {
+    if (loading) return;
+    if (!session) {
+      router.replace({ pathname: '/auth', params: { mode: 'signup' } });
+      return;
+    }
+    (async () => {
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('display_name')
+          .eq('id', session.user.id)
+          .single();
+        const name = profile?.display_name ?? session.user.email ?? 'My workspace';
+        const ws = await getOrCreateWorkspace(session.user.id, name);
+        setWorkspaceId(ws);
+        const { data: wsRow } = await supabase.from('workspaces').select('name').eq('id', ws).single();
+        setWorkspaceName(wsRow?.name ?? name);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    })();
+  }, [loading, session]);
 
   useEffect(() => {
     // Canonical taxonomy, Curbside excluded from the paid picker (locked).
@@ -364,14 +539,20 @@ export default function EventWizard() {
       .then(({ data }) => {
         if (data) setCategories(data.map((c) => ({ id: c.id, label: c.label })));
       });
-    // Draft defaults to Standard: read its photo cap (no tier SELECTION here).
+    // Tier structure + band prices: canonical, never hardcoded here.
     supabase
       .from('tiers')
-      .select('max_photos')
-      .eq('id', 'standard')
-      .single()
+      .select('id,label,sort_order,max_photos,allows_site_map,single_day_only')
+      .in('id', WIZARD_TIERS)
+      .order('sort_order')
       .then(({ data }) => {
-        if (data) setPhotoCap(data.max_photos);
+        if (data) setTiers(data as Tier[]);
+      });
+    supabase
+      .from('tier_prices')
+      .select('tier_id,duration_band,amount_cents')
+      .then(({ data }) => {
+        if (data) setPrices(data as TierPrice[]);
       });
   }, []);
 
@@ -389,22 +570,86 @@ export default function EventWizard() {
 
   const days = eventDays(startDate, endDate);
   const feeCents = entryFeeOn ? Math.max(0, Math.round((parseFloat(entryFee) || 0) * 100)) : 0;
+  const tierRow = tiers.find((t) => t.id === tier);
+  const photoCap = tierRow?.max_photos ?? 3;
+  const publishFeeCents = priceCents(prices, tier, days);
+  const capFor = (id: TierId) => tiers.find((t) => t.id === id)?.max_photos ?? 3;
+
+  /**
+   * Tier switching. Preserves every entered field by construction — this only
+   * ever writes `tier`. The one guarded direction is Plus→Standard while over
+   * Standard's photo cap: refuse the switch, surface the trim requirement, and
+   * let the effect below complete it once the host has chosen what to keep.
+   */
+  const selectTier = useCallback(
+    (next: TierId) => {
+      setError(null);
+      if (next === tier) return;
+      if (photos.length > capFor(next)) {
+        setPendingDowngrade(next);
+        return;
+      }
+      setPendingDowngrade(null);
+      setTier(next);
+    },
+    [tier, photos.length, tiers],
+  );
+
+  // Trim satisfied → complete the switch the host already asked for.
+  useEffect(() => {
+    if (pendingDowngrade && photos.length <= capFor(pendingDowngrade)) {
+      setTier(pendingDowngrade);
+      setPendingDowngrade(null);
+    }
+  }, [pendingDowngrade, photos.length, tiers]);
+
+  const catLabel = (id: string) => categories.find((c) => c.id === id)?.label ?? id;
+  const startsAt = combine(startDate, startTime);
+  const endsAt = combine(endDate, endTime);
 
   const preview: FeedEvent = useMemo(
     () => ({
       id: 'preview',
       title: title.trim() || 'Your event title',
-      organizer_name: null,
-      starts_at: combine(startDate, startTime),
-      ends_at: combine(endDate, endTime),
+      organizer_name: workspaceName || null,
+      starts_at: startsAt,
+      ends_at: endsAt,
       venue_name: venueName.trim() || address.trim() || null,
+      // The CARD reads the attendee entry fee — never the publish fee.
       entry_fee_cents: feeCents,
       categories: cats.length ? cats : null,
     }),
-    [title, startDate, startTime, endDate, endTime, venueName, address, feeCents, cats],
+    [title, startsAt, endsAt, venueName, address, feeCents, cats, workspaceName],
   );
 
-  const catLabel = (id: string) => categories.find((c) => c.id === id)?.label ?? id;
+  /** The draft as the real Event Detail sees it. Note publish_fee_cents has no
+   * slot here at all — the consumer preview cannot leak host economics. */
+  const previewDetail: EventDetailData = useMemo(
+    () => ({
+      id: 'preview',
+      title: title.trim() || 'Your event title',
+      description: desc.trim() || null,
+      organizer_name: workspaceName || null,
+      tier_id: tier,
+      status: 'draft',
+      starts_at: startsAt,
+      ends_at: endsAt,
+      venue_name: venueName.trim() || null,
+      address: address.trim() || null,
+      entry_fee_cents: feeCents,
+      rsvp_count: 0,
+      categories: cats.length ? cats : null,
+      distance_miles: null,
+      cancelled_at: null,
+    }),
+    [title, desc, workspaceName, tier, startsAt, endsAt, venueName, address, feeCents, cats],
+  );
+
+  const missing = [
+    !title.trim() && 'a title',
+    !address.trim() && 'an address',
+  ].filter(Boolean) as string[];
+  const canPublish = missing.length === 0 && !busy && publishFeeCents !== null;
 
   const back = () => {
     if (step === 0) {
@@ -413,10 +658,86 @@ export default function EventWizard() {
       setStep((s) => s - 1);
     }
   };
+
+  /**
+   * Review CTA → mock checkout. Writes the draft row FIRST (status
+   * pending_payment) so checkout has a real event to price and publish; the
+   * fee column is deliberately left unset — publish_paid_event stamps it, and
+   * the 0010 guard trigger would reject us if we tried.
+   */
+  const toCheckout = useCallback(async () => {
+    if (!workspaceId || !canPublish) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const point = await geocode(address.trim());
+      const row = {
+        workspace_id: workspaceId,
+        title: title.trim(),
+        description: desc.trim() || null,
+        tier_id: tier,
+        status: 'pending_payment',
+        starts_at: startsAt,
+        ends_at: endsAt,
+        venue_name: venueName.trim() || null,
+        address: address.trim(),
+        location: toWktPoint(point),
+        entry_fee_cents: feeCents,
+      };
+
+      // Re-entering checkout reuses the draft rather than littering rows.
+      let id = draftId;
+      if (id) {
+        const { error: updateError } = await supabase.from('events').update(row).eq('id', id);
+        if (updateError) throw new Error(updateError.message);
+        await supabase.from('event_categories').delete().eq('event_id', id);
+      } else {
+        const { data, error: insertError } = await supabase.from('events').insert(row).select('id').single();
+        if (insertError) throw new Error(insertError.message);
+        id = data.id as string;
+        setDraftId(id);
+      }
+
+      if (cats.length) {
+        const { error: catError } = await supabase
+          .from('event_categories')
+          .insert(cats.map((c) => ({ event_id: id, category_id: c })));
+        if (catError) throw new Error(catError.message);
+      }
+
+      router.push({ pathname: '/create/checkout', params: { eventId: id } });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }, [workspaceId, canPublish, address, title, desc, tier, startsAt, endsAt, venueName, feeCents, draftId, cats]);
+
   const next = () => {
-    if (step < STEPS.length - 1) setStep((s) => s + 1);
-    else setCheckoutNote(true);
+    if (step < REVIEW_STEP) setStep((s) => s + 1);
+    else toCheckout();
   };
+
+  if (loading || !session) {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.colors.bg, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color={brand.brightOrange} />
+      </View>
+    );
+  }
+
+  // "Preview full listing" — the DRAFT through the REAL Event Detail
+  // component, preview mode, no live actions (locked 2026-07-16).
+  if (showPreview) {
+    return (
+      <EventDetailView
+        event={previewDetail}
+        preview
+        photos={placeholderPhotos('preview', tier, categoryColor(cats), photos.length || 1)}
+        onBack={() => setShowPreview(false)}
+      />
+    );
+  }
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: theme.colors.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -427,7 +748,7 @@ export default function EventWizard() {
       >
         <View style={{ paddingHorizontal: 24 }}>
           <StepBar step={step} />
-          {step < 3 && <PreviewRail event={preview} />}
+          {step < REVIEW_STEP && <PreviewRail event={preview} />}
 
           {/* ---- STEP 0: BASICS ---- */}
           {step === 0 && (
@@ -484,11 +805,78 @@ export default function EventWizard() {
             </View>
           )}
 
-          {/* ---- STEP 2: DETAILS ---- */}
-          {step === 2 && (
+          {/* ---- STEP 2: TIER ---- (before Details: its band price needs the
+               dates behind it, and Details' photo cap needs the tier ahead) */}
+          {step === TIER_STEP && (
+            <View style={{ marginTop: 8 }}>
+              <Text style={styles(theme).h2}>Tier</Text>
+              <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 12.5, lineHeight: 19, color: theme.colors.textMuted, marginBottom: 16 }}>
+                Per-event · pay once · not a subscription. Priced by how long your event runs —
+                switching keeps everything you've entered.
+              </Text>
+
+              {tiers.length === 0 ? (
+                <ActivityIndicator color={brand.brightOrange} />
+              ) : (
+                <View style={{ gap: 10 }}>
+                  {tiers.map((t) => (
+                    <TierCard
+                      key={t.id}
+                      tier={t}
+                      price={priceCents(prices, t.id, days)}
+                      days={days}
+                      selected={tier === t.id}
+                      onPress={() => selectTier(t.id)}
+                    />
+                  ))}
+                </View>
+              )}
+
+              {/* Plus→Standard over cap: the switch is REFUSED until the host
+                  picks what to keep. Photos are never dropped for them.
+                  (Reachable only on backtrack now that Tier precedes Details —
+                  photos don't exist yet on a first forward pass.) */}
+              {pendingDowngrade && (
+                <View
+                  style={{
+                    marginTop: 14,
+                    padding: 14,
+                    borderRadius: 14,
+                    backgroundColor: 'rgba(239,68,68,0.08)',
+                    borderWidth: 1,
+                    borderColor: 'rgba(239,68,68,0.45)',
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <Ionicons name="alert-circle" size={15} color={theme.colors.danger} />
+                    <Text style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 13, color: theme.colors.danger }}>
+                      Trim your photos to switch
+                    </Text>
+                  </View>
+                  <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 12, lineHeight: 17.5, color: theme.colors.textMuted, marginBottom: 12 }}>
+                    {tiers.find((t) => t.id === pendingDowngrade)?.label ?? 'Standard'} fits{' '}
+                    {capFor(pendingDowngrade)} photos and you have {photos.length}. Remove{' '}
+                    {photos.length - capFor(pendingDowngrade)} to keep — we won't choose for you.
+                    You'll switch the moment you're under.
+                  </Text>
+                  <PhotoSection photos={photos} cap={capFor(pendingDowngrade)} onChange={setPhotos} />
+                  <Pressable onPress={() => setPendingDowngrade(null)} style={{ marginTop: 12 }}>
+                    <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 12, fontWeight: '800', color: theme.colors.textMuted }}>
+                      Never mind — stay on {tierRow?.label ?? 'Plus'}
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* ---- STEP 3: DETAILS ---- */}
+          {step === DETAILS_STEP && (
             <View style={{ marginTop: 8 }}>
               <Text style={styles(theme).h2}>Details</Text>
-              <Text style={styles(theme).fieldLabel}>Photos · first is your cover · up to {photoCap}</Text>
+              <Text style={styles(theme).fieldLabel}>
+                Photos · first is your cover · up to {photoCap} on {tierRow?.label ?? 'Standard'}
+              </Text>
               <View style={{ marginBottom: 18 }}>
                 <PhotoSection photos={photos} cap={photoCap} onChange={setPhotos} />
               </View>
@@ -529,14 +917,21 @@ export default function EventWizard() {
             </View>
           )}
 
-          {/* ---- STEP 3: REVIEW ---- */}
-          {step === 3 && (
+          {/* ---- STEP 4: REVIEW ---- */}
+          {step === REVIEW_STEP && (
             <View style={{ marginTop: 8 }}>
               <Text style={styles(theme).h2}>Review</Text>
               <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 9, fontWeight: '900', letterSpacing: 1.6, textTransform: 'uppercase', color: theme.colors.textFaint, marginBottom: 10 }}>
                 Live preview
               </Text>
               <EventStub event={preview} />
+
+              <View style={{ marginTop: 12 }}>
+                <SecondaryButton onPress={() => setShowPreview(true)}>Preview full listing</SecondaryButton>
+              </View>
+              <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 11, lineHeight: 16, color: theme.colors.textFaint, textAlign: 'center', marginTop: 8 }}>
+                Opens your listing exactly as attendees will see it.
+              </Text>
 
               {/* Description renders FORMATTED here — Review is a
                   "what buyers see" surface; raw asterisks would break it
@@ -559,19 +954,31 @@ export default function EventWizard() {
                   value={`${days > 1 ? `${days} days` : 'Single day'} · ${format12h(startTime)}–${format12h(endTime)}`}
                 />
                 <SummaryRow label="Where" value={venueName.trim() || address.trim() || '—'} />
-                <SummaryRow label="Entry" value={feeCents > 0 ? `$${(feeCents / 100).toFixed(2).replace(/\.00$/, '')} per person` : 'Free'} />
-                <SummaryRow label="Tier" value="Standard (default this build)" />
+                <SummaryRow label="Photos" value={`${photos.length} of ${photoCap}`} />
+                {/* ATTENDEE fee — this is the one that reaches consumers. */}
+                <SummaryRow label="Entry fee (attendees pay)" value={feeCents > 0 ? `${formatUSD(feeCents)} per person` : 'Free'} />
+                <SummaryRow label="Tier" value={tierRow?.label ?? '—'} />
+                {/* HOST fee — Review + checkout only, never a consumer surface. */}
+                <SummaryRow
+                  label="Publish fee (you pay)"
+                  value={publishFeeCents === null ? '—' : `${bandLabel(days)} · ${formatUSD(publishFeeCents)}`}
+                  strong
+                />
               </View>
 
-              {checkoutNote && (
-                <View style={{ marginTop: 16, padding: 14, borderRadius: 14, backgroundColor: 'rgba(252,163,17,0.10)', borderWidth: 1, borderColor: 'rgba(252,163,17,0.35)' }}>
-                  <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 12.5, lineHeight: 18, color: brand.brightOrange }}>
-                    Checkout — tier selection, duration-band pricing, and payment — lands in the
-                    next build. Your entered details are all here and ready.
-                  </Text>
-                </View>
+              {missing.length > 0 && (
+                <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 12, lineHeight: 17, color: theme.colors.textFaint, marginTop: 14 }}>
+                  Add {missing.join(' and ')} to continue. An address is what puts you on the
+                  distance feed.
+                </Text>
               )}
             </View>
+          )}
+
+          {error && (
+            <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 12, lineHeight: 17, color: theme.colors.danger, marginTop: 14 }}>
+              {error}
+            </Text>
           )}
 
           {/* ---- NAV ---- */}
@@ -580,8 +987,8 @@ export default function EventWizard() {
               <SecondaryButton onPress={back}>{step === 0 ? 'Cancel' : 'Back'}</SecondaryButton>
             </View>
             <View style={{ flex: 1 }}>
-              <GradientButton onPress={next}>
-                {step < STEPS.length - 1 ? 'Continue' : 'Continue to payment'}
+              <GradientButton onPress={next} busy={busy} disabled={step === REVIEW_STEP && !canPublish}>
+                {step < REVIEW_STEP ? 'Continue' : 'Continue to payment'}
               </GradientButton>
             </View>
           </View>

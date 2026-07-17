@@ -51,6 +51,7 @@ function ThemedStack() {
       <Stack.Screen name="create/index" />
       <Stack.Screen name="create/curbside" />
       <Stack.Screen name="create/event" />
+      <Stack.Screen name="create/checkout" />
       <Stack.Screen name="reset-password" />
     </Stack>
   );
