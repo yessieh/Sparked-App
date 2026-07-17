@@ -28,6 +28,7 @@ import {
 import { FormField, GradientButton, SecondaryButton } from '../../components/AuthControls';
 import { DateField, TimeField, format12h } from '../../components/pickers';
 import { useAuth } from '../../lib/auth';
+import { geocode, toWktPoint } from '../../lib/geocode';
 import { supabase } from '../../lib/supabase';
 import {
   CURBSIDE_QUOTA,
@@ -54,14 +55,6 @@ function toTimestamps(date: string, time: string | null) {
   return { starts_at: starts.toISOString(), ends_at: ends ? ends.toISOString() : null };
 }
 
-async function geocode(address: string): Promise<{ lat: number; lon: number }> {
-  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(address)}`;
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (!res.ok) throw new Error(`Address lookup failed (${res.status}) — try again in a moment.`);
-  const hits = (await res.json()) as { lat: string; lon: string }[];
-  if (!hits.length) throw new Error("Couldn't find that address — check it and try again.");
-  return { lat: parseFloat(hits[0].lat), lon: parseFloat(hits[0].lon) };
-}
 
 /** Visual-only single photo slot (real uploads = Code-stage tracker item). */
 function PhotoSlot({ filled, onToggle }: { filled: boolean; onToggle: () => void }) {
@@ -224,7 +217,7 @@ export default function CurbsideForm() {
     setBusy(true);
     setError(null);
     try {
-      const { lat, lon } = await geocode(address.trim());
+      const point = await geocode(address.trim());
       const { starts_at, ends_at } = toTimestamps(date, timeOn ? time : null);
       const { error: insertError } = await supabase.from('events').insert({
         workspace_id: workspaceId,
@@ -235,7 +228,7 @@ export default function CurbsideForm() {
         starts_at,
         ends_at,
         address: address.trim(),
-        location: `SRID=4326;POINT(${lon} ${lat})`,
+        location: toWktPoint(point),
         // Display-only anonymity (0009): the row stays attributed to the
         // workspace — quota, moderation, reports unchanged.
         curbside_anonymous: anonPost,
