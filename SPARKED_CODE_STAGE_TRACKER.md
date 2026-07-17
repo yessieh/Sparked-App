@@ -185,6 +185,22 @@ and verified in Cursor/Claude Code.
 - [x] **Entry fork + Curbside mini-form + typeable pickers built** (Event
       lane = next-build stub). Silent workspace creation on first post.
 
+## CREATE EVENT — SESSION 2 (wizard structure, 2026-07-16)
+
+- [x] **Paid wizard structure built** — 4 steps, both-direction persistence,
+      working date range (Start/End independently controlled, End ≥ Start),
+      live EventStub preview, Review CTA = checkout placeholder. No tier
+      selection / checkout / publish yet.
+- [x] **Review renders the formatted description** via shared
+      `components/MarkdownText.tsx` (locked subset only).
+- [ ] **Review "Preview full listing" action** — render the draft through the
+      real Event Detail component in preview mode (formatted description,
+      photos, fee line; NO live actions; clear PREVIEW marker). See
+      SPARKED_STATE lock. Next session.
+- [ ] **Live markdown preview in description editor — polish, post-MVP.**
+      Literal `**markers**` while typing are accepted for now; Review already
+      shows the formatted result, so this is comfort, not correctness.
+
 ## MEDIA & REAL-DEVICE (pre-store)
 
 - [ ] **Real-device test pass (Expo Go) before store prep.** Exercise the

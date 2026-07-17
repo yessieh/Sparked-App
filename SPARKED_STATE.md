@@ -170,7 +170,33 @@ Constant across ALL variants:
   when the Organizer Profile stage lands) — the minimized attribution model
   is Curbside-ONLY.
 - **Curbside address geocoding = Nominatim** (OpenStreetMap, no key, plain
-  fetch) for dev/MVP. Swap to a paid geocoder at scale — tracked.
+  fetch) for dev/MVP. Swap to a paid geocoder at scale — tracked. Shared by
+  both create flows via `lib/geocode.ts` — ONE geocode interface.
+
+### Paid wizard (structure built 2026-07-16; LOCKED rulings)
+
+- **Live preview rail: collapsed by default on steps 1–3** (Basics,
+  When/Where, Details) — it's a reassurance, not the main event there. The
+  preview **earns full presence at Review**, rendered as the real EventStub.
+- **Description markdown display rule.** Literal `**markers**` while typing
+  in the Basics editor are ACCEPTABLE (no live rendering — polish, tracked).
+  **Review MUST render the description FORMATTED** — Review is a "what
+  buyers see" surface and raw asterisks break it. Shared renderer:
+  `components/MarkdownText.tsx` (the locked subset only — **bold**,
+  *italic*, "- " bullets; anything else renders literal, no HTML).
+- **Review gains a "Preview full listing" action (BUILD NEXT SESSION).**
+  Renders the DRAFT through the real Event Detail component in a preview
+  mode — formatted description, photos, fee line — with NO live actions
+  (no RSVP/save/share firing) and a clear PREVIEW marker. Rationale:
+  coordinators must see BOTH consumer surfaces — the card (EventStub) and
+  the full detail page — before they pay. Reuses the real component, never
+  a lookalike, so preview drift is impossible.
+- **Date range = two independently-controlled fields** (the control that
+  failed 3× in Design): Start bumps End when it passes it; End takes
+  `min=Start`, so earlier days render disabled and inert.
+- **Wizard step content:** description lives on **Basics** (not the
+  reference's Details), entry fee on **Details**. Deliberate divergence
+  from the frozen reference's split, ruled 2026-07-16.
 
 ---
 

@@ -28,6 +28,7 @@ import {
 
 import { FormField, GradientButton, GradientFill, SecondaryButton } from '../../components/AuthControls';
 import EventStub, { type FeedEvent } from '../../components/EventStub';
+import MarkdownText from '../../components/MarkdownText';
 import { DateField, TimeField, format12h } from '../../components/pickers';
 import { supabase } from '../../lib/supabase';
 import { brand, useTheme } from '../../theme';
@@ -536,6 +537,19 @@ export default function EventWizard() {
                 Live preview
               </Text>
               <EventStub event={preview} />
+
+              {/* Description renders FORMATTED here — Review is a
+                  "what buyers see" surface; raw asterisks would break it
+                  (ruling 2026-07-16). Literal markers stay visible only in
+                  the Basics editor while typing. */}
+              {desc.trim() ? (
+                <View style={{ marginTop: 20 }}>
+                  <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 9, fontWeight: '900', letterSpacing: 1.6, textTransform: 'uppercase', color: theme.colors.textFaint, marginBottom: 8 }}>
+                    Description
+                  </Text>
+                  <MarkdownText value={desc} />
+                </View>
+              ) : null}
 
               <View style={{ marginTop: 22 }}>
                 <SummaryRow label="Title" value={title.trim() || '—'} />
