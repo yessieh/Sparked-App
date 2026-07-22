@@ -65,7 +65,7 @@ export const TIER_COPY: Record<'standard' | 'plus', {
   plus: {
     desc: 'Unlocks a 10-photo gallery and a site map with vendor pins — for events that need the extra reach.',
     inheritsFrom: 'Standard',
-    features: ['10-photo gallery', 'Interactive site map with vendor pins'],
+    features: ['10-photo gallery', 'Site map with vendor pins'],
   },
 };
 

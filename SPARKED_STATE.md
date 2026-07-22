@@ -239,6 +239,16 @@ Constant across ALL variants:
   buyers see" surface and raw asterisks break it. Shared renderer:
   `components/MarkdownText.tsx` (the locked subset only — **bold**,
   *italic*, "- " bullets; anything else renders literal, no HTML).
+  **Pairing is BALANCE-AWARE with CommonMark flanking rules** (fixed
+  2026-07-17): a delimiter opens a run only when a same-width delimiter
+  closes it, an opener may not be followed by whitespace, a closer may not
+  be preceded by one. The original regex paired greedily, so a stray `**`
+  stole the next marker and formatted the span between it — "note: ** real
+  text **bold** here" bolded " real text " and destroyed the host's real
+  run, on live Event Detail as much as on Review. Tested invariant: real
+  content is never dropped or invented, and markers only ever disappear in
+  balanced pairs. The Basics toolbar additionally refuses to insert a
+  marker adjacent to an existing one, so it cannot author that soup.
 - **Review gains a "Preview full listing" action (BUILD NEXT SESSION).**
   Renders the DRAFT through the real Event Detail component in a preview
   mode — formatted description, photos, fee line — with NO live actions
@@ -478,7 +488,11 @@ never-applied 0003_host_content batch), 0009 curbside attribution
 (`curbside_anonymous` flag + RPC name-masking), 0010 publish pricing
 (`publish_paid_event` definer RPC + `app.duration_band` + the
 publish_fee_cents guard trigger — pricing authority pulled forward from the
-never-applied 0004_payments batch). Advisor baseline steady at
+never-applied 0004_payments batch), 0011 publish-fee column privacy
+(per-column grants on `events` excluding `publish_fee_cents` from both
+read and write; member-scoped reader — SCHEMA_PLAN §7.2 ruling, 10/10
+behavioral), 0012 reader onto the `app`-definer/`public`-invoker
+convention. Advisor baseline steady at
 0 errors / 3 accepted warnings (SCHEMA_PLAN §10.7 — two rls_auto_enable
 platform warnings + leaked-password protection, Pro-gated on the Free plan;
 DECIDED 2026-07-09: enable with the launch-prep Pro upgrade).

@@ -138,20 +138,84 @@ function PreviewRail({ event }: { event: FeedEvent }) {
 // ---------------------------------------------------------------------------
 function DescriptionEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const theme = useTheme();
+  const inputRef = useRef<TextInput>(null);
   const sel = useRef({ start: value.length, end: value.length });
 
-  const wrap = (marker: string) => {
-    const { start, end } = sel.current;
-    const next = `${value.slice(0, start)}${marker}${value.slice(start, end)}${marker}${value.slice(end)}`;
-    onChange(next);
+  // WEB SELECTION BUG this fixes: pressing a toolbar Pressable blurs the
+  // <textarea>, and react-native-web fires onSelectionChange on that blur with
+  // a COLLAPSED range — clobbering sel.current before onPress runs. wrap() then
+  // saw no selection and dropped stray markers at offset 0 ("no visible change /
+  // stale offsets"). A textarea preserves selectionStart/End across blur, so on
+  // web we read the live range straight off the DOM node instead of the ref.
+  // Native has no blur-on-press and no DOM node, so it keeps using sel.current.
+  const readSelection = () => {
+    if (Platform.OS === 'web') {
+      const node = inputRef.current as unknown as {
+        selectionStart?: number | null;
+        selectionEnd?: number | null;
+      } | null;
+      if (node && typeof node.selectionStart === 'number' && typeof node.selectionEnd === 'number') {
+        return { start: node.selectionStart, end: node.selectionEnd };
+      }
+    }
+    return sel.current;
   };
-  const bullet = () => {
-    const { start } = sel.current;
-    const lineStart = value.lastIndexOf('\n', start - 1) + 1;
-    onChange(`${value.slice(0, lineStart)}- ${value.slice(lineStart)}`);
+  // One-shot caret placement after a toolbar insert. THE BUG this fixes:
+  // sel.current only moved on a real selection event, so a programmatic
+  // insert left it pointing at pre-insert offsets — press Bold then Italic
+  // and the second marker landed inside the first, producing `***` mush.
+  // Setting this briefly controls the caret; the resulting selection event
+  // clears it, handing the field back to the platform.
+  const [forcedSel, setForcedSel] = useState<{ start: number; end: number } | null>(null);
+
+  const place = (pos: number) => {
+    sel.current = { start: pos, end: pos };
+    setForcedSel({ start: pos, end: pos });
+    // Web: the press blurred the field, so refocus it — otherwise the caret we
+    // just placed is invisible and the next keystroke goes nowhere the host can
+    // see. The selection prop (forcedSel) lands the caret; focus makes it live.
+    if (Platform.OS === 'web') inputRef.current?.focus?.();
   };
 
-  const ToolBtn = ({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }) => (
+  /** Wrap the selection in `marker`. Empty selection → markers with the caret
+   * parked between them, so whatever is typed next lands inside.
+   *
+   * NO NESTING: an empty press next to an existing asterisk is ignored. The
+   * locked subset has no bold+italic, and more importantly a run of 3+
+   * asterisks MIS-PAIRS in MarkdownText — "note: ****** real text **bold**"
+   * pairs the stray run's tail with the next marker and bolds " real text "
+   * instead, destroying the host's real formatting. Cheapest place to stop
+   * that is at the source. */
+  const wrap = (marker: string) => {
+    const { start, end } = readSelection();
+    const selected = value.slice(start, end);
+    if (!selected && (value[start - 1] === '*' || value[start] === '*')) return;
+    onChange(`${value.slice(0, start)}${marker}${selected}${marker}${value.slice(end)}`);
+    place(selected ? start + marker.length + selected.length + marker.length : start + marker.length);
+  };
+
+  const bullet = () => {
+    const { start } = readSelection();
+    const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+    onChange(`${value.slice(0, lineStart)}- ${value.slice(lineStart)}`);
+    place(start + 2); // "- " shifts everything after lineStart right by two
+  };
+
+  // Glyphs, not icons: the previous pair ("text" / "text-outline") both drew
+  // an "Aa", so Bold and Italic were visually indistinguishable. B / I / •
+  // are self-describing. No underline button — underline is outside the
+  // locked markdown subset (bold, italic, "- " bullets only).
+  const ToolBtn = ({
+    label,
+    glyph,
+    style,
+    onPress,
+  }: {
+    label: string;
+    glyph: string;
+    style?: { fontWeight?: '400' | '900'; fontStyle?: 'italic' | 'normal' };
+    onPress: () => void;
+  }) => (
     <Pressable
       onPress={onPress}
       accessibilityLabel={label}
@@ -166,22 +230,36 @@ function DescriptionEditor({ value, onChange }: { value: string; onChange: (v: s
         borderColor: theme.colors.cardBorder,
       }}
     >
-      <Ionicons name={icon} size={15} color={theme.colors.text} />
+      <Text
+        style={{
+          fontFamily: theme.fonts.displayBlack,
+          fontSize: 14,
+          lineHeight: 18,
+          color: theme.colors.text,
+          fontWeight: style?.fontWeight ?? '900',
+          fontStyle: style?.fontStyle ?? 'normal',
+        }}
+      >
+        {glyph}
+      </Text>
     </Pressable>
   );
 
   return (
     <View>
       <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
-        <ToolBtn icon="text" label="Bold" onPress={() => wrap('**')} />
-        <ToolBtn icon="text-outline" label="Italic" onPress={() => wrap('*')} />
-        <ToolBtn icon="list" label="Bullet list" onPress={bullet} />
+        <ToolBtn label="Bold" glyph="B" onPress={() => wrap('**')} />
+        <ToolBtn label="Italic" glyph="I" style={{ fontWeight: '400', fontStyle: 'italic' }} onPress={() => wrap('*')} />
+        <ToolBtn label="Bullet list" glyph="•" onPress={bullet} />
       </View>
       <TextInput
+        ref={inputRef}
         value={value}
+        selection={forcedSel ?? undefined}
         onChangeText={onChange}
         onSelectionChange={(e) => {
           sel.current = e.nativeEvent.selection;
+          if (forcedSel) setForcedSel(null); // release control back to the field
         }}
         multiline
         placeholder="What should people know? Vendors, lineup, parking…"
@@ -671,12 +749,16 @@ export default function EventWizard() {
     setError(null);
     try {
       const point = await geocode(address.trim());
-      const row = {
-        workspace_id: workspaceId,
+      // workspace_id is set ONCE at insert and is immutable: an event can never
+      // change workspaces, so 0011 deliberately withholds it from
+      // authenticated's UPDATE column grant. Resending it on a re-entry
+      // .update() therefore fails with "permission denied for table events".
+      // Keep it out of the editable payload and only spread it in on insert.
+      const editable = {
         title: title.trim(),
         description: desc.trim() || null,
         tier_id: tier,
-        status: 'pending_payment',
+        status: 'pending_payment' as const,
         starts_at: startsAt,
         ends_at: endsAt,
         venue_name: venueName.trim() || null,
@@ -688,11 +770,15 @@ export default function EventWizard() {
       // Re-entering checkout reuses the draft rather than littering rows.
       let id = draftId;
       if (id) {
-        const { error: updateError } = await supabase.from('events').update(row).eq('id', id);
+        const { error: updateError } = await supabase.from('events').update(editable).eq('id', id);
         if (updateError) throw new Error(updateError.message);
         await supabase.from('event_categories').delete().eq('event_id', id);
       } else {
-        const { data, error: insertError } = await supabase.from('events').insert(row).select('id').single();
+        const { data, error: insertError } = await supabase
+          .from('events')
+          .insert({ workspace_id: workspaceId, ...editable })
+          .select('id')
+          .single();
         if (insertError) throw new Error(insertError.message);
         id = data.id as string;
         setDraftId(id);

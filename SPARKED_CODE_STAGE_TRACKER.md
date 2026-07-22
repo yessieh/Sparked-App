@@ -115,6 +115,16 @@ and verified in Cursor/Claude Code.
 - [ ] **Light-mode QA sweep** on real devices — token conversion was 3-pass;
       expect stragglers.
 - [ ] **Cold-start empty state** (if not closed in Design) — feed + funnels.
+- [ ] **Explore zip/radius inline-edit + onboarding — MUST PRECEDE LAUNCH.**
+      The feed origin is still the hardcoded `TEST_ORIGIN` (Sahuarita) in
+      `lib/devOrigin.ts`; the header's "Sahuarita, AZ · within 25 mi" is not
+      yet editable. Without it every user sees one fixed neighbourhood's
+      events — the distance promise only means something once the user can
+      say where they are. Onboarding sets the initial value.
+- [ ] **Web funnels deploy (Vercel) — launch prep.** The landing variants under
+      `design-reference/mockups/landings/` are static HTML and need a real
+      host + domain. Blocked on the app-store link, which the CTAs point at,
+      so sequence it after store submission is underway.
 - [ ] **Pre-launch: full Security Advisor sweep**, resolve or document every
       warning (baseline: 0 errors / 3 accepted, see SCHEMA_PLAN §10.7).
 - [ ] **Transfer Supabase project to business-email org — MUST precede the
@@ -142,6 +152,16 @@ and verified in Cursor/Claude Code.
       identify via User-Agent) — fine for dev/MVP volume. Swap to a paid
       geocoder (Google/Mapbox) before real traffic; the mini-form's `geocode`
       helper is the single swap point.
+- [ ] **Geocode confirmation step in both create flows — PRE-LAUNCH.** Show the
+      host the RESOLVED location and make them confirm or correct it before
+      publish. Today the geocode is silent and trusted: a typo'd or fictional
+      address still returns a confident match, and the event publishes pinned
+      wherever that landed. Observed 2026-07-21 during Create session-3 QA —
+      "123 Rainbow Road" resolved to Colorado and published **632 miles** from
+      the intended Sahuarita location, invisible in the feed with no error and
+      no clue why. A host would read that as "publishing is broken." Affects
+      the paid wizard and the Curbside mini form equally (one shared
+      `lib/geocode.ts`). Pairs naturally with the paid-geocoder swap below.
 - [ ] **Check-in / geofence (ROADMAP).** On-site check-in / proximity arrival
       confirmation for events. Not MVP — parked as a distinct capability that
       builds on the PostGIS point already stored per event.

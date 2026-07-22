@@ -53,6 +53,10 @@ export default function TabsLayout() {
           ),
         }}
       />
+      {/* Publish success ("You're live"). Inside the tab group so the tab bar
+          is restored the moment the listing goes live, but href:null keeps it
+          off the tab bar itself — it's reached only by the checkout redirect. */}
+      <Tabs.Screen name="published" options={{ href: null }} />
     </Tabs>
   );
 }

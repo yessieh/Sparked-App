@@ -26,7 +26,7 @@ import {
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
-import { GradientButton, GradientFill, SecondaryButton } from '../../components/AuthControls';
+import { GradientButton, SecondaryButton } from '../../components/AuthControls';
 import {
   type TierPrice,
   bandLabel,
@@ -103,43 +103,6 @@ function PayMark({ id }: { id: Method }) {
   );
 }
 
-/** Generic success screen — the reference's ConfirmScreen. */
-function PublishedScreen({ eventId }: { eventId: string }) {
-  const theme = useTheme();
-  return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.bg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
-      <View
-        style={{
-          width: 84,
-          height: 84,
-          borderRadius: 9999,
-          overflow: 'hidden',
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginBottom: 26,
-          boxShadow: '0 14px 40px rgba(255,95,78,0.35)',
-        }}
-      >
-        <GradientFill />
-        <Ionicons name="checkmark" size={38} color={brand.navy} />
-      </View>
-      <Text style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 28, lineHeight: 31, letterSpacing: -0.28, color: theme.colors.text, textAlign: 'center', marginBottom: 12 }}>
-        You're live
-      </Text>
-      <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 14, lineHeight: 22, color: theme.colors.textMuted, textAlign: 'center', marginBottom: 32, maxWidth: 300 }}>
-        Your event is on the local feed now — neighbours will see it ranked by how close they
-        are, never by an algorithm.
-      </Text>
-      <View style={{ width: '100%', maxWidth: 300, gap: 12 }}>
-        <GradientButton onPress={() => router.replace({ pathname: '/event/[id]', params: { id: eventId } })}>
-          View your listing
-        </GradientButton>
-        <SecondaryButton onPress={() => router.replace('/(tabs)')}>Back to the feed</SecondaryButton>
-      </View>
-    </View>
-  );
-}
-
 export default function CheckoutScreen() {
   const theme = useTheme();
   const { eventId } = useLocalSearchParams<{ eventId: string }>();
@@ -152,7 +115,6 @@ export default function CheckoutScreen() {
   const [cvc, setCvc] = useState('');
   const [name, setName] = useState('');
   const [paying, setPaying] = useState(false);
-  const [published, setPublished] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -183,10 +145,12 @@ export default function CheckoutScreen() {
       setPaying(false);
       return;
     }
-    setPublished(true);
+    // Leave the tab-less create stack and land on the in-tabs "You're live"
+    // screen, so the tab bar is restored the moment the listing goes live
+    // (publish-walk round 2 ruling). replace(), not push(): the finished
+    // checkout must not sit under a Back gesture.
+    router.replace({ pathname: '/published', params: { eventId: order.id } });
   }, [order, paying]);
-
-  if (published && order) return <PublishedScreen eventId={order.id} />;
 
   if (!order) {
     return (

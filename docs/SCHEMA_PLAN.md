@@ -42,6 +42,8 @@ checked into `supabase/migrations/`.*
 | `0003_host_content` | `event_photos`, `event_amenities`, `event_vendors`, curbside quota function + enforcement triggers, storage buckets | Stage 5 |
 | `0004_payments` | `orders`, publish-pipeline status transitions, refund fields | Stage 6 |
 | **`0010_publish_pricing`** *(APPLIED 2026-07-16)* | `app.duration_band`, `publish_paid_event` definer RPC, publish_fee_cents guard trigger — the **pricing-authority half of 0004**, pulled forward for the mock checkout (§7.2) | Stage 5 (mock publish) |
+| **`0011_publish_fee_column_privacy`** *(APPLIED 2026-07-17)* | per-column grants on `events` excluding `publish_fee_cents` (read + write) + member-scoped fee reader — §7.2 ruling | Stage 5 |
+| **`0012_publish_fee_fn_convention`** *(APPLIED 2026-07-17)* | splits 0011's reader onto the `app`-definer / `public`-invoker convention (no advisor lint) | Stage 5 |
 | `0005_notifications_infra` | `push_tokens`, `notification_sends` (throttle ledger), `notification_event_overrides` | Stage 7 |
 | `0006_moderation_feedback` | `feedback`, report review columns/indexes | Stage 8 |
 
@@ -396,19 +398,56 @@ a paid tier. The RPC is the app's only publish path today, not the DB's.
 1. **`tz` is client-supplied.** It is a locale input, not a fee input — the
    amount always comes from `tier_prices` — and a spoofed zone can shift the
    band by at most one day at a boundary. Revisit when Stripe prices the intent.
-2. **`events.publish_fee_cents` is readable by `anon` through the Data API**
-   (verified by direct REST probe). No consumer *screen* can show it — the feed
-   and detail RPCs don't select it, and neither does EventDetailView — but the
-   column itself is not column-privacy-protected. Same class as the 0009
-   workspace-join note. One-line fix if wanted:
-   `revoke select (publish_fee_cents) on public.events from anon;` — the
-   feed/detail RPCs are unaffected (neither selects the column). Note this
-   only closes the ANONYMOUS path: `authenticated` must keep the grant so
-   hosts can read their own fee, and the events RLS select policy lets any
-   signed-in user read any published row. Closing it fully means either a
-   column-privacy pass or moving host economics off `events` onto `orders`
-   (workspace-scoped RLS) when 0004 lands — which is the real fix.
-   **OPEN — needs a ruling, not yet applied.**
+2. **`events.publish_fee_cents` column privacy — RULED + CLOSED (0011/0012,
+   applied 2026-07-17).** The fee is excluded from every anonymous/consumer
+   read path; it is readable only by members of the owning workspace.
+
+   *The hole:* the feed (0005) and detail (0007) RPCs never selected it, but
+   the Data API let any caller read it straight off the table (pre-migration
+   probe: role `anon` read the fee on 8 seeded events).
+
+   *Why column grants, not RLS:* RLS is row-level, and the events select
+   policy deliberately exposes every published row to everyone (anonymous
+   browse). No policy can hide ONE column of an otherwise-public row.
+
+   *Why revoke-then-regrant:* a bare `revoke select (col)` is a **no-op**
+   while the role holds table-level SELECT — in Postgres a table grant
+   implies all columns and outranks a column-level revoke. 0002's table
+   grant had to come off first, then every column except the fee granted
+   back explicitly.
+
+   *Applied in 0011:* `anon` and `authenticated` hold per-column SELECT on
+   `events` excluding `publish_fee_cents`; `authenticated`'s INSERT/UPDATE
+   likewise exclude it, so the fee is structurally unwritable as well as
+   unreadable (the 0010 guard trigger remains the behavioral layer with the
+   readable error message — belt and braces, on purpose: it's money).
+   `authenticated` is NOT granted the column either — the select policy lets
+   any signed-in user read any published row, so granting it would leak every
+   host's economics to every user.
+
+   *Host read path:* `public.event_publish_fee_cents(event_id)` → the fee for
+   members of the owning workspace, `null` for everyone else. 0012 splits it
+   onto the project's definer convention (definer body in `app`, invoker
+   wrapper in `public` — see §6.4's curbside pair) so it adds no advisor lint.
+
+   *Fail-closed consequence:* **every future column added to `events` must add
+   its own grant in a migration**, or clients cannot read it. Deliberate for a
+   table carrying host economics.
+
+   *Second consequence:* an anonymous `?select=*` on `events` now returns a
+   permission error rather than rows. No app path does this (feed/detail use
+   the RPCs; Saved and checkout use explicit column lists).
+
+   *Still the real fix later:* moving host economics off `events` onto
+   `orders` (workspace-scoped RLS) when 0004 lands.
+
+3. **`public.publish_paid_event` (0010) carries a definer advisor lint.** It is
+   SECURITY DEFINER and client-callable, the shape the advisor flags as
+   "Public/Signed-In Users Can Execute SECURITY DEFINER Function" — unlike
+   0008's and 0012's pairs, which keep the definer body in the unexposed `app`
+   schema. **OPEN:** restructure onto the same convention. Deliberately
+   deferred past the live publish walk rather than putting an untested change
+   under the flow that most needs to work.
 
 ---
 

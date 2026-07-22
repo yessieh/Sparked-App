@@ -10,20 +10,77 @@ import { Text, View } from 'react-native';
 
 import { useTheme } from '../theme';
 
-/** Split a line into bold/italic/plain runs. **bold** wins over *italic*
- * (alternation order), so "**x**" never parses as nested italics. */
-function inlineRuns(text: string): { text: string; bold?: boolean; italic?: boolean }[] {
-  const runs: { text: string; bold?: boolean; italic?: boolean }[] = [];
-  const re = /\*\*([^*]+)\*\*|\*([^*]+)\*/g;
-  let last = 0;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    if (m.index > last) runs.push({ text: text.slice(last, m.index) });
-    if (m[1] !== undefined) runs.push({ text: m[1], bold: true });
-    else runs.push({ text: m[2], italic: true });
-    last = re.lastIndex;
+export interface InlineRun {
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+}
+
+/**
+ * Split a line into bold/italic/plain runs.
+ *
+ * Pairing is BALANCE-AWARE, which the original regex (`\*\*([^*]+)\*\*|…`)
+ * was not: it matched greedily with no notion of an opening delimiter, so any
+ * unconsumed marker stole the next one and formatted the span between them.
+ * "note: ** real text **bold** here" bolded " real text " and destroyed the
+ * host's actual bold run — and that is reachable by typing "**", changing
+ * your mind, and formatting something later. Descriptions are stored markdown
+ * shown on live Event Detail, so the damage reached consumers, not just the
+ * wizard.
+ *
+ * Now: the line is tokenized into asterisk-runs and text, and a delimiter
+ * only opens a run when a LATER delimiter of the same width closes it, with
+ * real content between. Anything unmatched — a stray "**", an odd "*", a run
+ * of three or more (bold+italic is outside the locked subset) — renders as
+ * the literal characters the host typed. Nothing is ever silently eaten.
+ */
+export function inlineRuns(text: string): InlineRun[] {
+  // Keeps the delimiters: "a **b** c" → ['a ', '**', 'b', '**', ' c']
+  const tokens = text.split(/(\*+)/).filter((t) => t !== '');
+  const isDelim = (t: string) => /^\*+$/.test(t) && t.length <= 2;
+
+  const runs: InlineRun[] = [];
+  const push = (t: string, style?: { bold?: boolean; italic?: boolean }) => {
+    if (!t) return;
+    const prev = runs[runs.length - 1];
+    // Merge adjacent plain text so literal markers read as one run.
+    if (prev && !prev.bold && !prev.italic && !style?.bold && !style?.italic) {
+      prev.text += t;
+      return;
+    }
+    runs.push({ text: t, ...style });
+  };
+
+  // Flanking rules, borrowed from CommonMark and the thing that actually
+  // disambiguates three delimiters in a line: an opener may not be followed by
+  // whitespace, a closer may not be preceded by it. Without these, the stray
+  // "**" in "note: ** real text **bold** here" pairs with the user's OPENING
+  // marker and bolds " real text ". With them, the stray is rejected as an
+  // opener (a space follows it) and the intended run pairs correctly.
+  const opens = (i: number) => tokens[i + 1] !== undefined && !/^\s/.test(tokens[i + 1]);
+  const closes = (j: number) => tokens[j - 1] !== undefined && !/\s$/.test(tokens[j - 1]);
+
+  for (let i = 0; i < tokens.length; i++) {
+    const tok = tokens[i];
+    if (!isDelim(tok) || !opens(i)) {
+      push(tok); // literal: not a delimiter, or not a legal opener
+      continue;
+    }
+    // j starts at i+2 so there is always real content inside the pair.
+    let close = -1;
+    for (let j = i + 2; j < tokens.length; j++) {
+      if (tokens[j] === tok && closes(j)) {
+        close = j;
+        break;
+      }
+    }
+    if (close > -1) {
+      push(tokens.slice(i + 1, close).join(''), tok.length === 2 ? { bold: true } : { italic: true });
+      i = close;
+    } else {
+      push(tok); // unmatched — literal, exactly as typed
+    }
   }
-  if (last < text.length) runs.push({ text: text.slice(last) });
   return runs;
 }
 
