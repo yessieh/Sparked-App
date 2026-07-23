@@ -44,6 +44,7 @@ checked into `supabase/migrations/`.*
 | **`0010_publish_pricing`** *(APPLIED 2026-07-16)* | `app.duration_band`, `publish_paid_event` definer RPC, publish_fee_cents guard trigger — the **pricing-authority half of 0004**, pulled forward for the mock checkout (§7.2) | Stage 5 (mock publish) |
 | **`0011_publish_fee_column_privacy`** *(APPLIED 2026-07-17)* | per-column grants on `events` excluding `publish_fee_cents` (read + write) + member-scoped fee reader — §7.2 ruling | Stage 5 |
 | **`0012_publish_fee_fn_convention`** *(APPLIED 2026-07-17)* | splits 0011's reader onto the `app`-definer / `public`-invoker convention (no advisor lint) | Stage 5 |
+| **`0013_event_vendors`** *(CREATED 2026-07-23 — apply pending)* | `event_vendors` (name, vendor_type, logo_path, pin_x/pin_y as 0–1 relative coords, sort_order) — the Plus tier's site-map/vendor-pins feature, pulled forward from `0003_host_content`. RLS mirrors `event_categories` (anon read where parent visible, member write); no new advisor lint | Stage 5 |
 | `0005_notifications_infra` | `push_tokens`, `notification_sends` (throttle ledger), `notification_event_overrides` | Stage 7 |
 | `0006_moderation_feedback` | `feedback`, report review columns/indexes | Stage 8 |
 
@@ -308,6 +309,16 @@ code, not schema). Index `(event_id)`. RLS mirrors `event_photos`.
 `id uuid PK · event_id FK cascade · name text not null · vendor_type text ·
 logo_path text · pin_x real · pin_y real` (site-map pin as 0–1 relative coords,
 null when unpinned). Index `(event_id)`. RLS mirrors `event_photos`.
+
+- **Pulled forward as migration 0013 (2026-07-23)** for the Plus tier's
+  site-map/vendor-pins feature — the final Create-Event session. `sort_order int`
+  added (host order). `pin_x`/`pin_y` carry `CHECK (… between 0 and 1)`. RLS is
+  cloned from `event_categories` (parent-visibility read, owner/editor write via
+  `app.is_member`), so no new SECURITY DEFINER function and the advisor baseline
+  holds. `event_photos` (the site-map IMAGE) stays deferred: the image is an
+  ephemeral placeholder this stage (no uploads), and the consumer section is
+  gated on `tier = plus AND >=1 vendor` (ruled 2026-07-23), so nothing needs to
+  persist the map itself yet.
 
 ### 6.4 Curbside quota — computed, never a counter (LOCK)
 - Function `app.curbside_posts_used(ws uuid) returns int`: count of `events`

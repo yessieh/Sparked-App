@@ -26,6 +26,8 @@ import { GradientButton, GradientFill, SecondaryButton } from './AuthControls';
 import EventGallery, { type GalleryPhoto } from './EventGallery';
 import { CategoryBadges, Perforation, PriceLine } from './EventStub';
 import MarkdownText from './MarkdownText';
+import SiteMap from './SiteMap';
+import type { Vendor } from '../lib/vendors';
 
 /** Consumer-facing event shape. Note what is ABSENT: publish_fee_cents and
  * tier pricing never reach this surface (SCHEMA LOCK 1 — card/detail read
@@ -123,6 +125,9 @@ export interface EventDetailViewProps {
   /** Draft preview: identical surface, every consumer action inert. */
   preview?: boolean;
   photos?: GalleryPhoto[];
+  /** Plus site-map vendors (with relative pins). Section shows only for a Plus
+   * event that has >=1 vendor; absent (or empty) everywhere else. */
+  vendors?: Vendor[];
   saved?: boolean;
   going?: boolean;
   goingCount?: number;
@@ -138,6 +143,7 @@ export default function EventDetailView({
   event,
   preview = false,
   photos,
+  vendors,
   saved = false,
   going = false,
   goingCount = 0,
@@ -460,6 +466,25 @@ export default function EventDetailView({
                     </Text>
                   </View>
                 </View>
+              </View>
+            )}
+
+            {/* Site map & vendors — the Plus tier's second feature. Shows only
+                for a Plus event that actually has vendors (ruling 2026-07-23:
+                Plus + >=1 vendor); the map surface is a placeholder this stage,
+                pins are the vendors' relative coords, tap a pin for name/type.
+                Same SiteMap component the wizard uses, so preview can't drift. */}
+            {event.tier_id === 'plus' && vendors && vendors.length > 0 && (
+              <View style={{ borderTopWidth: 1, borderTopColor: theme.colors.divider, paddingTop: 18, marginBottom: 26 }}>
+                <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: theme.fontSizes.eyebrow, fontWeight: '900', letterSpacing: 2.2, textTransform: 'uppercase', color: brand.ignitionGold }}>
+                  Site map &amp; vendors
+                </Text>
+                <View style={{ marginTop: 12 }}>
+                  <SiteMap vendors={vendors} tint={stripe} />
+                </View>
+                <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 11.5, color: theme.colors.textFaint, marginTop: 8 }}>
+                  Tap a pin for vendor details · {vendors.length} vendor{vendors.length === 1 ? '' : 's'}
+                </Text>
               </View>
             )}
 

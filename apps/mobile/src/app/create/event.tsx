@@ -42,9 +42,17 @@ import { FormField, GradientButton, GradientFill, SecondaryButton } from '../../
 import EventDetailView, { type EventDetailData, placeholderPhotos } from '../../components/EventDetailView';
 import EventStub, { type FeedEvent } from '../../components/EventStub';
 import MarkdownText from '../../components/MarkdownText';
+import SiteMap from '../../components/SiteMap';
 import { DateField, TimeField, format12h } from '../../components/pickers';
 import { useAuth } from '../../lib/auth';
 import { geocode, toWktPoint } from '../../lib/geocode';
+import { canonicalize, isBlocked, suggestMatches } from '../../lib/moderation';
+import {
+  DEFAULT_VENDOR_TYPE,
+  VENDOR_TYPES,
+  type Vendor,
+  vendorInsert,
+} from '../../lib/vendors';
 import {
   TIER_COPY,
   WIZARD_TIERS,
@@ -456,6 +464,258 @@ function PhotoSection({ photos, cap, onChange }: { photos: number[]; cap: number
 }
 
 // ---------------------------------------------------------------------------
+// Site map & vendors — the Plus tier's second feature (site map + vendor pins).
+// Collapsible, Details step, PLUS ONLY (the caller gates it; Standard renders
+// nothing — no upsell nag beyond the tier card). The map image is a placeholder
+// (same pattern as photos, ephemeral); only the vendor rows persist. Pins are
+// placed by tapping the map with a vendor selected. Custom vendor TYPES use the
+// shared substring-match + dedupe + blocklist pattern (lib/moderation).
+// ---------------------------------------------------------------------------
+function SiteMapVendors({
+  vendors,
+  onChangeVendors,
+  siteMapOn,
+  onToggleSiteMap,
+  tint,
+}: {
+  vendors: Vendor[];
+  onChangeVendors: (v: Vendor[]) => void;
+  siteMapOn: boolean;
+  onToggleSiteMap: (on: boolean) => void;
+  tint: string;
+}) {
+  const theme = useTheme();
+  const [open, setOpen] = useState(false);
+  const [vName, setVName] = useState('');
+  const [vType, setVType] = useState('');
+  const [vLogo, setVLogo] = useState(false);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const suggestions = suggestMatches(vType, VENDOR_TYPES);
+
+  const addVendor = () => {
+    const name = vName.trim();
+    if (!name) return;
+    const type = canonicalize(vType, VENDOR_TYPES) || DEFAULT_VENDOR_TYPE;
+    // Blocklist gates the name AND the (possibly custom) type — the same guard
+    // custom categories use — because both reach public surfaces.
+    if (isBlocked(name) || isBlocked(type)) {
+      setErr("That name or type isn't allowed. Please reword it.");
+      return;
+    }
+    const next: Vendor[] = [...vendors, { name, vendorType: type, pinX: null, pinY: null, logo: vLogo }];
+    onChangeVendors(next);
+    setSelected(next.length - 1); // auto-select the new vendor to pin next
+    setVName('');
+    setVType('');
+    setVLogo(false);
+    setErr(null);
+  };
+
+  const removeVendor = (i: number) => {
+    onChangeVendors(vendors.filter((_, idx) => idx !== i));
+    setSelected((s) => (s === i ? null : s !== null && s > i ? s - 1 : s));
+  };
+
+  const placePin = (x: number, y: number) => {
+    if (selected === null) return;
+    onChangeVendors(vendors.map((v, idx) => (idx === selected ? { ...v, pinX: x, pinY: y } : v)));
+  };
+
+  const removeMap = () => {
+    // Removing the map strips the pins it anchored (coords are meaningless
+    // without it); the vendor rows themselves stay.
+    onChangeVendors(vendors.map((v) => ({ ...v, pinX: null, pinY: null })));
+    onToggleSiteMap(false);
+    setSelected(null);
+  };
+
+  const sub = {
+    fontFamily: theme.fonts.bodySemiBold,
+    fontSize: 10,
+    fontWeight: '900' as const,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase' as const,
+    color: theme.colors.textFaint,
+  };
+
+  return (
+    <View style={{ borderRadius: 16, borderWidth: 1, borderColor: theme.colors.cardBorder, backgroundColor: theme.colors.cardBg, overflow: 'hidden' }}>
+      <Pressable onPress={() => setOpen((o) => !o)} style={{ flexDirection: 'row', alignItems: 'center', gap: 11, padding: 14 }}>
+        <Ionicons name="map-outline" size={17} color={brand.brightOrange} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 14, color: theme.colors.text }}>Site map &amp; vendors</Text>
+          <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 11, color: theme.colors.textFaint, marginTop: 1 }}>
+            {vendors.length} vendor{vendors.length === 1 ? '' : 's'}
+          </Text>
+        </View>
+        <Text style={{ ...sub, color: brand.brightOrange }}>Plus</Text>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={theme.colors.textFaint} />
+      </Pressable>
+
+      {open && (
+        <View style={{ paddingHorizontal: 14, paddingBottom: 16 }}>
+          {/* "Better on desktop" note (fully usable on mobile, nothing gated). */}
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 9, padding: 11, borderRadius: 12, backgroundColor: 'rgba(252,163,17,0.08)', borderWidth: 1, borderColor: 'rgba(252,163,17,0.22)', marginBottom: 14 }}>
+            <Ionicons name="desktop-outline" size={14} color={brand.brightOrange} style={{ marginTop: 1 }} />
+            <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 11.5, lineHeight: 16, color: '#ffd9a0', flex: 1 }}>
+              These tools work best on desktop — you can finish on a computer anytime.
+            </Text>
+          </View>
+
+          {!siteMapOn ? (
+            <Pressable
+              onPress={() => onToggleSiteMap(true)}
+              accessibilityLabel="Upload site map image"
+              style={{ height: 100, borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.18)', backgroundColor: theme.colors.cardBg, alignItems: 'center', justifyContent: 'center', gap: 6 }}
+            >
+              <Ionicons name="map" size={20} color={brand.brightOrange} />
+              <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 11, fontWeight: '800', color: theme.colors.textMuted }}>Upload site map image</Text>
+            </Pressable>
+          ) : (
+            <View>
+              <SiteMap vendors={vendors} tint={tint} onPlace={placePin} selectedIndex={selected} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+                <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 11, color: theme.colors.textFaint, flex: 1 }}>
+                  {selected !== null && vendors[selected]
+                    ? `Tap the map to pin ${vendors[selected].name}`
+                    : 'Select a vendor below, then tap the map to pin it.'}
+                </Text>
+                <Pressable onPress={removeMap} accessibilityLabel="Remove site map">
+                  <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 11, fontWeight: '800', color: theme.colors.textMuted }}>Remove map</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
+          <Text style={{ ...sub, marginTop: 18, marginBottom: 8 }}>Vendors</Text>
+          {vendors.map((v, i) => {
+            const pinned = v.pinX !== null && v.pinY !== null;
+            const isSel = selected === i;
+            return (
+              <Pressable
+                key={v.id ?? i}
+                onPress={() => setSelected(isSel ? null : i)}
+                accessibilityLabel={`${v.name}, ${v.vendorType}${pinned ? ', pinned' : ', not pinned'}`}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                  paddingVertical: 8,
+                  paddingHorizontal: 8,
+                  borderRadius: 10,
+                  backgroundColor: isSel ? 'rgba(252,163,17,0.08)' : 'transparent',
+                }}
+              >
+                <View
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 9,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: v.logo ? 'rgba(255,255,255,0.06)' : 'rgba(252,163,17,0.12)',
+                    borderWidth: 1,
+                    borderColor: v.logo ? theme.colors.cardBorder : 'rgba(252,163,17,0.28)',
+                  }}
+                >
+                  {v.logo ? (
+                    <Ionicons name="image-outline" size={13} color={theme.colors.textFaint} />
+                  ) : (
+                    <Text style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 12, color: brand.brightOrange }}>
+                      {(v.name[0] ?? '?').toUpperCase()}
+                    </Text>
+                  )}
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text numberOfLines={1} style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 13, fontWeight: '700', color: theme.colors.text }}>{v.name}</Text>
+                  <Text numberOfLines={1} style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 11, fontWeight: '600', color: theme.colors.textFaint, marginTop: 1 }}>{v.vendorType}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Ionicons name={pinned ? 'location' : 'location-outline'} size={12} color={pinned ? theme.colors.green : theme.colors.textFaint} />
+                  <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 10, fontWeight: '800', color: pinned ? theme.colors.green : theme.colors.textFaint }}>
+                    {pinned ? 'Pinned' : isSel ? 'Tap map' : 'No pin'}
+                  </Text>
+                </View>
+                <Pressable onPress={() => removeVendor(i)} accessibilityLabel={`Remove ${v.name}`} hitSlop={6} style={{ paddingLeft: 4 }}>
+                  <Ionicons name="close" size={14} color={theme.colors.textFaint} />
+                </Pressable>
+              </Pressable>
+            );
+          })}
+
+          {/* Add-vendor row: logo toggle · name · type · add. */}
+          <View style={{ flexDirection: 'row', alignItems: 'stretch', gap: 8, marginTop: 8 }}>
+            <Pressable
+              onPress={() => setVLogo((l) => !l)}
+              accessibilityLabel="Add vendor logo"
+              style={{
+                width: 42,
+                borderRadius: 12,
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 2,
+                backgroundColor: vLogo ? 'rgba(252,163,17,0.16)' : theme.colors.iconChipBg,
+                borderWidth: 1,
+                borderStyle: vLogo ? 'solid' : 'dashed',
+                borderColor: vLogo ? 'rgba(252,163,17,0.4)' : 'rgba(255,255,255,0.2)',
+              }}
+            >
+              <Ionicons name={vLogo ? 'checkmark' : 'image-outline'} size={15} color={brand.brightOrange} />
+              <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 7, fontWeight: '800', color: theme.colors.textFaint }}>logo</Text>
+            </Pressable>
+            <TextInput
+              value={vName}
+              onChangeText={setVName}
+              placeholder="Vendor name"
+              placeholderTextColor={theme.colors.textHint}
+              style={{ flex: 1, backgroundColor: theme.colors.cardBg, borderWidth: 1, borderColor: theme.colors.cardBorder, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12, fontFamily: theme.fonts.bodyMedium, fontSize: theme.fontSizes.bodySm, color: theme.colors.text }}
+            />
+            <TextInput
+              value={vType}
+              onChangeText={(t) => {
+                setVType(t);
+                if (err) setErr(null);
+              }}
+              placeholder="Type"
+              placeholderTextColor={theme.colors.textHint}
+              style={{ width: 88, backgroundColor: theme.colors.cardBg, borderWidth: 1, borderColor: theme.colors.cardBorder, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12, fontFamily: theme.fonts.bodyMedium, fontSize: theme.fontSizes.bodySm, color: theme.colors.text }}
+            />
+            <Pressable
+              onPress={addVendor}
+              accessibilityLabel="Add vendor"
+              style={{ width: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(252,163,17,0.14)', borderWidth: 1, borderColor: 'rgba(252,163,17,0.32)' }}
+            >
+              <Ionicons name="add" size={18} color={brand.brightOrange} />
+            </Pressable>
+          </View>
+
+          {/* Type suggestions (substring match) — tap to fill. */}
+          {suggestions.length > 0 && (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+              {suggestions.map((s) => (
+                <Pressable
+                  key={s}
+                  onPress={() => setVType(s)}
+                  style={{ paddingHorizontal: 11, paddingVertical: 5, borderRadius: 9999, borderWidth: 1, borderColor: theme.colors.borderStrong }}
+                >
+                  <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 11.5, fontWeight: '700', color: theme.colors.textMuted }}>{s}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          {err && (
+            <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 11.5, color: theme.colors.danger, marginTop: 8 }}>{err}</Text>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Tier card — ONE clean total for the draft's actual band ("4-day event · $20").
 // No per-day math anywhere: the band IS the unit of price.
 // ---------------------------------------------------------------------------
@@ -589,6 +849,12 @@ export default function EventWizard() {
   const [venueName, setVenueName] = useState('');
   const [address, setAddress] = useState('');
   const [photos, setPhotos] = useState<number[]>([]);
+  // Plus site-map feature. `siteMap` = the placeholder image is "uploaded"
+  // (ephemeral, like photos); `vendors` = the structured rows that persist.
+  // Both live here so they survive step + back-nav + tier switches, exactly
+  // like the rest of the wizard state.
+  const [siteMap, setSiteMap] = useState(false);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [entryFeeOn, setEntryFeeOn] = useState(false);
   const [entryFee, setEntryFee] = useState('10');
   const [tier, setTier] = useState<TierId>('standard');
@@ -605,6 +871,7 @@ export default function EventWizard() {
   const [workspaceName, setWorkspaceName] = useState<string>('');
   const [draftId, setDraftId] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [reviewMap, setReviewMap] = useState(false); // Review card ↔ site-map toggle
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -824,13 +1091,29 @@ export default function EventWizard() {
         if (catError) throw new Error(catError.message);
       }
 
+      // Vendors (Plus site-map feature). PLUS-GATED end to end: only a Plus
+      // checkout touches event_vendors, so Standard/curbside checkout never
+      // depends on this table (and never carries vendors — the consumer section
+      // is Plus-gated too). Clear-then-insert like categories so a re-entry
+      // replaces cleanly. (Consumer detail also gates on tier==='plus', so the
+      // rare Plus→Standard-after-checkout leftover row stays invisible.)
+      if (tier === 'plus') {
+        await supabase.from('event_vendors').delete().eq('event_id', id);
+        if (vendors.length) {
+          const { error: vendorError } = await supabase
+            .from('event_vendors')
+            .insert(vendors.map((v, i) => vendorInsert(v, id as string, i)));
+          if (vendorError) throw new Error(vendorError.message);
+        }
+      }
+
       router.push({ pathname: '/create/checkout', params: { eventId: id } });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
-  }, [workspaceId, canPublish, address, title, desc, tier, startsAt, endsAt, venueName, feeCents, draftId, cats]);
+  }, [workspaceId, canPublish, address, title, desc, tier, startsAt, endsAt, venueName, feeCents, draftId, cats, vendors]);
 
   const next = () => {
     if (step < REVIEW_STEP) setStep((s) => s + 1);
@@ -853,6 +1136,7 @@ export default function EventWizard() {
         event={previewDetail}
         preview
         photos={placeholderPhotos('preview', tier, categoryColor(cats), photos.length || 1)}
+        vendors={vendors}
         onBack={() => setShowPreview(false)}
       />
     );
@@ -1033,6 +1317,21 @@ export default function EventWizard() {
                   <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 12.5, color: theme.colors.textFaint }}>per person</Text>
                 </View>
               )}
+
+              {/* Site map & vendors — PLUS ONLY (data-driven off the tier's
+                  allows_site_map flag). Standard renders nothing here — the tier
+                  card is the only upsell; no in-form nag (locked). */}
+              {tierRow?.allows_site_map && (
+                <View style={{ marginTop: 20 }}>
+                  <SiteMapVendors
+                    vendors={vendors}
+                    onChangeVendors={setVendors}
+                    siteMapOn={siteMap}
+                    onToggleSiteMap={setSiteMap}
+                    tint={categoryColor(cats)}
+                  />
+                </View>
+              )}
             </View>
           )}
 
@@ -1043,7 +1342,51 @@ export default function EventWizard() {
               <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 9, fontWeight: '900', letterSpacing: 1.6, textTransform: 'uppercase', color: theme.colors.textFaint, marginBottom: 10 }}>
                 Live preview
               </Text>
-              <EventStub event={preview} />
+
+              {/* Card ↔ Site map toggle — Plus events with vendors only. The
+                  "map" is the SITE MAP (vendor diagram), NEVER a Google location
+                  map (locked spec). */}
+              {tier === 'plus' && vendors.length > 0 && (
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                  {(['card', 'map'] as const).map((m) => {
+                    const active = (m === 'map') === reviewMap;
+                    return (
+                      <Pressable
+                        key={m}
+                        onPress={() => setReviewMap(m === 'map')}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected: active }}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 6,
+                          paddingHorizontal: 13,
+                          paddingVertical: 7,
+                          borderRadius: 9999,
+                          borderWidth: 1,
+                          borderColor: active ? 'rgba(252,163,17,0.45)' : theme.colors.cardBorder,
+                          backgroundColor: active ? 'rgba(252,163,17,0.10)' : theme.colors.cardBg,
+                        }}
+                      >
+                        <Ionicons
+                          name={m === 'map' ? 'map-outline' : 'pricetag-outline'}
+                          size={13}
+                          color={active ? brand.brightOrange : theme.colors.textFaint}
+                        />
+                        <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 12, fontWeight: '800', color: active ? brand.brightOrange : theme.colors.textMuted }}>
+                          {m === 'map' ? 'Site map' : 'Card'}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
+
+              {reviewMap && tier === 'plus' && vendors.length > 0 ? (
+                <SiteMap vendors={vendors} tint={categoryColor(cats)} />
+              ) : (
+                <EventStub event={preview} />
+              )}
 
               <View style={{ marginTop: 12 }}>
                 <SecondaryButton onPress={() => setShowPreview(true)}>Preview full listing</SecondaryButton>

@@ -19,6 +19,7 @@ import { useAuth } from '../../lib/auth';
 import { TEST_ORIGIN } from '../../lib/devOrigin';
 import { useEngagement } from '../../lib/engagement';
 import { supabase } from '../../lib/supabase';
+import { vendorFromRow, type Vendor, type VendorRow } from '../../lib/vendors';
 import { brand, useTheme } from '../../theme';
 
 export default function EventDetailScreen() {
@@ -27,6 +28,7 @@ export default function EventDetailScreen() {
   const { session } = useAuth();
   const { savedIds, goingIds, toggleSave, toggleRsvp, refresh, rsvpDelta } = useEngagement();
   const [event, setEvent] = useState<EventDetailData | null>(null);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -46,7 +48,21 @@ export default function EventDetailScreen() {
     if (rpcError) setError(rpcError.message);
     else {
       setError(null);
-      setEvent(((data ?? []) as EventDetailData[])[0] ?? null);
+      const ev = ((data ?? []) as EventDetailData[])[0] ?? null;
+      setEvent(ev);
+      // Vendors are a Plus-only feature — skip the extra read for every other
+      // event (the common feed→detail path). event_vendors RLS lets anon read
+      // rows of any publicly-visible event, so no RPC is needed.
+      if (ev && ev.tier_id === 'plus') {
+        const { data: vRows } = await supabase
+          .from('event_vendors')
+          .select('id,name,vendor_type,logo_path,pin_x,pin_y,sort_order')
+          .eq('event_id', id)
+          .order('sort_order');
+        setVendors(((vRows ?? []) as VendorRow[]).map(vendorFromRow));
+      } else {
+        setVendors([]);
+      }
     }
   }, [id]);
 
@@ -125,6 +141,7 @@ export default function EventDetailScreen() {
     <>
       <EventDetailView
         event={event}
+        vendors={vendors}
         saved={saved}
         going={going}
         goingCount={event.rsvp_count + rsvpDelta(event.id)}
