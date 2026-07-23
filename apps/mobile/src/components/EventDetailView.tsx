@@ -483,7 +483,7 @@ export default function EventDetailView({
                   <SiteMap vendors={vendors} tint={stripe} />
                 </View>
                 <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 11.5, color: theme.colors.textFaint, marginTop: 8 }}>
-                  Tap a pin for vendor details · {vendors.length} vendor{vendors.length === 1 ? '' : 's'}
+                  Tap a pin or a vendor to highlight it · {vendors.length} vendor{vendors.length === 1 ? '' : 's'}
                 </Text>
               </View>
             )}
