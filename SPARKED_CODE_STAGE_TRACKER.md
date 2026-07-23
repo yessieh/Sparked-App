@@ -66,6 +66,16 @@ and verified in Cursor/Claude Code.
       bound to its own state, each opening a picker; End ≥ Start. Demo gate:
       show a date actually changing.
 - [ ] **Real image uploads** — cover, gallery, vendor logos (Supabase Storage).
+      **Designs `event_photos` here, against real storage** (SCHEMA_PLAN §6.1,
+      deliberately deferred at the 0013 site-map/vendors session): `kind` in
+      ('gallery','site_map'), the Plus-only site-map insert trigger, and the
+      storage buckets all land with actual uploads rather than as a placeholder
+      row. Two loose ends to reconnect when it does: (1) the site-map IMAGE
+      becomes a real `event_photos(kind='site_map')` row — the consumer section,
+      currently gated on `tier=plus AND >=1 vendor`, can then also show a map
+      with zero vendors; (2) `event_vendors.logo_path` (nullable placeholder in
+      0013) starts carrying a real storage path for vendor logos. So the two
+      stages find each other — this item OWNS `event_photos`; 0013 owns vendors.
 - [ ] **Entry-fee display: RESOLVED — ALL-TIER.** Any tier with paid entry on
       shows the fee. The prototype's `isPlus` gate is a known frozen-reference
       bug (AppScreens.jsx:404, :1009) — production ignores it.
