@@ -281,6 +281,39 @@ function DescriptionEditor({ value, onChange }: { value: string; onChange: (v: s
       <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 11, color: theme.colors.textFaint, marginTop: 6 }}>
         Bold, italic, and bullets only. Markdown is saved as typed.
       </Text>
+
+      {/* Live preview — renders the SAME markdown through the SAME MarkdownText
+          the Review + live listing use, so what the host sees here can't drift
+          from what publishes. Absorbs the marker layer for non-technical hosts
+          (they see the outcome, not the asterisks) without a rich-text editor;
+          the true WYSIWYG editor is a tracked follow-up. Hidden while empty. */}
+      {value.trim() ? (
+        <View
+          style={{
+            marginTop: 12,
+            padding: 13,
+            borderRadius: theme.radii.lg - 2,
+            borderWidth: 1,
+            borderColor: theme.colors.cardBorder,
+            backgroundColor: theme.colors.cardBg,
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: theme.fonts.bodySemiBold,
+              fontSize: 9,
+              fontWeight: '900',
+              letterSpacing: 1.6,
+              textTransform: 'uppercase',
+              color: theme.colors.textFaint,
+              marginBottom: 8,
+            }}
+          >
+            Preview
+          </Text>
+          <MarkdownText value={value} />
+        </View>
+      ) : null}
     </View>
   );
 }

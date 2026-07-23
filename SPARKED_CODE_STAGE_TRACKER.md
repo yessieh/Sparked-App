@@ -217,9 +217,23 @@ and verified in Cursor/Claude Code.
       real Event Detail component in preview mode (formatted description,
       photos, fee line; NO live actions; clear PREVIEW marker). See
       SPARKED_STATE lock. Next session.
-- [ ] **Live markdown preview in description editor — polish, post-MVP.**
-      Literal `**markers**` while typing are accepted for now; Review already
-      shows the formatted result, so this is comfort, not correctness.
+- [x] **Category soft-cap warning — confirmed live (2026-07-22).** The gentle
+      "Most events use 2–3 categories" nudge fires at the 4th selection
+      (uncapped) as specified. Verified in the round-2 walk.
+- [x] **Live markdown preview in description editor — SHIPPED (round-2 walk,
+      2026-07-22).** A labelled **Preview** under the field renders the typed
+      markdown through the SAME `components/MarkdownText.tsx` as Review + the
+      live listing, so the host sees the formatted outcome (marker layer
+      absorbed) and the preview can't drift from what publishes. Literal
+      `**markers**` stay in the input by design — markdown is saved as typed.
+- [ ] **Rich text editor (WYSIWYG) — host-experience polish, replaces the
+      marker input.** Web `contentEditable` per the design reference
+      (`AppScreens.jsx` `_RichText`: live B / I / •, no visible markers);
+      native later — RN `TextInput` can't render inline formatting while
+      editing, so native needs a webview-based editor or a later solution.
+      Storage stays the locked markdown subset: the editor serializes down to
+      the same bold/italic/bullets, so `MarkdownText` and the DB are unchanged.
+      Supersedes the live-preview above once it lands.
 
 ## MEDIA & REAL-DEVICE (pre-store)
 
