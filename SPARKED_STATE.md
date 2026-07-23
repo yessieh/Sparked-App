@@ -566,7 +566,13 @@ name/type/logo_path/`pin_x`,`pin_y` as 0..1 relative coords/sort_order, pulled
 forward from the never-applied `0003_host_content`; RLS cloned from
 `event_categories`, anon read where the parent event is visible, owner/editor
 write via `app.is_member`; APPLIED 2026-07-23, verified anon read = 200 empty
-and anon insert = 42501). Advisor baseline steady at
+and anon insert = 42501), 0014 `publish_paid_event` onto the
+`app`-definer/`public`-invoker convention (closes SCHEMA_PLAN §7.2 tradeoff 3;
+behavior/signature/error codes unchanged — the public wrapper's `event_id`/`tz`
+argument NAMES are load-bearing for PostgREST). **Migrations apply from files
+via `npx supabase db push --linked`, never pasted** — remote history verified
+matching the repo 2026-07-23 (0013 had drifted from a dashboard paste and was
+repaired with `migration repair --status applied`). Advisor baseline steady at
 0 errors / 3 accepted warnings (SCHEMA_PLAN §10.7 — two rls_auto_enable
 platform warnings + leaked-password protection, Pro-gated on the Free plan;
 DECIDED 2026-07-09: enable with the launch-prep Pro upgrade).

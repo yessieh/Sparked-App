@@ -158,22 +158,44 @@ and verified in Cursor/Claude Code.
       so sequence it after store submission is underway.
 - [ ] **Pre-launch: full Security Advisor sweep**, resolve or document every
       warning (baseline: 0 errors / 3 accepted, see SCHEMA_PLAN §10.7).
-- [ ] **Separate dev / prod Supabase environments — BEFORE real users.**
-      Today there is ONE project: development, QA walks, and the seeded demo
-      events all share the database the app points at, and every migration has
-      been applied by hand in the dashboard. That is fine now and unacceptable
-      the moment real hosts have real listings — a bad migration or a QA
-      cleanup query would hit live data (this arc already ran several
-      `delete from public.events` cleanups by hand). Needs: a second project,
-      env-scoped `EXPO_PUBLIC_SUPABASE_*` config per build profile (EAS), the
-      migration files in `supabase/migrations/` as the source of truth applied
-      via CLI rather than pasted, and seed data confined to dev. Sequence it
-      with the business-email org transfer below so prod is created in the
-      right org from day one.
-- [ ] **Transfer Supabase project to business-email org — MUST precede the
-      Pro upgrade** (billing attaches to the org, not the project). Built-in
-      transfer, zero downtime. Prep: create the business-email Supabase
-      account/org anytime.
+- [ ] **Create the PRODUCTION Supabase project at launch prep — STRATEGY
+      DECIDED 2026-07-23.** The current project (`Sparked-App`,
+      `kzynvvdggooqgtnprhrm`) is **dev/staging PERMANENTLY** — it keeps the
+      seeded demo events, the QA walk-throughs, and every experiment. It never
+      becomes production.
+      **Production is a NEW, EMPTY project**, stood up at launch prep by
+      running `supabase/migrations/` **0001 → N fresh** against it. There is
+      **no data migration and no dump/restore**: nothing from dev crosses over,
+      so none of the QA cruft, test listings, throwaway accounts, or
+      hand-applied drift can land in front of real users. The migration files
+      are the contract — if the schema can't be rebuilt from them alone, that's
+      the bug to fix before launch, and this is the moment it gets proven.
+      At cutover:
+      - **App env vars repoint.** `EXPO_PUBLIC_SUPABASE_URL` /
+        `EXPO_PUBLIC_SUPABASE_ANON_KEY` swap to the prod project, scoped per
+        EAS build profile so dev builds keep pointing at dev. Verify a release
+        build actually reads the prod values before shipping.
+      - **Auth is reconfigured on prod, not inherited:** Google OAuth client +
+        callback, the redirect allowlist, and email confirmations all have to
+        be set up again on the new project.
+      - **These all attach to the NEW prod project, not this one:** the Pro
+        upgrade, custom SMTP (replacing the 2 emails/hr built-in mailer), and
+        leaked-password protection (the third accepted advisor warning — see
+        below; enabling it there is what returns the baseline to 0 errors /
+        2 accepted **on prod**).
+      - **Seed data stays dev-only.** `supabase/seed.sql` and
+        `scripts/qa-cleanup.sql` must never run against prod.
+      Consequence worth stating: until this exists, there is exactly one
+      database and every destructive query is one typo from mattering. That's
+      acceptable now precisely BECAUSE there are no real users — it stops being
+      acceptable the day there are.
+- [ ] **Business-email Supabase org — CREATE PROD INSIDE IT** (billing attaches
+      to the org, not the project). **Superseded in shape by the dev/prod
+      strategy above:** since production is a NEW project, it should simply be
+      *created in* the business-email org — no transfer of the existing project
+      is needed, and the dev project can stay where it is. Prep: create the
+      business-email Supabase account/org anytime; do it before launch prep so
+      prod is born in the right org and the Pro upgrade bills correctly.
 - [ ] **Google Cloud cleanup:** delete the Firebase browser key +
       firebase-adminsdk service account from `sparked-dedd9` (old-rendition
       residue) — after confirming the old build is fully dead. Store accounts
@@ -184,6 +206,9 @@ and verified in Cursor/Claude Code.
       advisor badge stays DISABLED). Documented as the third accepted advisor
       warning. Enable it with the launch-prep Pro upgrade (folds into the
       pre-launch advisor sweep above), restoring baseline to 0 / 2 accepted.
+      **Applies to the NEW PROD project** (see the dev/prod strategy above) —
+      dev/staging stays on Free and keeps this warning permanently, which is
+      fine and expected. "0 / 2 accepted" is a PROD statement.
 
 ## GEO / MAPS (carried from prior state doc)
 
@@ -316,6 +341,31 @@ and verified in Cursor/Claude Code.
       path (Supabase Storage CDN vs. a transform/resize layer vs. external
       CDN) and its egress cost model BEFORE uploads ship. Feed is
       read-heavy; unbounded full-size delivery is the cost risk.
+
+---
+
+## STANDING PROCEDURES (not TODOs — how this project operates)
+
+- [x] **Migrations apply FROM FILES via the CLI — never pasted.** The repo's
+      `supabase/migrations/` is the source of truth; the remote's
+      `schema_migrations` history must always match it.
+      Workflow: write the file → `npx supabase db push --linked` → confirm with
+      `npx supabase migration list --linked` (every row `local == remote`).
+      The CLI is not on PATH; `npx supabase` resolves it (v2.109.1), the
+      project is linked (`supabase/.temp/linked-project.json` → ref
+      `kzynvvdggooqgtnprhrm`) and authenticated.
+      *History:* 0013 was pasted into the dashboard, so its SQL ran but the
+      history never recorded it — repaired 2026-07-23 with
+      `supabase migration repair --status applied 20260723000013`. That is the
+      remedy for a pasted migration; **never** `db push` a migration whose
+      objects already exist — it re-runs and fails. 0011/0012 were fine.
+- [x] **QA cleanup runs from `scripts/qa-cleanup.sql`** — not ad-hoc DELETEs.
+      The standing QA address is **`18680 S Nogales Hwy`**; use it for every
+      test listing. The script previews, deletes (prefix-matched, because the
+      geocoder rewrites the address — the same test event has appeared as both
+      the bare street and the full `…, Green Valley, AZ 85614` form), then
+      verifies. Seeded demo events are excluded explicitly. Deletes cascade to
+      categories / vendors / saves / rsvps. DEV ONLY — never against prod.
 
 ---
 

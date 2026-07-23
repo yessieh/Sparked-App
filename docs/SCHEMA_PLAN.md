@@ -44,7 +44,8 @@ checked into `supabase/migrations/`.*
 | **`0010_publish_pricing`** *(APPLIED 2026-07-16)* | `app.duration_band`, `publish_paid_event` definer RPC, publish_fee_cents guard trigger — the **pricing-authority half of 0004**, pulled forward for the mock checkout (§7.2) | Stage 5 (mock publish) |
 | **`0011_publish_fee_column_privacy`** *(APPLIED 2026-07-17)* | per-column grants on `events` excluding `publish_fee_cents` (read + write) + member-scoped fee reader — §7.2 ruling | Stage 5 |
 | **`0012_publish_fee_fn_convention`** *(APPLIED 2026-07-17)* | splits 0011's reader onto the `app`-definer / `public`-invoker convention (no advisor lint) | Stage 5 |
-| **`0013_event_vendors`** *(CREATED 2026-07-23 — apply pending)* | `event_vendors` (name, vendor_type, logo_path, pin_x/pin_y as 0–1 relative coords, sort_order) — the Plus tier's site-map/vendor-pins feature, pulled forward from `0003_host_content`. RLS mirrors `event_categories` (anon read where parent visible, member write); no new advisor lint | Stage 5 |
+| **`0013_event_vendors`** *(APPLIED 2026-07-23)* | `event_vendors` (name, vendor_type, logo_path, pin_x/pin_y as 0–1 relative coords, sort_order) — the Plus tier's site-map/vendor-pins feature, pulled forward from `0003_host_content`. RLS mirrors `event_categories` (anon read where parent visible, member write); no new advisor lint | Stage 5 |
+| **`0014_publish_fn_convention`** *(APPLIED 2026-07-23)* | splits `publish_paid_event` (0010) onto the `app`-definer / `public`-invoker convention, closing §7.2 tradeoff 3. Behavior, signature, OUT columns and error codes unchanged | Stage 5 |
 | `0005_notifications_infra` | `push_tokens`, `notification_sends` (throttle ledger), `notification_event_overrides` | Stage 7 |
 | `0006_moderation_feedback` | `feedback`, report review columns/indexes | Stage 8 |
 
@@ -452,13 +453,26 @@ a paid tier. The RPC is the app's only publish path today, not the DB's.
    *Still the real fix later:* moving host economics off `events` onto
    `orders` (workspace-scoped RLS) when 0004 lands.
 
-3. **`public.publish_paid_event` (0010) carries a definer advisor lint.** It is
-   SECURITY DEFINER and client-callable, the shape the advisor flags as
-   "Public/Signed-In Users Can Execute SECURITY DEFINER Function" — unlike
-   0008's and 0012's pairs, which keep the definer body in the unexposed `app`
-   schema. **OPEN:** restructure onto the same convention. Deliberately
-   deferred past the live publish walk rather than putting an untested change
-   under the flow that most needs to work.
+3. **`public.publish_paid_event` (0010) carried a definer advisor lint —
+   RESOLVED by migration 0014 (applied 2026-07-23).** It was SECURITY DEFINER
+   and client-callable, the shape the advisor flags as "Public/Signed-In Users
+   Can Execute SECURITY DEFINER Function" — unlike 0008's and 0012's pairs,
+   which keep the definer body in the unexposed `app` schema. The restructure
+   was deliberately deferred past the live publish walk rather than putting an
+   untested change under the flow that most needs to work; the Create Event arc
+   closed 2026-07-23, so 0014 took it.
+
+   *Applied in 0014:* the body moved verbatim to `app.publish_paid_event(
+   p_event_id, p_tz)` (definer, membership still re-checked by hand), with a
+   thin `public.publish_paid_event(event_id, tz)` SECURITY INVOKER wrapper.
+   Behavior, error codes/messages, and the transaction-local
+   `app.pricing_context` bypass are unchanged.
+
+   *Load-bearing detail:* the PUBLIC wrapper's parameter names must stay
+   `event_id` / `tz` — PostgREST calls RPCs with NAMED arguments and the app
+   sends exactly those keys (`create/checkout.tsx`). Renaming them breaks every
+   publish. The `app` body uses `p_` prefixes to avoid ambiguity with
+   `events.id`, same as 0012.
 
 ---
 
