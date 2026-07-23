@@ -117,7 +117,11 @@ export default function SiteMap({
   const [selected, setSelected] = useState<number | null>(null);
   const [expanded, setExpanded] = useState(false);
 
-  // Brief pulse that SETTLES (≈2 cycles) — never a continuous loop.
+  // A BREATH that settles: 2 slow cycles, never a continuous loop. Timing is
+  // deliberately unhurried (260ms in / 300ms out ≈ 1.1s total) with inOut
+  // easing — the earlier 160ms out/in cadence read as a twitch rather than a
+  // breath. Rising slightly faster than it falls is what makes it feel drawn
+  // rather than mechanical.
   const pulse = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (interactive || selected === null) return;
@@ -127,8 +131,8 @@ export default function SiteMap({
     }
     pulse.setValue(0);
     const cycle = () => [
-      Animated.timing(pulse, { toValue: 1, duration: 160, easing: Easing.out(Easing.quad), useNativeDriver: false }),
-      Animated.timing(pulse, { toValue: 0, duration: 160, easing: Easing.in(Easing.quad), useNativeDriver: false }),
+      Animated.timing(pulse, { toValue: 1, duration: 260, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
+      Animated.timing(pulse, { toValue: 0, duration: 300, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
     ];
     const anim = Animated.sequence([...cycle(), ...cycle()]);
     anim.start();

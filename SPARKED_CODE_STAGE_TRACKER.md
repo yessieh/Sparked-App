@@ -258,7 +258,22 @@ and verified in Cursor/Claude Code.
       dots + thumbnails, the RSVP stamp motion, and the Google auth
       deep-link return — on a PHYSICAL device. Web preview + machine checks
       do not cover these; they are the standing human feel-list carried
-      across sessions.
+      across sessions. **Site map adds to this list:** tap-to-place pin
+      accuracy under a finger (not a mouse), the selected-pin breath (2 slow
+      cycles, ~1.1s, must SETTLE — never loop), the unselected-pin dim level,
+      and callout placement at real phone widths, where the surface is far
+      narrower than desktop and collisions get tighter.
+- [ ] **Site-map directory scroll-into-view on NATIVE.** Tapping a pin selects
+      its directory row on every platform, but the "scroll that row into view"
+      half is **web-only** today (`Platform.OS === 'web'` → `scrollIntoView`).
+      React Native has no DOM equivalent: revealing it needs a handle on the
+      PARENT scroll view (Event Detail's `ScrollView`), which the shared
+      `SiteMap` component deliberately doesn't own. Fix shape: measure the row
+      (`onLayout` / `measureLayout`) and expose an `onRevealRow` callback the
+      parent screen wires to its `scrollTo` — or pass a scroll ref down.
+      Until then, on a phone a pin tap highlights a row that may be off-screen
+      (selection is still CORRECT, just not revealed). Verify during the
+      real-device pass above.
 - [ ] **Image-delivery egress strategy.** Real event photos (Code-stage
       uploads) pull image bytes on every feed scroll — decide the delivery
       path (Supabase Storage CDN vs. a transform/resize layer vs. external
