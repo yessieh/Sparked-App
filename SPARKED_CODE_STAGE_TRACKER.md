@@ -281,10 +281,11 @@ and verified in Cursor/Claude Code.
       selection / checkout / publish yet.
 - [x] **Review renders the formatted description** via shared
       `components/MarkdownText.tsx` (locked subset only).
-- [ ] **Review "Preview full listing" action** — render the draft through the
-      real Event Detail component in preview mode (formatted description,
-      photos, fee line; NO live actions; clear PREVIEW marker). See
-      SPARKED_STATE lock. Next session.
+- [x] **Review "Preview full listing" action — DONE.** Renders the draft
+      through the REAL `EventDetailView` in `preview` mode (formatted
+      description, photos, fee line, site map for Plus), every consumer action
+      inert, persistent PREVIEW bar (`create/event.tsx`, `showPreview`). Reuses
+      the real component, so preview drift is structurally impossible.
 - [x] **Category soft-cap warning — confirmed live (2026-07-22).** The gentle
       "Most events use 2–3 categories" nudge fires at the 4th selection
       (uncapped) as specified. Verified in the round-2 walk.
