@@ -75,6 +75,12 @@ and verified in Cursor/Claude Code.
 - [ ] **Real Stripe checkout** — replace the mock Apple Pay / Google Pay / Link
       / Card screen. Payment marks in prototype are hand-drawn approximations;
       production uses real SDK-rendered buttons under brand guidelines.
+- [ ] **Wizard exit affordance** — persistent X/close on all wizard + checkout
+      steps with a discard-draft confirmation. Pairs with the in-tabs success
+      screen restructure (round-2 walk): the create flow is a focused,
+      chrome-less stack, so leaving it mid-way currently relies on Back/Cancel
+      only — a clear, always-present exit (that warns before dropping an
+      unsaved draft) closes the loop the success-screen redirect opened.
 
 ---
 
