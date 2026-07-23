@@ -228,13 +228,47 @@ Constant across ALL variants:
   with Review) — landed with publish, since published events now carry
   markdown.
 
+### CREATE EVENT — ARC COMPLETE (2026-07-23)
+
+The whole creation path is built and walked end to end. What exists, in the
+order a host meets it:
+
+1. **Entry fork** — "What are you posting?" → Curbside (free) or Event (paid).
+2. **Curbside mini-form + quota** — auto-tagged, single-day, 3 free posts per
+   rolling 100 days enforced server-side (migration **0008**, computed never
+   counted), block-at-0 renders the CONVERSION screen. Display-only anonymity
+   via `curbside_anonymous` (**0009**) with RPC name-masking.
+3. **5-step paid wizard** — Basics → When/Where → **Tier** → Details → Review.
+   All state parent-owned, so back-nav and tier switches never lose a field.
+4. **Tier + band pricing** — ONE clean total per tier for the draft's band,
+   read from `tier_prices`; per-day math exists nowhere.
+5. **Server-priced publish fee** (**0010**, SCHEMA_PLAN §7.2) — the client may
+   not write `publish_fee_cents` (guard trigger); `publish_paid_event` re-reads
+   `tier_prices` and stamps it. Fee is host-only: per-column grants (**0011**)
+   exclude it from every consumer read, member-scoped reader on the
+   `app`-definer/`public`-invoker convention (**0012**).
+6. **Mock checkout → publish** — Stripe-style screen, 1.4s settle, no charge;
+   real Stripe is stage 6.
+7. **Plus site map + vendor pins + directory** (**0013**) — placeholder map
+   image, event-owned vendor rows with relative 0..1 pins, read-only directory
+   beneath the map on every consumer surface.
+
+**Still open for this area (all tracked, none blocking):** real Stripe, real
+image uploads, WYSIWYG description editor, wizard exit affordance, geocode
+confirmation, published events in Workspace.
+
 ### Paid wizard (structure built 2026-07-16; LOCKED rulings)
 
 - **Live preview rail: collapsed by default on steps 1–3** (Basics,
   When/Where, Details) — it's a reassurance, not the main event there. The
   preview **earns full presence at Review**, rendered as the real EventStub.
-- **Description markdown display rule.** Literal `**markers**` while typing
-  in the Basics editor are ACCEPTABLE (no live rendering — polish, tracked).
+- **Description markdown display rule.** Literal `**markers**` stay in the
+  Basics input (markdown is saved as typed), but a labelled **Preview** now
+  renders live UNDER the field (shipped 2026-07-22) through the SAME
+  `MarkdownText` as Review and the live listing — so the host sees the
+  formatted outcome, and preview cannot drift from what publishes. This
+  supersedes the earlier "no live rendering" note. A true WYSIWYG editor that
+  removes the markers entirely is the tracked follow-up.
   **Review MUST render the description FORMATTED** — Review is a "what
   buyers see" surface and raw asterisks break it. Shared renderer:
   `components/MarkdownText.tsx` (the locked subset only — **bold**,
@@ -262,6 +296,41 @@ Constant across ALL variants:
 - **Wizard step content:** description lives on **Basics** (not the
   reference's Details), entry fee on **Details**. Deliberate divergence
   from the frozen reference's split, ruled 2026-07-16.
+
+### Site map & vendors + create-flow chrome (LOCKED 2026-07-23)
+
+- **Site-map section visibility = `tier = plus` AND `>= 1 vendor`.** The map
+  IMAGE is an ephemeral placeholder (same pattern as photos — real uploads are
+  stage 5), so only the vendor rows persist; an empty map has no pins worth
+  showing. Consequence to revisit when uploads land: a Plus event with a map
+  and zero vendors currently shows nothing. Standard events show the section
+  NOWHERE, and the wizard shows no in-form upsell — the tier card is the only
+  pitch.
+- **Vendors are EVENT-OWNED data, never accounts.** Name + type + a pin as
+  RELATIVE 0..1 coords on the image (never geography — it's a diagram, not a
+  location map). Custom vendor types title-case on save and dedupe
+  case-insensitively against the seed list plus types already on the event.
+  Plurality ("Drink" vs "Drinks") is deliberately NOT collapsed — tracked.
+- **Vendor directory (read-only surfaces): peek at 5 + "Show all (N)"**, with
+  ONE shared bidirectional selection — tapping a row highlights its pin,
+  tapping a pin highlights its row. Selected pin takes a gold `#ffca3a` ring +
+  a 2-cycle settling breath (never a loop), unselected pins dim, selected row
+  takes a matching border; reduced motion applies end-states instantly. The
+  pin callout is NAME ONLY and collision-aware so it never covers another pin.
+  All of it renders through the shared `components/SiteMap.tsx`, which the
+  Event Detail, the full-listing preview, AND the Review map toggle all use —
+  drift is structurally impossible. The wizard's Details step uses the SAME
+  component in interactive mode (tap-to-place) and shows no directory, because
+  that step has its own editing list.
+- **"Better on desktop" banner shows only below `breakpoints.desktop` (1024).**
+  Nothing is gated at any width — the section stays fully usable on mobile.
+- **Tab bar: hidden through the wizard AND checkout, RESTORED at the success
+  screen and everywhere after.** The create flow is a deliberate chrome-less
+  focus mode; the moment the listing goes live the host is back in the app. It
+  is implemented by making "You're live" an `href: null` route INSIDE the
+  `(tabs)` group, so the tab bar returns structurally rather than being
+  redrawn. Checkout `router.replace()`s there on success, which also drops the
+  finished create stack out from under the Back gesture.
 
 ---
 
@@ -359,7 +428,7 @@ Constant across ALL variants:
 | **Saved page** | ✅ Proven | Ticket stubs grouped Tonight / This Weekend / Coming Up (section renders only if populated). Compact EventStub variant. Green "Going" / muted "Saved" chips + RSVP count. |
 | **Logged-out "Me"** | ✅ Proven | Signup invitation (not empty shell). Lists what an account unlocks. Browse + share stay open to guests. |
 | **Workspace slot** (Me hub) | ✅ Proven | Two states: non-host = dashed "+ Create your first event" invitation (taps into create flow, workspace created silently); host = solid stats card. Multi-workspace picker built but DORMANT (only shows at 2+ workspaces). "+ Create a workspace" (no "join" — teams not built). |
-| **Create Event** | 🔧 In revision | Mobile-first **5-step** wizard (Basics → When/Where → **Tier** → Details → Review → mock Stripe checkout). Live collapsible EventStub preview + "Preview full listing" through the real Event Detail. Transactional per-event duration-band pricing (NO subscription), publish fee stamped server-side by 0010. See "Paid wizard" locks above. |
+| **Create Event** | ✅ **ARC COMPLETE (2026-07-23)** | Mobile-first **5-step** wizard (Basics → When/Where → **Tier** → Details → Review → mock Stripe checkout). Live collapsible EventStub preview + "Preview full listing" through the real Event Detail. Transactional per-event duration-band pricing (NO subscription), publish fee stamped server-side by 0010. Plus site map + vendor pins + directory (0013). See "Paid wizard" locks + the arc summary below. |
 
 ### Create Event — pricing spine (LOCKED)
 - Transactional, per-event, NO subscription. Price scales by **duration band**: Single-day /
@@ -492,7 +561,12 @@ never-applied 0004_payments batch), 0011 publish-fee column privacy
 (per-column grants on `events` excluding `publish_fee_cents` from both
 read and write; member-scoped reader — SCHEMA_PLAN §7.2 ruling, 10/10
 behavioral), 0012 reader onto the `app`-definer/`public`-invoker
-convention. Advisor baseline steady at
+convention, 0013 `event_vendors` (the Plus site-map/vendor-pins feature —
+name/type/logo_path/`pin_x`,`pin_y` as 0..1 relative coords/sort_order, pulled
+forward from the never-applied `0003_host_content`; RLS cloned from
+`event_categories`, anon read where the parent event is visible, owner/editor
+write via `app.is_member`; APPLIED 2026-07-23, verified anon read = 200 empty
+and anon insert = 42501). Advisor baseline steady at
 0 errors / 3 accepted warnings (SCHEMA_PLAN §10.7 — two rls_auto_enable
 platform warnings + leaked-password protection, Pro-gated on the Free plan;
 DECIDED 2026-07-09: enable with the launch-prep Pro upgrade).

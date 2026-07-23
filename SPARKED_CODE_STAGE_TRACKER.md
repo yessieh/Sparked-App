@@ -61,10 +61,17 @@ and verified in Cursor/Claude Code.
 
 ## CREATE EVENT (carried from prior Bucket 3 + this session)
 
-- [ ] **Date range editable** — moved to Code stage (was 3× failed in Design).
-      Spec: two separately-tappable Start/End fields, each a controlled input
-      bound to its own state, each opening a picker; End ≥ Start. Demo gate:
-      show a date actually changing.
+> **ARC COMPLETE 2026-07-23.** Fork, Curbside + quota (0008/0009), the 5-step
+> wizard, tier/band pricing, server-priced fees (0010–0012), mock checkout,
+> publish, and the Plus site map + vendor pins + directory (0013) are all
+> built and walked. Full inventory + the locks made along the way live in
+> SPARKED_STATE "CREATE EVENT — ARC COMPLETE". The unchecked items below are
+> what remains in this area — none of them block the arc.
+
+- [x] **Date range editable** — DONE. Two independently-controlled Start/End
+      `DateField`s in the wizard's When/Where step: Start bumps End when it
+      passes it, End takes `min=Start` so earlier days render disabled. Closes
+      the control that failed 3× in Design.
 - [ ] **Real image uploads** — cover, gallery, vendor logos (Supabase Storage).
       **Designs `event_photos` here, against real storage** (SCHEMA_PLAN §6.1,
       deliberately deferred at the 0013 site-map/vendors session): `kind` in
@@ -151,6 +158,18 @@ and verified in Cursor/Claude Code.
       so sequence it after store submission is underway.
 - [ ] **Pre-launch: full Security Advisor sweep**, resolve or document every
       warning (baseline: 0 errors / 3 accepted, see SCHEMA_PLAN §10.7).
+- [ ] **Separate dev / prod Supabase environments — BEFORE real users.**
+      Today there is ONE project: development, QA walks, and the seeded demo
+      events all share the database the app points at, and every migration has
+      been applied by hand in the dashboard. That is fine now and unacceptable
+      the moment real hosts have real listings — a bad migration or a QA
+      cleanup query would hit live data (this arc already ran several
+      `delete from public.events` cleanups by hand). Needs: a second project,
+      env-scoped `EXPO_PUBLIC_SUPABASE_*` config per build profile (EAS), the
+      migration files in `supabase/migrations/` as the source of truth applied
+      via CLI rather than pasted, and seed data confined to dev. Sequence it
+      with the business-email org transfer below so prod is created in the
+      right org from day one.
 - [ ] **Transfer Supabase project to business-email org — MUST precede the
       Pro upgrade** (billing attaches to the org, not the project). Built-in
       transfer, zero downtime. Prep: create the business-email Supabase
@@ -271,6 +290,16 @@ and verified in Cursor/Claude Code.
       cycles, ~1.1s, must SETTLE — never loop), the unselected-pin dim level,
       and callout placement at real phone widths, where the surface is far
       narrower than desktop and collisions get tighter.
+- [ ] **Gallery counter ↔ bookmark collision check at ALL scroll offsets.**
+      Event Detail floats the back/bookmark chips ABSOLUTELY over the hero
+      gallery, which also carries its own "1/3" counter and dot indicators.
+      Verify they never overlap or obscure each other — at every scroll offset
+      (the header does not scroll away), every photo count (1 vs 3 vs the Plus
+      10-photo gallery), and every width from small phone to desktop, in both
+      themes. Suspect combination: a wide counter + the bookmark chip at the
+      same top-right corner on a narrow screen. Machine checks miss it because
+      both elements exist and only their RECTS conflict — compare bounding
+      boxes, or eyeball on device.
 - [ ] **Site-map directory scroll-into-view on NATIVE.** Tapping a pin selects
       its directory row on every platform, but the "scroll that row into view"
       half is **web-only** today (`Platform.OS === 'web'` → `scrollIntoView`).
