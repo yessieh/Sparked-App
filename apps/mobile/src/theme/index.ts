@@ -13,7 +13,7 @@ import React, {
 import { useColorScheme } from 'react-native';
 
 import { brand, darkPalette, lightPalette, sparkGradient, type Palette } from './colors';
-import { darkShadows, lightShadows, radii, spacing, type Shadows } from './spacing';
+import { breakpoints, darkShadows, lightShadows, radii, spacing, type Shadows } from './spacing';
 import {
   fontFamilies,
   fontSizes,
@@ -34,6 +34,7 @@ export {
   trackingEm,
   radii,
   spacing,
+  breakpoints,
 };
 export type { Palette, Shadows };
 

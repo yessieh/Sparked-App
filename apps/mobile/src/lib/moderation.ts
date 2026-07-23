@@ -39,3 +39,20 @@ export function canonicalize(query: string, options: string[]): string {
   const v = query.trim();
   return options.find((o) => o.toLowerCase() === v.toLowerCase()) ?? v;
 }
+
+/**
+ * Display casing for a genuinely custom entry, so "drink" doesn't sit next to
+ * "Food" in the same list. Compose with `canonicalize` (which matches
+ * case-insensitively, so title-casing first never blocks a match):
+ * `canonicalize(titleCase(input), pool)`.
+ *
+ * A SHORT all-caps entry is preserved as an acronym ("BBQ", "DJ", "VIP") —
+ * blindly lowercasing those to "Bbq" reads as broken, which is the opposite of
+ * what this is for. Mixed or lowercase input title-cases per word.
+ */
+export function titleCase(s: string): string {
+  const t = s.trim();
+  if (!t) return t;
+  if (t.length <= 4 && t === t.toUpperCase() && /[A-Z]/.test(t)) return t;
+  return t.replace(/\S+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}

@@ -35,6 +35,7 @@ import {
   ScrollView,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 
@@ -46,7 +47,7 @@ import SiteMap from '../../components/SiteMap';
 import { DateField, TimeField, format12h } from '../../components/pickers';
 import { useAuth } from '../../lib/auth';
 import { geocode, toWktPoint } from '../../lib/geocode';
-import { canonicalize, isBlocked, suggestMatches } from '../../lib/moderation';
+import { canonicalize, isBlocked, suggestMatches, titleCase } from '../../lib/moderation';
 import {
   DEFAULT_VENDOR_TYPE,
   VENDOR_TYPES,
@@ -67,7 +68,7 @@ import {
 } from '../../lib/pricing';
 import { supabase } from '../../lib/supabase';
 import { getOrCreateWorkspace } from '../../lib/workspace';
-import { brand, useTheme } from '../../theme';
+import { brand, breakpoints, useTheme } from '../../theme';
 import { categoryColor } from '../../theme/categoryColors';
 import { SubHeader } from './index';
 
@@ -485,6 +486,8 @@ function SiteMapVendors({
   tint: string;
 }) {
   const theme = useTheme();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= breakpoints.desktop;
   const [open, setOpen] = useState(false);
   const [vName, setVName] = useState('');
   const [vType, setVType] = useState('');
@@ -492,12 +495,27 @@ function SiteMapVendors({
   const [selected, setSelected] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const suggestions = suggestMatches(vType, VENDOR_TYPES);
+  // The canonical set a typed vendor type is matched against: the seed list
+  // PLUS every type already used on THIS event, deduped case-insensitively.
+  // Including the used ones is what stops "drink" becoming a second entry
+  // beside an existing "Drink" — a near-match reuses the existing spelling.
+  const typePool = useMemo(() => {
+    const pool: string[] = [];
+    for (const t of [...VENDOR_TYPES, ...vendors.map((v) => v.vendorType)]) {
+      if (t && !pool.some((x) => x.toLowerCase() === t.toLowerCase())) pool.push(t);
+    }
+    return pool;
+  }, [vendors]);
+
+  const suggestions = suggestMatches(vType, typePool);
 
   const addVendor = () => {
     const name = vName.trim();
     if (!name) return;
-    const type = canonicalize(vType, VENDOR_TYPES) || DEFAULT_VENDOR_TYPE;
+    // Title-case first (so a genuinely new type saves as "Drink", not "drink"),
+    // then canonicalize — the match is case-insensitive, so title-casing never
+    // blocks a hit, and a hit returns the EXISTING spelling.
+    const type = canonicalize(titleCase(vType), typePool) || DEFAULT_VENDOR_TYPE;
     // Blocklist gates the name AND the (possibly custom) type — the same guard
     // custom categories use — because both reach public surfaces.
     if (isBlocked(name) || isBlocked(type)) {
@@ -556,13 +574,18 @@ function SiteMapVendors({
 
       {open && (
         <View style={{ paddingHorizontal: 14, paddingBottom: 16 }}>
-          {/* "Better on desktop" note (fully usable on mobile, nothing gated). */}
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 9, padding: 11, borderRadius: 12, backgroundColor: 'rgba(252,163,17,0.08)', borderWidth: 1, borderColor: 'rgba(252,163,17,0.22)', marginBottom: 14 }}>
-            <Ionicons name="desktop-outline" size={14} color={brand.brightOrange} style={{ marginTop: 1 }} />
-            <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 11.5, lineHeight: 16, color: '#ffd9a0', flex: 1 }}>
-              These tools work best on desktop — you can finish on a computer anytime.
-            </Text>
-          </View>
+          {/* "Better on desktop" note — MOBILE WIDTHS ONLY. On a desktop-width
+              viewport the host is already on the machine it recommends, so the
+              banner is nonsense there. Nothing is gated either way: the whole
+              section stays fully usable at every width. */}
+          {!isDesktop && (
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 9, padding: 11, borderRadius: 12, backgroundColor: 'rgba(252,163,17,0.08)', borderWidth: 1, borderColor: 'rgba(252,163,17,0.22)', marginBottom: 14 }}>
+              <Ionicons name="desktop-outline" size={14} color={brand.brightOrange} style={{ marginTop: 1 }} />
+              <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 11.5, lineHeight: 16, color: '#ffd9a0', flex: 1 }}>
+                These tools work best on desktop — you can finish on a computer anytime.
+              </Text>
+            </View>
+          )}
 
           {!siteMapOn ? (
             <Pressable

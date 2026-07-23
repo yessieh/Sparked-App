@@ -23,6 +23,16 @@ export const radii = {
   pill: 9999,
 } as const;
 
+/**
+ * Layout breakpoints. `desktop` is the width at which COORDINATOR surfaces
+ * (Create Event, Workspace, Pricing) earn real multi-column desktop layouts —
+ * the per-surface responsive lock in SPARKED_STATE ("Responsive strategy").
+ * Below it, treat the viewport as a phone.
+ */
+export const breakpoints = {
+  desktop: 1024,
+} as const;
+
 /** boxShadow strings (RN 0.76+ supports the CSS boxShadow style prop). */
 export interface Shadows {
   card: string;

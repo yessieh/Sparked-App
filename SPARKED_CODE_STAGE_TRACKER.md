@@ -85,6 +85,14 @@ and verified in Cursor/Claude Code.
 - [ ] **Real Stripe checkout** — replace the mock Apple Pay / Google Pay / Link
       / Card screen. Payment marks in prototype are hand-drawn approximations;
       production uses real SDK-rendered buttons under brand guidelines.
+- [ ] **Vendor/category type plurality collapsing — revisit with real host
+      feedback.** Custom types now title-case on save and dedupe
+      case-insensitively against the seed list + types already on the event, so
+      "drink" reuses an existing "Drink". Plurality is deliberately NOT
+      handled: "Drink" and "Drinks" remain two entries. Collapsing them needs a
+      stemming rule, and a wrong one is worse than none ("Crafts"→"Craft" reads
+      fine, but naive stemming mangles real words) — so wait for evidence that
+      hosts actually create the duplicate pairs before picking a rule.
 - [ ] **Wizard exit affordance** — persistent X/close on all wizard + checkout
       steps with a discard-draft confirmation. Pairs with the in-tabs success
       screen restructure (round-2 walk): the create flow is a focused,
