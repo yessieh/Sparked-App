@@ -46,6 +46,7 @@ checked into `supabase/migrations/`.*
 | **`0012_publish_fee_fn_convention`** *(APPLIED 2026-07-17)* | splits 0011's reader onto the `app`-definer / `public`-invoker convention (no advisor lint) | Stage 5 |
 | **`0013_event_vendors`** *(APPLIED 2026-07-23)* | `event_vendors` (name, vendor_type, logo_path, pin_x/pin_y as 0–1 relative coords, sort_order) — the Plus tier's site-map/vendor-pins feature, pulled forward from `0003_host_content`. RLS mirrors `event_categories` (anon read where parent visible, member write); no new advisor lint | Stage 5 |
 | **`0014_publish_fn_convention`** *(APPLIED 2026-07-23)* | splits `publish_paid_event` (0010) onto the `app`-definer / `public`-invoker convention, closing §7.2 tradeoff 3. Behavior, signature, OUT columns and error codes unchanged | Stage 5 |
+| **`0015_workspace_read_path`** *(APPLIED 2026-07-23)* | member-scoped `workspace_stats` RPC — 4 computed numbers (active listings, upcoming events, total rsvps, total saves; `app` definer + `public` invoker) — plus `workspaces.created_by` column-privacy lockdown (per-column SELECT excluding the raw auth user id, mirroring 0011) + `saves_event_id_idx`. Feeds the Me hub / Workspace screens (UI later) | Stage 5 |
 | `0005_notifications_infra` | `push_tokens`, `notification_sends` (throttle ledger), `notification_event_overrides` | Stage 7 |
 | `0006_moderation_feedback` | `feedback`, report review columns/indexes | Stage 8 |
 
@@ -94,7 +95,7 @@ or ts script), never a migration.
 | `website` | `text` | |
 | `socials` | `jsonb not null default '{}'` | `{instagram, twitter, facebook}` (flagged §10) |
 | `logo_path` | `text` | storage path |
-| `created_by` | `uuid not null` FK → `profiles(id)` | audit only — ownership lives in memberships |
+| `created_by` | `uuid not null` FK → `profiles(id)` | audit only — ownership lives in memberships. **NOT client-readable (0015):** it is a raw `auth.users` id, so the public Organizer-Profile grant leaked an organizer→user map to anon. Per-column SELECT now excludes it (mirrors 0011's `publish_fee_cents`); still INSERTABLE, since the silent-create path writes it and the insert policy checks it. |
 | `created_at` / `updated_at` | | |
 
 - `after insert` trigger creates the owner `memberships` row for `auth.uid()`

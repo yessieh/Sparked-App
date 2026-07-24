@@ -569,7 +569,12 @@ write via `app.is_member`; APPLIED 2026-07-23, verified anon read = 200 empty
 and anon insert = 42501), 0014 `publish_paid_event` onto the
 `app`-definer/`public`-invoker convention (closes SCHEMA_PLAN §7.2 tradeoff 3;
 behavior/signature/error codes unchanged — the public wrapper's `event_id`/`tz`
-argument NAMES are load-bearing for PostgREST). **Migrations apply from files
+argument NAMES are load-bearing for PostgREST), 0015 workspace read path
+(member-scoped `workspace_stats` RPC — 4 computed numbers, `app`-definer /
+`public`-invoker — plus `workspaces.created_by` column-privacy lockdown closing
+an organizer→auth-user-id leak on the public Organizer-Profile grant, plus a
+`saves(event_id)` index; consumed by `lib/workspace.ts` `useMyWorkspace()` /
+`useWorkspaceStats()`, UI is a later prompt). **Migrations apply from files
 via `npx supabase db push --linked`, never pasted** — remote history verified
 matching the repo 2026-07-23 (0013 had drifted from a dashboard paste and was
 repaired with `migration repair --status applied`). Advisor baseline steady at

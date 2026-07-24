@@ -1,13 +1,41 @@
-// Workspace plumbing for the create flows.
+// Workspace plumbing for the create flows + the host read path (Me hub /
+// Workspace screens consume it; those screens are a later prompt).
 // Locked architecture: events belong to a WORKSPACE; every host workspace
 // starts with exactly one owner membership, created silently — the UI never
 // shows any of this. The workspace name defaults to the user's display name
 // (it IS the organizer name on their posts; the Workspace editor lets hosts
 // rename it later).
 
+import { useCallback, useEffect, useState } from 'react';
+
+import { useAuth } from './auth';
 import { supabase } from './supabase';
 
 export const CURBSIDE_QUOTA = 3;
+
+export type WorkspaceRole = 'owner' | 'editor' | 'viewer';
+
+/** A workspace the signed-in user belongs to. `role` comes from the membership
+ * row. Host-facing fields only — NEVER `created_by` (a raw auth user id, and
+ * unreadable by clients as of 0015 anyway). */
+export interface Workspace {
+  id: string;
+  name: string;
+  role: WorkspaceRole;
+  bio: string | null;
+  location_text: string | null;
+  website: string | null;
+  socials: Record<string, string>;
+  logo_path: string | null;
+}
+
+/** The four numbers `workspace_stats` (0015) returns. */
+export interface WorkspaceStats {
+  active_listings: number;
+  upcoming_events: number;
+  total_rsvps: number;
+  total_saves: number;
+}
 
 export async function getOwnWorkspaceId(): Promise<string | null> {
   const { data, error } = await supabase
@@ -38,4 +66,108 @@ export async function curbsidePostsUsed(workspaceId: string): Promise<number> {
   const { data, error } = await supabase.rpc('curbside_posts_used', { ws: workspaceId });
   if (error) throw new Error(error.message);
   return (data as number | null) ?? 0;
+}
+
+// PostgREST embed row: memberships (own-rows RLS → only mine) joined to its
+// workspace. Explicit column list, so created_by never rides along.
+interface MembershipRow {
+  role: WorkspaceRole;
+  workspace: Omit<Workspace, 'role'> | null;
+}
+
+/**
+ * The signed-in user's workspace(s), read through `memberships` (own-rows RLS —
+ * the membership table IS the authorization, so no workspace the user doesn't
+ * belong to can appear). Returns an ARRAY even though every MVP user has
+ * exactly one: the dormant multi-workspace picker depends on this shape. `null`
+ * means none (signed out, or signed in with no workspace yet).
+ */
+export function useMyWorkspace(): {
+  workspaces: Workspace[] | null;
+  loading: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
+} {
+  const { session } = useAuth();
+  const userId = session?.user.id ?? null;
+  const [workspaces, setWorkspaces] = useState<Workspace[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!userId) {
+      setWorkspaces(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const { data, error: err } = await supabase
+      .from('memberships')
+      .select('role, workspace:workspaces(id,name,bio,location_text,website,socials,logo_path)')
+      .order('created_at', { ascending: true });
+    if (err) {
+      setError(err.message);
+      setLoading(false);
+      return;
+    }
+    const rows = ((data ?? []) as unknown as MembershipRow[])
+      .filter((m): m is MembershipRow & { workspace: Omit<Workspace, 'role'> } => m.workspace !== null)
+      .map((m) => ({ ...m.workspace, role: m.role }));
+    setError(null);
+    setWorkspaces(rows.length ? rows : null); // null when none (per the read contract)
+    setLoading(false);
+  }, [userId]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { workspaces, loading, error, refresh };
+}
+
+/**
+ * The four workspace stats (0015 `workspace_stats` RPC). Returns `null` when
+ * the caller is not a member of `workspaceId` — the RPC yields an empty result
+ * set for non-members (member-scoped by design), never an error.
+ */
+export async function fetchWorkspaceStats(workspaceId: string): Promise<WorkspaceStats | null> {
+  const { data, error } = await supabase.rpc('workspace_stats', { workspace_id: workspaceId });
+  if (error) throw new Error(error.message);
+  return (data as WorkspaceStats[] | null)?.[0] ?? null;
+}
+
+/** Hook form of {@link fetchWorkspaceStats}. Pass `null` to hold off (e.g.
+ * before the workspace id is known); re-fetches when the id changes. */
+export function useWorkspaceStats(workspaceId: string | null): {
+  stats: WorkspaceStats | null;
+  loading: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
+} {
+  const [stats, setStats] = useState<WorkspaceStats | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!workspaceId) {
+      setStats(null);
+      return;
+    }
+    setLoading(true);
+    try {
+      setStats(await fetchWorkspaceStats(workspaceId));
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [workspaceId]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { stats, loading, error, refresh };
 }
