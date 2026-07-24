@@ -7,8 +7,8 @@
 // Saved card is deliberately absent — saves land in a later session.
 
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
 import {
@@ -19,8 +19,16 @@ import {
 import SparkedLogo from '../../components/SparkedLogo';
 import { useAuth } from '../../lib/auth';
 import { supabase } from '../../lib/supabase';
-import { getOrCreateWorkspace } from '../../lib/workspace';
+import {
+  getOrCreateWorkspace,
+  useMyWorkspace,
+  useWorkspaceStats,
+  type Workspace,
+  type WorkspaceStats,
+} from '../../lib/workspace';
 import { brand, useTheme } from '../../theme';
+
+type Theme = ReturnType<typeof useTheme>;
 
 // What an account unlocks — copy from the proven design.
 const ME_UNLOCKS = [
@@ -191,6 +199,98 @@ function SignedOutMe() {
   );
 }
 
+// One stat in the host card — big number over a small uppercase label. Shows a
+// muted block instead of a number while stats resolve (never a flash of 0).
+function StatTile({ theme, value, label, loading }: { theme: Theme; value: number | null; label: string; loading: boolean }) {
+  return (
+    <View style={{ flex: 1, alignItems: 'center' }}>
+      {loading || value === null ? (
+        <View style={{ width: 24, height: 22, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.06)' }} />
+      ) : (
+        <Text style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 22, letterSpacing: -0.3, color: theme.colors.text }}>
+          {value}
+        </Text>
+      )}
+      <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 9.5, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase', color: theme.colors.textFaint, marginTop: 5 }}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+// HOST state — solid, informational (no gradient; that's reserved for actions).
+// Card/surface fill + border tokens per the reference host card. Taps to
+// /workspace. The four numbers come from useWorkspaceStats.
+function WorkspaceStatsCard({ theme, workspace, stats, loading, onPress }: {
+  theme: Theme;
+  workspace: Workspace;
+  stats: WorkspaceStats | null;
+  loading: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityLabel={`Workspace: ${workspace.name}`}
+      style={({ pressed }) => ({
+        backgroundColor: pressed ? 'rgba(255,255,255,0.06)' : theme.colors.cardBg,
+        borderWidth: 1,
+        borderColor: theme.colors.cardBorder,
+        borderRadius: 22,
+        padding: 18,
+      })}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+        <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: 'rgba(255,99,72,0.10)', borderWidth: 1, borderColor: 'rgba(255,99,72,0.25)', alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name="sparkles" size={18} color={brand.flameRed} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 9, fontWeight: '900', letterSpacing: 1.6, textTransform: 'uppercase', color: theme.colors.textFaint }}>
+            Workspace
+          </Text>
+          <Text numberOfLines={1} style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 16, letterSpacing: -0.16, color: theme.colors.text, marginTop: 2 }}>
+            {workspace.name}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={theme.colors.textFaint} />
+      </View>
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
+        <StatTile theme={theme} value={stats?.active_listings ?? null} label="Active" loading={loading} />
+        <StatTile theme={theme} value={stats?.upcoming_events ?? null} label="Upcoming" loading={loading} />
+        <StatTile theme={theme} value={stats?.total_rsvps ?? null} label="RSVPs" loading={loading} />
+        <StatTile theme={theme} value={stats?.total_saves ?? null} label="Saves" loading={loading} />
+      </View>
+    </Pressable>
+  );
+}
+
+// LOADING state — the card's silhouette in muted blocks, so the workspace read
+// never flashes the "Create your first event" invitation before it resolves.
+function WorkspaceSkeleton({ theme }: { theme: Theme }) {
+  const block = (width: number, height: number) => (
+    <View style={{ width, height, borderRadius: 7, backgroundColor: 'rgba(255,255,255,0.05)' }} />
+  );
+  return (
+    <View style={{ backgroundColor: theme.colors.cardBg, borderWidth: 1, borderColor: theme.colors.cardBorder, borderRadius: 22, padding: 18 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+        <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.05)' }} />
+        <View style={{ flex: 1, gap: 7 }}>
+          {block(70, 9)}
+          {block(150, 15)}
+        </View>
+      </View>
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
+        {[0, 1, 2, 3].map((i) => (
+          <View key={i} style={{ flex: 1, alignItems: 'center', gap: 6 }}>
+            {block(24, 22)}
+            {block(34, 8)}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function SignedInMe() {
   const theme = useTheme();
   const { session, signOut } = useAuth();
@@ -198,6 +298,24 @@ function SignedInMe() {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+
+  // The workspace read path (0015). Most-recently-created workspace only — the
+  // hook orders memberships by created_at ASCENDING, so that's the LAST entry
+  // (item 4: one card, no picker). null = no workspace yet.
+  const { workspaces, loading: wsLoading, refresh: refreshWorkspaces } = useMyWorkspace();
+  const workspace = workspaces && workspaces.length ? workspaces[workspaces.length - 1] : null;
+  const { stats, loading: statsLoading, refresh: refreshStats } = useWorkspaceStats(workspace?.id ?? null);
+
+  // Re-pull on focus so the slot flips to the host card after a workspace is
+  // created elsewhere (e.g. tapping the invitation), rather than showing stale
+  // state until this screen remounts. Consumes the hooks' refresh — doesn't
+  // modify them.
+  useFocusEffect(
+    useCallback(() => {
+      refreshWorkspaces();
+      refreshStats();
+    }, [refreshWorkspaces, refreshStats]),
+  );
 
   const startCreate = async () => {
     if (!session) return;
@@ -321,54 +439,69 @@ function SignedInMe() {
         </Text>
       )}
 
-      {/* Workspace slot — dashed invitation, now LIVE: the tap silently
-          ensures the workspace (one owner membership, invisible to the UI —
-          locked architecture) and opens the create fork. */}
-      <Pressable
-        onPress={startCreate}
-        disabled={creating}
-        accessibilityLabel="Create your first event"
-        style={({ pressed }) => ({
-          backgroundColor: pressed ? 'rgba(255,140,56,0.09)' : 'rgba(255,140,56,0.04)',
-          borderWidth: 1.5,
-          borderStyle: 'dashed',
-          borderColor: 'rgba(255,140,56,0.50)',
-          borderRadius: 22,
-          paddingVertical: 22,
-          paddingHorizontal: 18,
-          alignItems: 'center',
-          opacity: creating ? 0.6 : 1,
-        })}
-      >
-        {creating ? (
-          <ActivityIndicator color={brand.sparkOrange} />
-        ) : (
+      {/* Workspace slot — three states off useMyWorkspace. The skeleton holds
+          while the membership read resolves, so the invitation never flashes
+          for a host who already has a workspace. */}
+      {wsLoading ? (
+        <WorkspaceSkeleton theme={theme} />
+      ) : workspace ? (
+        <WorkspaceStatsCard
+          theme={theme}
+          workspace={workspace}
+          stats={stats}
+          loading={statsLoading}
+          onPress={() => router.push('/workspace')}
+        />
+      ) : (
+        // No workspace — the dashed invitation (unchanged treatment). The tap
+        // silently ensures the workspace (one owner membership, invisible to
+        // the UI — locked architecture) and opens the create fork.
+        <Pressable
+          onPress={startCreate}
+          disabled={creating}
+          accessibilityLabel="Create your first event"
+          style={({ pressed }) => ({
+            backgroundColor: pressed ? 'rgba(255,140,56,0.09)' : 'rgba(255,140,56,0.04)',
+            borderWidth: 1.5,
+            borderStyle: 'dashed',
+            borderColor: 'rgba(255,140,56,0.50)',
+            borderRadius: 22,
+            paddingVertical: 22,
+            paddingHorizontal: 18,
+            alignItems: 'center',
+            opacity: creating ? 0.6 : 1,
+          })}
+        >
+          {creating ? (
+            <ActivityIndicator color={brand.sparkOrange} />
+          ) : (
+            <Text
+              style={{
+                fontFamily: theme.fonts.displayBlack,
+                fontWeight: '900',
+                fontSize: 17,
+                letterSpacing: -0.17,
+                color: brand.sparkOrange,
+              }}
+            >
+              + Create your first event
+            </Text>
+          )}
           <Text
             style={{
-              fontFamily: theme.fonts.displayBlack,
-              fontWeight: '900',
-              fontSize: 17,
-              letterSpacing: -0.17,
-              color: brand.sparkOrange,
+              fontFamily: theme.fonts.bodyMedium,
+              fontSize: 12.5,
+              lineHeight: 18,
+              color: theme.colors.textMuted,
+              marginTop: 7,
+              maxWidth: 260,
+              textAlign: 'center',
             }}
           >
-            + Create your first event
+            Host your own events and reach people nearby.
           </Text>
-        )}
-        <Text
-          style={{
-            fontFamily: theme.fonts.bodyMedium,
-            fontSize: 12.5,
-            lineHeight: 18,
-            color: theme.colors.textMuted,
-            marginTop: 7,
-            maxWidth: 260,
-            textAlign: 'center',
-          }}
-        >
-          Host your own events and reach people nearby.
-        </Text>
-      </Pressable>
+        </Pressable>
+      )}
       {createError && (
         <Text
           style={{
