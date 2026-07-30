@@ -33,6 +33,24 @@ export function eventCountdown(
   return { big: `${days}`, label: days === 1 ? 'DAY' : 'DAYS', live: false };
 }
 
+/**
+ * THE ended-test. Every "Past" split in the app goes through this, and it is
+ * defined as eventCountdown's own verdict rather than a second comparison
+ * against starts_at — so a section header and the chip on the card inside it
+ * can never disagree. Live events (started, not finished) are NOT ended: they
+ * read LIVE and stay in their upcoming bucket.
+ *
+ * Used by the Saved tab's Past section and the Workspace listings' Past
+ * section. Adding a third caller is the point.
+ */
+export function hasEnded(
+  startsAtISO: string,
+  endsAtISO?: string | null,
+  now?: Date,
+): boolean {
+  return eventCountdown(startsAtISO, endsAtISO, now).label === 'ENDED';
+}
+
 export type SavedBucket = 'tonight' | 'weekend' | 'coming';
 
 /**

@@ -35,11 +35,25 @@ export interface FeedEvent {
   rsvp_count?: number;
 }
 
+/**
+ * HOST-ONLY per-event engagement, shown as count chips on the compact variant.
+ * Consumer surfaces never pass this: `saves` is own-rows RLS, so a save total
+ * is only reachable through the member-scoped `workspace_event_stats` RPC
+ * (0017). When absent the card keeps its consumer treatment (the quiet
+ * "N RSVPs" line), so Saved and Explore are untouched.
+ */
+export interface EngagementCounts {
+  rsvps: number;
+  saves: number;
+}
+
 export interface EventStubProps {
   event: FeedEvent;
   variant?: 'photo' | 'compact';
   saved?: boolean;
   going?: boolean;
+  /** Workspace listings only — see {@link EngagementCounts}. */
+  counts?: EngagementCounts;
   onToggleSave?: () => void;
   onToggleGoing?: () => void;
   onTap?: () => void;
@@ -250,6 +264,45 @@ function StatusChip({ going, saved }: { going: boolean; saved: boolean }) {
   );
 }
 
+/** Informational count chip — host listings only. Deliberately NEUTRAL: green
+ * is semantic (going/free) and gold reads as the save-active state, so an
+ * engagement TALLY borrows neither. Same outlined, non-gradient language as the
+ * category badges. Callers zero-suppress; this just draws. */
+function CountChip({ icon, label }: { icon: 'rsvp' | 'save'; label: string }) {
+  const theme = useTheme();
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        paddingHorizontal: 9,
+        paddingVertical: 4,
+        borderRadius: 9999,
+        backgroundColor: theme.colors.iconChipBg,
+        borderWidth: 1,
+        borderColor: theme.colors.cardBorder,
+      }}
+    >
+      {icon === 'rsvp' ? (
+        <CheckIcon size={10} color={theme.colors.textFaint} />
+      ) : (
+        <BookmarkIcon size={10} color={theme.colors.textFaint} fill />
+      )}
+      <Text
+        style={{
+          fontFamily: theme.fonts.bodySemiBold,
+          fontSize: 10.5,
+          fontWeight: '700',
+          color: theme.colors.textMuted,
+        }}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 /** Dashed perforation with the ticket notches biting top & bottom edges. */
 export function Perforation() {
   const theme = useTheme();
@@ -308,6 +361,7 @@ export default function EventStub({
   variant = 'photo',
   saved = false,
   going = false,
+  counts,
   onToggleSave,
   onToggleGoing,
   onTap,
@@ -379,12 +433,33 @@ export default function EventStub({
           <Text numberOfLines={1} style={[styles.metaLine, { color: theme.colors.textMuted, fontFamily: theme.fonts.bodyMedium }]}>
             {event.venue_name ?? event.organizer_name ?? 'Local host'}
           </Text>
+          {/* Chip row. Host listings replace the consumer RSVP line with two
+              count chips, each zero-suppressed independently — a listing with
+              no engagement yet says nothing rather than "0". */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 10 }}>
             <StatusChip going={going} saved={saved} />
-            {typeof event.rsvp_count === 'number' && event.rsvp_count > 0 && (
-              <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 11, color: theme.colors.textFaint }}>
-                {event.rsvp_count} {event.rsvp_count === 1 ? 'RSVP' : 'RSVPs'}
-              </Text>
+            {counts ? (
+              <>
+                {counts.rsvps > 0 && (
+                  <CountChip
+                    icon="rsvp"
+                    label={`${counts.rsvps} ${counts.rsvps === 1 ? 'RSVP' : 'RSVPs'}`}
+                  />
+                )}
+                {counts.saves > 0 && (
+                  <CountChip
+                    icon="save"
+                    label={`${counts.saves} ${counts.saves === 1 ? 'save' : 'saves'}`}
+                  />
+                )}
+              </>
+            ) : (
+              typeof event.rsvp_count === 'number' &&
+              event.rsvp_count > 0 && (
+                <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 11, color: theme.colors.textFaint }}>
+                  {event.rsvp_count} {event.rsvp_count === 1 ? 'RSVP' : 'RSVPs'}
+                </Text>
+              )
             )}
           </View>
         </View>

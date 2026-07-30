@@ -144,6 +144,38 @@ export async function fetchWorkspaceStats(workspaceId: string): Promise<Workspac
   return (data as WorkspaceStats[] | null)?.[0] ?? null;
 }
 
+/** Per-event RSVP + save counts for one workspace's PUBLISHED events (0017).
+ * Keyed by event id. Server-side by necessity: `saves` is own-rows RLS, so a
+ * client can only ever count its own save. Non-members get an empty map, never
+ * an error — same contract as {@link fetchWorkspaceStats}. */
+export async function fetchWorkspaceEventStats(
+  workspaceId: string,
+): Promise<Map<string, { rsvps: number; saves: number }>> {
+  const { data, error } = await supabase.rpc('workspace_event_stats', {
+    workspace_id: workspaceId,
+  });
+  if (error) throw new Error(error.message);
+  const rows = (data ?? []) as { event_id: string; rsvp_count: number; save_count: number }[];
+  return new Map(rows.map((r) => [r.event_id, { rsvps: r.rsvp_count, saves: r.save_count }]));
+}
+
+/**
+ * Permanently deletes a workspace and, by FK cascade, every event it owns plus
+ * those events' saves, RSVPs, categories and vendors (0017). OWNER ONLY — the
+ * RPC raises `not_an_owner` rather than silently doing nothing, because a
+ * destructive call that no-ops is worse than one that complains.
+ *
+ * Returns the number of events deleted (all statuses, drafts included).
+ * There is no undo and nothing is soft-deleted.
+ */
+export async function deleteWorkspace(workspaceId: string): Promise<number> {
+  const { data, error } = await supabase.rpc('delete_workspace', {
+    workspace_id: workspaceId,
+  });
+  if (error) throw new Error(error.message);
+  return (data as number | null) ?? 0;
+}
+
 /** Hook form of {@link fetchWorkspaceStats}. Pass `null` to hold off (e.g.
  * before the workspace id is known); re-fetches when the id changes. */
 export function useWorkspaceStats(workspaceId: string | null): {

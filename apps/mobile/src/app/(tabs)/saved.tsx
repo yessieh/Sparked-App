@@ -16,7 +16,7 @@ import EventStub, { type FeedEvent } from '../../components/EventStub';
 import SparkedLogo from '../../components/SparkedLogo';
 import { useAuth } from '../../lib/auth';
 import { useEngagement } from '../../lib/engagement';
-import { eventCountdown, savedBucket, type SavedBucket } from '../../lib/eventTime';
+import { hasEnded, savedBucket, type SavedBucket } from '../../lib/eventTime';
 import { supabase } from '../../lib/supabase';
 import { brand, useTheme } from '../../theme';
 
@@ -222,12 +222,13 @@ export default function Saved() {
       // through its default and landed in "Coming Up" — a card stamped ENDED
       // sitting under a header promising it hadn't happened yet.
       //
-      // The test is eventCountdown, the SAME util the card's chip renders from
-      // (locked client-side-time rule), so the section split and the chip
-      // cannot disagree. It also gets live events right for free: an event
-      // that has started but not ended reads LIVE, not ENDED, so it stays in
-      // its upcoming bucket exactly as the Me hub's Saved card treats it.
-      if (eventCountdown(r.starts_at, r.ends_at).label === 'ENDED') past.push(event);
+      // The test is hasEnded — eventCountdown's own verdict, the SAME util the
+      // card's chip renders from (locked client-side-time rule), so the section
+      // split and the chip cannot disagree. It also gets live events right for
+      // free: an event that has started but not ended reads LIVE, not ENDED, so
+      // it stays in its upcoming bucket exactly as the Me hub's Saved card
+      // treats it. Shared with the Workspace listings' Past section.
+      if (hasEnded(r.starts_at, r.ends_at)) past.push(event);
       else buckets[savedBucket(r.starts_at)].push(event);
     }
     return {
