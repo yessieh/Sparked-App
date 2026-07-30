@@ -53,6 +53,12 @@ function ThemedStack() {
       <Stack.Screen name="create/curbside" />
       <Stack.Screen name="create/event" />
       <Stack.Screen name="create/checkout" />
+      {/* Settings — reached from the Me hub rows (no gear). Stubs this stage. */}
+      <Stack.Screen name="settings/interests" />
+      <Stack.Screen name="settings/notifications" />
+      <Stack.Screen name="settings/privacy" />
+      <Stack.Screen name="settings/appearance" />
+      <Stack.Screen name="settings/help" />
       <Stack.Screen name="reset-password" />
     </Stack>
   );

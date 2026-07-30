@@ -24,6 +24,15 @@ import { supabase } from './supabase';
 interface EngagementContextValue {
   savedIds: ReadonlySet<string>;
   goingIds: ReadonlySet<string>;
+  /**
+   * False until the first load for the current user resolves. Consumers that
+   * render something different for "no saves" (rather than just rendering an
+   * empty list) must hold on this — an empty set means "not loaded yet" just
+   * as easily as "nothing saved", and the two look identical. Flips back to
+   * false only when the USER changes, so focus refreshes don't re-trigger
+   * loading states on screens that are already showing data.
+   */
+  loaded: boolean;
   /** Re-pull both sets (screens call this on focus). No-op when signed out. */
   refresh: () => Promise<void>;
   toggleSave: (eventId: string) => Promise<void>;
@@ -41,6 +50,7 @@ interface EngagementContextValue {
 const EngagementContext = createContext<EngagementContextValue>({
   savedIds: new Set(),
   goingIds: new Set(),
+  loaded: false,
   refresh: async () => {},
   toggleSave: async () => {},
   toggleRsvp: async () => {},
@@ -59,6 +69,7 @@ export function EngagementProvider({ children }: { children: ReactNode }) {
   const userId = session?.user.id ?? null;
   const [savedIds, setSavedIds] = useState<ReadonlySet<string>>(new Set());
   const [goingIds, setGoingIds] = useState<ReadonlySet<string>>(new Set());
+  const [loaded, setLoaded] = useState(false);
   const [rsvpDeltas, setRsvpDeltas] = useState<Record<string, number>>({});
   // Stale-response guard: a refresh started before sign-out must not
   // resurrect rows after the sets were cleared.
@@ -79,16 +90,22 @@ export function EngagementProvider({ children }: { children: ReactNode }) {
       // so accumulated local count adjustments are absorbed.
       setRsvpDeltas({});
     }
+    setLoaded(true);
   }, [userId]);
 
   useEffect(() => {
     if (userId) {
+      // Reset on USER change only (refresh's identity is keyed to userId), so
+      // a focus refresh never drops consumers back into a loading state.
+      setLoaded(false);
       refresh();
     } else {
       generation.current++;
       setSavedIds(new Set());
       setGoingIds(new Set());
       setRsvpDeltas({});
+      // Signed out: the empty sets ARE the resolved answer, not a pending one.
+      setLoaded(true);
     }
   }, [userId, refresh]);
 
@@ -124,12 +141,13 @@ export function EngagementProvider({ children }: { children: ReactNode }) {
     () => ({
       savedIds,
       goingIds,
+      loaded,
       refresh,
       toggleSave: (eventId) => toggle('saves', savedIds, setSavedIds, eventId),
       toggleRsvp: (eventId) => toggle('rsvps', goingIds, setGoingIds, eventId),
       rsvpDelta: (eventId) => rsvpDeltas[eventId] ?? 0,
     }),
-    [savedIds, goingIds, rsvpDeltas, refresh, toggle],
+    [savedIds, goingIds, loaded, rsvpDeltas, refresh, toggle],
   );
 
   return <EngagementContext.Provider value={value}>{children}</EngagementContext.Provider>;
