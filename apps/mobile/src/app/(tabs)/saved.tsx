@@ -16,7 +16,7 @@ import EventStub, { type FeedEvent } from '../../components/EventStub';
 import SparkedLogo from '../../components/SparkedLogo';
 import { useAuth } from '../../lib/auth';
 import { useEngagement } from '../../lib/engagement';
-import { savedBucket, type SavedBucket } from '../../lib/eventTime';
+import { eventCountdown, savedBucket, type SavedBucket } from '../../lib/eventTime';
 import { supabase } from '../../lib/supabase';
 import { brand, useTheme } from '../../theme';
 
@@ -137,6 +137,10 @@ export default function Saved() {
   const [error, setError] = useState<string | null>(null);
   // All is the default — nothing is ever hidden by default (locked ruling).
   const [filter, setFilter] = useState<'all' | 'going'>('all');
+  // Past is collapsed by default and the state is session-only, deliberately:
+  // this screen is about what's ahead, and a finished event is reference, not
+  // a plan. Nothing persisted — reopening Saved starts collapsed again.
+  const [pastOpen, setPastOpen] = useState(false);
 
   const userId = session?.user.id ?? null;
 
@@ -192,14 +196,15 @@ export default function Saved() {
   // Within each time bucket, Going events sort first (structural priority —
   // rows arrive starts_at-ordered, and the stable partition preserves that
   // inside each half). The Going pill narrows the list; All hides nothing.
-  const sections = useMemo(() => {
+  const grouped = useMemo(() => {
     if (!rows) return null;
     const visible = rows.filter((r) =>
       filter === 'going' ? goingIds.has(r.id) : savedIds.has(r.id) || goingIds.has(r.id),
     );
     const buckets: Record<SavedBucket, FeedEvent[]> = { tonight: [], weekend: [], coming: [] };
+    const past: FeedEvent[] = [];
     for (const r of visible) {
-      buckets[savedBucket(r.starts_at)].push({
+      const event: FeedEvent = {
         id: r.id,
         title: r.title,
         // Same mask the RPCs apply server-side (this path reads the table
@@ -211,26 +216,55 @@ export default function Saved() {
         entry_fee_cents: r.entry_fee_cents,
         rsvp_count: r.rsvp_count + rsvpDelta(r.id),
         categories: r.event_categories.map((c) => c.category_id),
-      });
+      };
+      // Ended events split off BEFORE bucketing. savedBucket reads starts_at
+      // against two forward-looking windows only, so anything in the past fell
+      // through its default and landed in "Coming Up" — a card stamped ENDED
+      // sitting under a header promising it hadn't happened yet.
+      //
+      // The test is eventCountdown, the SAME util the card's chip renders from
+      // (locked client-side-time rule), so the section split and the chip
+      // cannot disagree. It also gets live events right for free: an event
+      // that has started but not ended reads LIVE, not ENDED, so it stays in
+      // its upcoming bucket exactly as the Me hub's Saved card treats it.
+      if (eventCountdown(r.starts_at, r.ends_at).label === 'ENDED') past.push(event);
+      else buckets[savedBucket(r.starts_at)].push(event);
     }
-    return BUCKET_ORDER.map((key) => ({
-      key,
-      label: BUCKET_LABELS[key],
-      items: [
-        ...buckets[key].filter((e) => goingIds.has(e.id)),
-        ...buckets[key].filter((e) => !goingIds.has(e.id)),
-      ],
-    })).filter((s) => s.items.length > 0);
+    return {
+      upcoming: BUCKET_ORDER.map((key) => ({
+        key,
+        label: BUCKET_LABELS[key],
+        items: [
+          ...buckets[key].filter((e) => goingIds.has(e.id)),
+          ...buckets[key].filter((e) => !goingIds.has(e.id)),
+        ],
+      })).filter((s) => s.items.length > 0),
+      // Most-recent-first: rows arrive starts_at ASCENDING, so the reverse is
+      // "just finished" at the top. No Going-first partition here — that rule
+      // exists to surface commitments you still have to keep, and a finished
+      // event has none.
+      past: [...past].reverse(),
+    };
   }, [rows, savedIds, goingIds, filter, rsvpDelta]);
+
+  const sections = grouped?.upcoming ?? null;
+  const past = grouped?.past ?? [];
 
   if (!session) return <SignedOutSaved />;
 
-  // Union count = the screen's inventory (subtitle + pill visibility);
-  // total = what the active filter currently shows.
-  const unionTotal = rows
+  // Two counts, because they answer different questions and Past made them
+  // diverge:
+  //   inventoryTotal — everything saved/going regardless of filter or whether
+  //     it has happened. Gates the filter pills and the true-empty state, so a
+  //     user whose events have all ended keeps their pills and doesn't get
+  //     told to go bookmark something while their history sits below.
+  //   upcomingTotal — what the subtitle counts. Past carries its own count in
+  //     its header, so counting it twice would overstate what's ahead.
+  const inventoryTotal = rows
     ? rows.filter((r) => savedIds.has(r.id) || goingIds.has(r.id)).length
     : 0;
-  const total = sections?.reduce((n, s) => n + s.items.length, 0) ?? 0;
+  const upcomingTotal = sections?.reduce((n, s) => n + s.items.length, 0) ?? 0;
+  const filteredTotal = upcomingTotal + past.length;
 
   return (
     <ScrollView
@@ -266,12 +300,14 @@ export default function Saved() {
           marginBottom: 22,
         }}
       >
-        {unionTotal === 0
+        {inventoryTotal === 0
           ? 'Bookmark events from the feed to see them here.'
-          : `${unionTotal} ${unionTotal === 1 ? 'event' : 'events'}, sorted by when they happen.`}
+          : upcomingTotal === 0
+            ? 'Nothing coming up — your past events are below.'
+            : `${upcomingTotal} ${upcomingTotal === 1 ? 'event' : 'events'}, sorted by when they happen.`}
       </Text>
 
-      {unionTotal > 0 && (
+      {inventoryTotal > 0 && (
         <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
           <FilterPill label="All" active={filter === 'all'} onPress={() => setFilter('all')} />
           <FilterPill
@@ -290,7 +326,7 @@ export default function Saved() {
         <View style={{ paddingVertical: 48, alignItems: 'center' }}>
           <ActivityIndicator color={brand.brightOrange} />
         </View>
-      ) : total === 0 ? (
+      ) : filteredTotal === 0 ? (
         <View
           style={{
             borderWidth: 1,
@@ -366,6 +402,72 @@ export default function Saved() {
               </View>
             </View>
           ))}
+
+          {/* PAST — always last, collapsed by default. Muted rather than
+              brand-orange like the upcoming headers: it's an archive drawer,
+              not a section competing for attention. */}
+          {past.length > 0 && (
+            <View>
+              <Pressable
+                onPress={() => setPastOpen((o) => !o)}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: pastOpen }}
+                accessibilityLabel={`Past, ${past.length} ${past.length === 1 ? 'event' : 'events'}`}
+                style={({ pressed }) => ({
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                  paddingVertical: 6,
+                  marginBottom: pastOpen ? 13 : 0,
+                  opacity: pressed ? 0.6 : 1,
+                })}
+              >
+                <Text
+                  style={{
+                    fontFamily: theme.fonts.displayBlack,
+                    fontWeight: '900',
+                    fontSize: 13,
+                    letterSpacing: 1.8,
+                    textTransform: 'uppercase',
+                    color: theme.colors.textMuted,
+                  }}
+                >
+                  Past
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: theme.fonts.displayExtraBold,
+                    fontSize: 11,
+                    color: theme.colors.textFaint,
+                  }}
+                >
+                  {past.length}
+                </Text>
+                <View style={{ flex: 1, height: 1, backgroundColor: theme.colors.divider }} />
+                <Ionicons
+                  name={pastOpen ? 'chevron-up' : 'chevron-down'}
+                  size={15}
+                  color={theme.colors.textFaint}
+                />
+              </Pressable>
+              {pastOpen && (
+                <View style={{ gap: 16 }}>
+                  {past.map((e) => (
+                    <EventStub
+                      key={e.id}
+                      event={e}
+                      variant="compact"
+                      saved={savedIds.has(e.id)}
+                      going={goingIds.has(e.id)}
+                      onToggleSave={() => toggleSave(e.id)}
+                      onToggleGoing={() => toggleRsvp(e.id)}
+                      onTap={() => router.push({ pathname: '/event/[id]', params: { id: e.id } })}
+                    />
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
         </View>
       )}
     </ScrollView>
