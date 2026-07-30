@@ -318,20 +318,29 @@ Nothing is gated at any width; the full desktop batch still runs once at the end
   document. The WINDOW is still computed on demand, never a stored integer —
   what time changes cannot be a counter — but **what gets counted changed on
   2026-07-30: an immutable consumption LEDGER keyed on `user_id`, not live
-  `events` rows keyed on `workspace_id`.** As applied, 0008/0016 count
-  `events` where `created_at > now() - interval '100 days'`, which means
-  deleting the post refunds the quota and deleting the WORKSPACE refunds it
-  again; see Architecture Decision 8 for the ruling and the tracker for the
-  repoint. At 1, the mini form renders the CONVERSION screen ("You've used
-  your free post — Standard is $5"), an invitation, not an error.
+  `events` rows keyed on `workspace_id`.** 0008/0016 counted `events` in the
+  window, so deleting the post refunded the quota and deleting the WORKSPACE
+  refunded it again; **migration 0018 replaced that** with
+  `public.curbside_quota_ledger` and dropped the workspace-keyed functions
+  outright. Ruling in Architecture Decision 8. At 1, the mini form renders the
+  CONVERSION screen ("You've used your free post — Standard is $5"), an
+  invitation, not an error.
   **Two triggers, deliberately not one:**
-  - `events_curbside_quota` — BEFORE **INSERT** only. On UPDATE the row being
-    edited is itself inside the window, so a combined trigger would count it
-    and reject every edit a host makes to their own post.
+  - `events_curbside_consume` — AFTER **INSERT OR UPDATE** (0018; replaced
+    0008's BEFORE-INSERT `events_curbside_quota`). It both checks and records,
+    in that order, in one place. AFTER because the ledger's FK needs the event
+    row to exist, and because in a multi-row insert every BEFORE fires before
+    any AFTER — split across the two, a batch of curbside rows would all see an
+    empty ledger and all pass. **`OR UPDATE` is new and closes
+    draft-promotion**: `status` sits in the authenticated UPDATE grant (0011),
+    so insert-as-draft → update-to-published used to consume nothing at all.
+    0016's reason for skipping UPDATE — that the row being edited would count
+    itself — is dissolved by the ledger: consumption is identified per EVENT, so
+    an edit short-circuits on its own existing ledger row.
   - `events_curbside_span` — BEFORE **INSERT OR UPDATE**, because `starts_at`
     and `ends_at` both sit in the authenticated UPDATE column grant (0011).
     Insert-only would be trivially bypassed: post one compliant day, then
-    widen it to a fortnight.
+    widen it to a fortnight. Untouched by 0018.
   The mini form's date field is now Start + optional End, the End picker
   capped at start + 2 days (`max` prop on the shared `DateField`), so the
   picker cannot offer a span the server rejects. Copy: "Up to 3 consecutive
@@ -411,10 +420,9 @@ order a host meets it:
 1. **Entry fork** — "What are you posting?" → Curbside (free) or Event (paid).
 2. **Curbside mini-form + quota** — auto-tagged; **1 free post per rolling
    100 days, up to 3 consecutive days** (**0016**, superseding 0008's
-   3-single-day rule), block-at-quota renders the CONVERSION screen. As
-   applied, the count reads live `events` rows by workspace; repointing it to a
-   user-keyed consumption ledger is LOCKED (Architecture Decision 8) and
-   tracked. Display-only anonymity via `curbside_anonymous`
+   3-single-day rule), block-at-quota renders the CONVERSION screen. The count
+   reads a user-keyed immutable consumption ledger (**0018**), not live event
+   rows — Architecture Decision 8. Display-only anonymity via `curbside_anonymous`
    (**0009**) with RPC name-masking; anonymous posts read **"Local host"**.
 3. **5-step paid wizard** — Basics → When/Where → **Tier** → Details → Review.
    All state parent-owned, so back-nav and tier switches never lose a field.
@@ -678,7 +686,7 @@ gone; irreversible to them, but not to us.
   window still can't be a stored integer — but wrong about the source: counting
   live rows means the host deletes the post and the quota comes back.
   The 0008/0016 descriptions below remain accurate as a record of what was
-  APPLIED; the repoint is tracked as unbuilt work.
+  APPLIED; **BUILT as migration 0018 on 2026-07-30.**
   - **Keyed on `user_id`, NOT `workspace_id`.** Workspaces are free to create
     and free to delete (the Workspace screen ships exactly that button), so
     workspace-keying hands out a fresh quota via delete-and-recreate — a second
@@ -781,10 +789,10 @@ Create Event's tier step (per-day model is DEAD everywhere):
   **1 free post per rolling 100 days** (CHANGED 2026-07-29, migration 0016 — supersedes the
   original 3-single-day-posts rule; casual neighbors free, every-weekend posters graduate to
   Standard). The rolling window is computed on demand, never a stored integer, but the thing
-  it counts is an immutable **consumption ledger keyed on `user_id`** (LOCKED 2026-07-30,
-  Architecture Decision 8) — counting live event rows let a host delete the post, or the whole
-  workspace, and get the free lane back. Enforced by two triggers (quota on INSERT, span on
-  INSERT OR UPDATE) — full rules in "Curbside free-tier rules" above.
+  it counts is an immutable **consumption ledger keyed on `user_id`** (Architecture Decision 8;
+  migration **0018**) — counting live event rows let a host delete the post, or the whole
+  workspace, and get the free lane back. Enforced by two triggers (consume on AFTER INSERT OR
+  UPDATE, span on BEFORE INSERT OR UPDATE) — full rules in "Curbside free-tier rules" above.
   $1 gate held in reserve if spam materializes (free→$1 is an easy story; don't launch with it).
 - **Curbside category rules:** auto-tagged "Curbside" (mini form has NO category picker),
   Curbside category is FIRST in every category lineup (new-term exposure), EXCLUDED from the
@@ -899,6 +907,23 @@ everyone's Saved lists, and it returns the event count (all statuses, drafts
 included). Verified anon-denied 42501 on both, matching the `workspace_stats`
 baseline. **Flagged for 0004_payments:** once real orders exist, a workspace
 with settled payments should be soft-deleted or blocked rather than cascaded.
+0018 curbside quota consumption ledger (**APPLIED 2026-07-30** — implements
+Architecture Decision 8). New `public.curbside_quota_ledger`
+(`user_id`/`event_id` both nullable FKs **on delete SET NULL**, `consumed_at`;
+no content columns), RLS select-own with NO write policy or grant, partial
+unique index on `event_id`, index on `(user_id, consumed_at)`.
+`app.curbside_credits_used(user)` counts ledger rows in the rolling window and
+backs BOTH the gate and the UI, so they cannot disagree.
+`app.consume_curbside_credit()` on an **AFTER INSERT OR UPDATE** trigger
+(`events_curbside_consume`) short-circuits on the event's existing ledger row,
+takes a per-user advisory lock, then raises `curbside_quota_exhausted` or
+records consumption — replacing 0008's BEFORE-INSERT `events_curbside_quota`.
+`public.curbside_posts_used()` is now ZERO-argument (own count); the 1-arg
+workspace-keyed forms in both schemas are DROPPED so a stale caller 404s
+instead of silently receiving 0. Backfilled every existing non-draft Curbside
+post at its own `created_at`. Verified anon-denied on the new RPC and the
+table, and PGRST202 on the dropped signature; full behavioral suite lives in
+`scripts/qa-0018-quota-ledger.sql`.
 **Migrations apply from files via `npx supabase db push --linked`, never
 pasted** — remote history verified matching the repo 2026-07-29, all 16 rows
 `local == remote` (0013 had drifted from a dashboard paste and was repaired

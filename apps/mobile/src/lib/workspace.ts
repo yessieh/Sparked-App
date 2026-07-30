@@ -67,10 +67,20 @@ export async function getOrCreateWorkspace(userId: string, displayName: string):
   return data.id;
 }
 
-/** Non-draft Curbside posts in the rolling 100-day window (0008 RPC;
- * member-scoped — null from the server means "not yours to see"). */
-export async function curbsidePostsUsed(workspaceId: string): Promise<number> {
-  const { data, error } = await supabase.rpc('curbside_posts_used', { ws: workspaceId });
+/**
+ * Free Curbside posts the SIGNED-IN USER has consumed in the rolling 100-day
+ * window (0018 RPC — no arguments, because you can only ever be asking about
+ * yourself).
+ *
+ * Reads the immutable consumption ledger, NOT live event rows, and is keyed on
+ * the person rather than a workspace. Both halves matter: counting events let a
+ * host delete the post to refund the free lane, and workspace-keying let them
+ * delete the whole workspace and get another one (Architecture Decision 8).
+ * This calls the same `app.curbside_credits_used` the insert trigger enforces
+ * with, so the conversion screen and the server cannot disagree.
+ */
+export async function curbsidePostsUsed(): Promise<number> {
+  const { data, error } = await supabase.rpc('curbside_posts_used');
   if (error) throw new Error(error.message);
   return (data as number | null) ?? 0;
 }

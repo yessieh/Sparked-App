@@ -322,22 +322,53 @@ null when unpinned). Index `(event_id)`. RLS mirrors `event_photos`.
   gated on `tier = plus AND >=1 vendor` (ruled 2026-07-23), so nothing needs to
   persist the map itself yet.
 
-### 6.4 Curbside quota — computed, never a counter (LOCK)
-- Function `app.curbside_posts_used(ws uuid) returns int`: count of `events`
-  where `workspace_id = ws and tier_id = 'curbside' and status <> 'draft' and
-  created_at > now() - interval '100 days'`. Served to the client for the quota
-  display AND used by a `before insert` trigger that rejects the 4th post
-  (client renders the conversion screen on that error).
-- Supporting index already created in 0001 (§3.4).
-- **APPLIED as migration 0008 (2026-07-15)** — pulled forward from this
-  planned `0003_host_content` batch (which was never applied) because the
-  Curbside mini-form shipped in Create session 1. Definer
-  `app.curbside_posts_used` backs both the trigger and a member-scoped
-  public wrapper `public.curbside_posts_used` (null for non-members).
-  Behavioral suite **9/9 PASS** (fills to 3 via the RLS path, 4th rejected
-  with `curbside_quota_exhausted`, paid tiers unaffected, auto-tag intact,
-  post visible in the anon feed RPC, member/non-member UI counts, net-zero
-  cleanup).
+### 6.4 Curbside quota — computed WINDOW over an immutable ledger (LOCK)
+
+> **REWRITTEN 2026-07-30 (migration 0018).** Everything below the "as
+> originally planned" note is the current contract. The plan's original shape —
+> count `events` rows, keyed on `workspace_id` — shipped as 0008/0016 and has
+> been replaced, because counting rows the host can delete made the quota
+> refundable. See SPARKED_STATE Architecture Decision 8.
+
+- **Table `public.curbside_quota_ledger`**: `id uuid pk · user_id uuid null
+  references profiles(id) on delete set null · event_id uuid null references
+  events(id) on delete set null · consumed_at timestamptz not null default
+  now()`. Index `(user_id, consumed_at)`; PARTIAL unique index on `(event_id)
+  where event_id is not null` (one credit per event; many NULLs coexist once
+  their events are gone). No content columns — minimal by design, retained
+  under legitimate-interest fraud prevention.
+  RLS: `select` own rows for `authenticated`; **no write policy and no write
+  grant**, so the ledger is unwritable by clients by construction.
+- **Both `on delete set null`s are load-bearing.** The row must outlive its
+  event (that is the whole mechanism) and outlive its user (AD 8's
+  anonymization-on-erasure; `cascade` would destroy it).
+- Function `app.curbside_credits_used(p_user_id uuid) returns int`: count of
+  ledger rows where `user_id = p_user_id and consumed_at > now() - interval
+  '100 days'`. **The window is still computed** — a rolling window can never be
+  a stored integer — but it is computed over immutable rows, and keyed on the
+  PERSON, not a workspace (workspaces are deletable, so workspace-keying leaked
+  a fresh quota via delete-and-recreate once 0017 shipped that button).
+- Client read: zero-argument `public.curbside_posts_used()` → the caller's own
+  count. The 1-argument form is DROPPED, so a stale caller sending `{ ws }`
+  gets a PostgREST 404 rather than a confidently wrong 0.
+- Enforcement: `app.consume_curbside_credit()` on an **`after insert or update`**
+  trigger (`events_curbside_consume`), `when (new.tier_id = 'curbside' and
+  new.status <> 'draft')`. It short-circuits if the event already holds a ledger
+  row (so edits are free), takes a per-user advisory lock, checks
+  `app.curbside_credits_used`, raises `curbside_quota_exhausted` at >= 1, else
+  writes the ledger row. AFTER rather than BEFORE because the FK needs the event
+  to exist and because a multi-row insert would otherwise pass every BEFORE
+  check before any AFTER write; `or update` closes draft-promotion, which the
+  old INSERT-only gate left open.
+- *As originally planned and applied 2026-07-15 (0008), superseded above:*
+  `app.curbside_posts_used(ws uuid)` counted `events` in the window, a
+  `before insert` trigger rejected the 4th post, and a member-scoped public
+  wrapper served the UI (null for non-members). Behavioral suite 9/9 PASS at
+  the time. 0016 (2026-07-29) retargeted the threshold 3 → 1 and added the span
+  cap; the span trigger is untouched by 0018.
+- Supporting index `events (workspace_id, tier_id, created_at)` from 0001 §3.4
+  no longer backs the quota (nothing reads `events` for it now). Left in place —
+  harmless, and dropping it is not worth a migration.
 
 ### 6.6 Curbside attribution — display-only anonymity (APPLIED 0009)
 - `events.curbside_anonymous boolean not null default false` (additive).

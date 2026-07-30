@@ -158,14 +158,13 @@ and verified in Cursor/Claude Code.
 - [x] **Curbside quota — DONE (0008), RULES CHANGED 2026-07-29 (0016).**
       Now **1 free post per rolling 100-day window, spanning up to 3
       consecutive days** (was 3 single-day posts). The rolling window is
-      computed on demand, never a stored integer. **NOT DONE as of 2026-07-30:
-      what it counts.** As applied it counts live `events` rows keyed by
-      workspace, so deleting the post — or the workspace — refunds the free
-      lane. Repointing it to a user-keyed consumption ledger is LOCKED and
-      tracked in the Data Lifecycle section; this item stays checked for the
-      RULES, not for the source. Two triggers: quota on BEFORE INSERT, span on BEFORE
-      INSERT **OR UPDATE** (`starts_at`/`ends_at` are in 0011's UPDATE grant,
-      so insert-only was bypassable). At quota the mini form renders the
+      computed on demand, never a stored integer. **What it counts was
+      repointed 2026-07-30 (0018)** from live `events` rows keyed by workspace
+      to an immutable user-keyed consumption ledger — see the Data Lifecycle
+      section. Two triggers: consume on AFTER INSERT **OR UPDATE** (0018 — the
+      `OR UPDATE` closes draft-promotion), span on BEFORE INSERT **OR UPDATE**
+      (`starts_at`/`ends_at` are in 0011's UPDATE grant, so insert-only was
+      bypassable). At quota the mini form renders the
       CONVERSION screen ("You've used your free post — Standard is $5"), an
       invitation, not an error. 6/6 behavioral PASS.
       **Accepted:** the span cap is a 72-HOUR duration, not a calendar-day
@@ -208,23 +207,29 @@ and verified in Cursor/Claude Code.
       3-single-day copy that still lives in the frozen `design-reference`
       `PRICING_TIERS`. There is no `description` column on `tiers`, so this
       copy has no production home yet and can't drift until it does.
-- [ ] **No working lint setup in the repo.** `npm run lint` → `expo lint`
-      bootstraps `eslint` + `eslint-config-expo` into `package.json`, writes an
-      `eslint.config.js`, then fails with "Cannot find module 'eslint'". Ran
-      into this 2026-07-29 and reverted all three files, so the repo is clean
-      but has no lint. Worth fixing separately — typecheck is currently the
-      only automated gate, and it won't catch unused vars or dead code.
-      **STATUS CHANGED 2026-07-30 — "the repo is clean" is no longer true.**
-      Running `npx expo lint` during the Workspace build bootstrapped it again
-      and this time it WORKED: it reported 58 problems (55 errors) across the
-      app, a real standing baseline. But the bootstrap only half-landed —
-      `eslint` + `eslint-config-expo` are in `node_modules` and
-      `apps/mobile/eslint.config.js` exists **untracked**, while
-      `package.json` declares neither. So lint works on this machine and would
-      vanish on a fresh `npm install`. **Decide one way or the other:** finish
-      it (add the devDependencies, commit the config, then work the 58-problem
-      baseline down) or revert the stray file again. Leaving it half-installed
-      is the worst of the three.
+- [x] **Lint setup — LANDED 2026-07-30.** `eslint ^9.39.5` +
+      `eslint-config-expo ^57.0.0` are declared in `apps/mobile` devDependencies,
+      `package-lock.json` is synced, and `eslint.config.js` is committed. The
+      2026-07-29 "Cannot find module 'eslint'" failure was the half-finished
+      bootstrap, not a broken config — `npx expo lint` runs fine now and
+      survives a fresh `npm install`.
+- [ ] **Work the lint baseline down: 58 problems (55 errors, 3 warnings).**
+      NOT a regression — this is the first time the repo could see its own lint
+      output. Standing baseline as of 2026-07-30, by rule:
+      **24 `react-hooks/refs`** (reading/writing `Animated.Value` refs during
+      render — `EventDetailView` 16, `SiteMap` 4, `EventStub` 4; these are the
+      animation paths, so changes here need the human feel-pass, never a
+      screenshot check);
+      **21 `react/no-unescaped-entities`** (raw apostrophes in JSX copy — the
+      codebase does this deliberately and everywhere, so the honest fix is
+      probably to disable the rule, not to escape 21 strings);
+      **5 `react-hooks/set-state-in-effect`** (the data-fetch hooks in
+      `lib/workspace.ts`, `lib/engagement.tsx`, `me.tsx`);
+      3 `react-hooks/static-components`, 2 `react-hooks/immutability`,
+      2 `react-hooks/exhaustive-deps`.
+      Do this as its own pass — mixing it into a feature session would bury
+      real changes under formatting churn. Decide the
+      `no-unescaped-entities` rule first; it's a third of the list.
 - [ ] **In-context App Store rating prompt** (OS API, fire at happy moments,
       e.g. after an RSVP). The Settings "Rate Sparked" row was removed on purpose.
 - [ ] **Privacy wiring:** Location toggle MIRRORS the OS permission (deep-link to
@@ -363,25 +368,40 @@ and verified in Cursor/Claude Code.
       function on a timer) and a rule for what happens to a purged event's
       ledger rows and any financial records pointing at it — the ledger is
       immutable and must SURVIVE the purge.
-- [ ] **Curbside quota ledger — table + publish-path insert + repoint the quota
-      function.** Three parts, all required together:
-      1. A ledger table: **`user_id` + timestamp, no content.** User-keyed, not
-         workspace-keyed — workspaces are free to create and delete, so
-         workspace-keying leaks a fresh quota via delete-and-recreate.
-      2. An insert on the Curbside publish path, in the same transaction as the
-         event insert.
-      3. `app.enforce_curbside_quota` + `curbside_posts_used` repointed from
-         `events` to the ledger. **The rolling window stays computed** — only
-         the source changes.
-      **This closes a live exploit**: as applied (0008/0016) the quota counts
-      live `events` rows by workspace, so deleting the post refunds the free
-      lane. Soft delete does NOT close it by itself — a soft-deleted row still
-      exists, so the count would still hold, but only until the 90-day purge
-      removes it, at which point the quota silently comes back. The ledger is
-      what makes consumption permanent regardless of what happens to the event.
-      GDPR posture: minimal data under legitimate-interest fraud prevention; on
-      erasure the identifier may be hashed while the row keeps functioning.
-      Retention window → pre-launch legal consult.
+- [x] **Curbside quota ledger — DONE (migration 0018, 2026-07-30).**
+      `public.curbside_quota_ledger` (`user_id` + `consumed_at` + a nullable
+      `event_id`, no content columns), written only by a definer trigger, read
+      by `app.curbside_credits_used(user)` which now backs BOTH the gate and the
+      UI. `public.curbside_posts_used()` is zero-argument; the workspace-keyed
+      1-arg forms are dropped so a stale caller 404s rather than silently
+      getting 0. Client repointed (`lib/workspace.ts`, `create/curbside.tsx`) —
+      including the `no workspace ⇒ used = 0` shortcut, which was half the
+      exploit on its own. Backfilled every existing non-draft Curbside post at
+      its own `created_at`.
+      **Closed a live exploit**: 0008/0016 counted live `events` rows by
+      workspace, so deleting the post refunded the free lane and deleting the
+      workspace refunded it again. Soft delete would NOT have closed it — a
+      soft-deleted row still counts, but only until the 90-day purge, at which
+      point the quota silently returns. Only the ledger makes consumption
+      permanent.
+      **Two things went beyond the literal repoint, both deliberate:** the gate
+      moved to `AFTER INSERT OR UPDATE` (a BEFORE trigger can't satisfy the
+      ledger's FK, and in a multi-row insert every BEFORE fires before any
+      AFTER), and `OR UPDATE` closes draft-promotion — `status` is in the
+      authenticated UPDATE grant, so insert-as-draft → update-to-published used
+      to consume nothing. A per-user advisory lock closes the concurrent
+      double-tap race that existed under 0008 too.
+      GDPR posture: minimal data under legitimate-interest fraud prevention;
+      `user_id` is `on delete set null`, which IS the anonymization AD 8
+      describes. **Residual accepted:** delete the account, sign up again, get a
+      new `auth.users.id` and a fresh quota — closing that needs a hashed-email
+      identifier, tracked below. Retention window → pre-launch legal consult.
+- [ ] **Hashed-identifier ledger key (ROADMAP, low priority).** The one quota
+      door still open: account deletion + re-signup mints a new `auth.users.id`,
+      so consumption doesn't follow the person across accounts. Needs a stable
+      hashed identifier (email, normalized) stored alongside `user_id` and
+      counted as a fallback. Far higher friction than the doors 0018 closed, and
+      it collides with erasure semantics — do not build on speculation.
 - [ ] **Per-event delete + archive / un-archive UI in Workspace.** Today the
       screen has exactly one destructive control and it takes the whole
       workspace. Needs: a per-row delete (soft, confirm dialog, no undo offered
@@ -590,9 +610,9 @@ and verified in Cursor/Claude Code.
       `supabase migration repair --status applied 20260723000013`. That is the
       remedy for a pasted migration; **never** `db push` a migration whose
       objects already exist — it re-runs and fails. 0011/0012 were fine.
-      **Applied through 0016** (0016 = curbside 1-post/3-day rules,
-      2026-07-29). History verified 2026-07-29: 16 rows, every one
-      `local == remote`. Full per-migration detail lives in SPARKED_STATE's
+      **Applied through 0018** (0017 = workspace host screen, 0018 = curbside
+      quota consumption ledger, both 2026-07-30). Full per-migration detail
+      lives in SPARKED_STATE's
       "Applied migrations" paragraph — that list is the authoritative one; keep
       it current rather than duplicating it here.
 - [x] **QA cleanup runs from `scripts/qa-cleanup.sql`** — not ad-hoc DELETEs.
@@ -605,9 +625,15 @@ and verified in Cursor/Claude Code.
       **Exempt from the soft-delete lock, deliberately:** this is a
       service-role maintenance tool for removing QA cruft, not a host action.
       It hard-deletes on purpose and should keep doing so — a soft-deleted test
-      listing is still a row in the way. When the quota ledger lands, decide
-      whether cleanup also clears the ledger rows those test posts consumed
-      (it probably should, or repeat QA walks will hit the quota).
+      listing is still a row in the way.
+      **Clears the quota ledger too, as of 2026-07-30 (ruled with 0018).** New
+      section 2a deletes `curbside_quota_ledger` rows for the matched events
+      **before** the events themselves — once they're gone their `event_id` is
+      already NULL (SET NULL, not cascade, on purpose) and there is no way left
+      to identify them. Without this, every QA Curbside post would burn its
+      poster's one free post for 100 days and the next walk would meet the
+      conversion screen instead of the form. Dev-only exemption; nothing in the
+      app may ever delete a ledger row.
 
 ---
 

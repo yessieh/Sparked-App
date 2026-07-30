@@ -5,10 +5,14 @@
 // FREE-TIER RULES (changed 2026-07-29, migration 0016): ONE post per rolling
 // 100-day window, spanning up to THREE consecutive days. Supersedes the
 // original "3 single-day posts per 100 days".
-// Both rules are enforced twice: the 0016 triggers are the real gates; this
-// screen reads the computed count and, at 1, renders the CONVERSION screen
-// (an invitation, not an error state), and caps the end-date picker at
-// start + 2 days so it can't offer a span the server would reject.
+// Both rules are enforced twice: the triggers are the real gates; this screen
+// reads the count and, at 1, renders the CONVERSION screen (an invitation, not
+// an error state), and caps the end-date picker at start + 2 days so it can't
+// offer a span the server would reject.
+// QUOTA SOURCE CHANGED 2026-07-30 (migration 0018): the count comes from an
+// immutable, USER-keyed consumption ledger, not from live event rows keyed on
+// the workspace. Deleting the post — or the whole workspace — no longer refunds
+// the free lane. Client and server call the same count function.
 // Geocoding: Nominatim (decided this session — no key, plain fetch; swap for
 // a paid provider at scale). Photo slot is visual-only until real uploads
 // (Code-stage tracker item; event_photos table isn't applied yet either).
@@ -214,11 +218,16 @@ export default function CurbsideForm() {
   // Signed-in territory. READ-ONLY setup: this no longer creates a workspace —
   // opening the form must not make anyone a host (that happens at "Post it").
   //
-  // The quota display doesn't need one either. It needs the COUNT, and a user
-  // with no workspace has provably never posted, so the count is 0 without
-  // asking the server. getOwnWorkspaceId() is the fetch-only half of
-  // getOrCreateWorkspace, so an existing host still gets their real tally and
-  // their conversion screen at 3/3.
+  // The quota read is now USER-KEYED and independent of the workspace (0018).
+  // It used to short-circuit to 0 when the user had no workspace, on the
+  // reasoning that they had "provably never posted" — which stopped being true
+  // the moment the Workspace screen shipped a delete button. That shortcut WAS
+  // half the exploit: delete the workspace, and the client handed you a fresh
+  // form before the server was even asked. The count now comes from the
+  // consumption ledger every time.
+  //
+  // getOwnWorkspaceId() still runs, but only to pre-fill the id `post()` needs
+  // — it no longer has anything to do with the quota.
   useEffect(() => {
     if (loading) return;
     if (!session) {
@@ -227,9 +236,9 @@ export default function CurbsideForm() {
     }
     (async () => {
       try {
-        const ws = await getOwnWorkspaceId();
+        const [ws, consumed] = await Promise.all([getOwnWorkspaceId(), curbsidePostsUsed()]);
         setWorkspaceId(ws);
-        setUsed(ws ? await curbsidePostsUsed(ws) : 0);
+        setUsed(consumed);
       } catch (e) {
         setSetupError(e instanceof Error ? e.message : String(e));
       }
@@ -369,9 +378,10 @@ export default function CurbsideForm() {
           <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 12.5, lineHeight: 19, color: theme.colors.textMuted, marginBottom: 6 }}>
             The essentials only. Your post goes straight to the local feed.
           </Text>
-          {/* Quota display reads the computed server count. At quota this
-              screen isn't reachable (the conversion screen renders instead), so
-              this only ever states the one free post is still available. */}
+          {/* Quota display reads the ledger count for THIS USER (0018). At
+              quota this screen isn't reachable (the conversion screen renders
+              instead), so this only ever states the one free post is still
+              available. */}
           <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 11.5, fontWeight: '800', color: brand.sparkGold, marginBottom: 18 }}>
             {used} of {CURBSIDE_QUOTA} free post used · resets 100 days after posting
           </Text>
