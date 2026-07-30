@@ -11,7 +11,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from './auth';
 import { supabase } from './supabase';
 
-export const CURBSIDE_QUOTA = 3;
+/** Free Curbside posts per rolling 100-day window. Mirrors the server gate in
+ * migration 0016 — this constant is DISPLAY ONLY; `app.enforce_curbside_quota`
+ * is the enforcement. Changing it here changes copy, not rules. */
+export const CURBSIDE_QUOTA = 1;
+
+/** Max consecutive calendar days a Curbside post may span (0016). The picker
+ * caps the end date at start + CURBSIDE_MAX_DAYS - 1. */
+export const CURBSIDE_MAX_DAYS = 3;
 
 export type WorkspaceRole = 'owner' | 'editor' | 'viewer';
 

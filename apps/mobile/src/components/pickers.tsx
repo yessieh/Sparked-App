@@ -89,19 +89,25 @@ function FieldShell({
 
 /**
  * Calendar date field. Tapping the field expands a month grid below it;
- * selected day wears the spark gradient; days before `min` are disabled
- * (single-day Curbside keeps min = today).
+ * selected day wears the spark gradient; days outside [`min`, `max`] are
+ * disabled and inert.
+ *
+ * `max` exists for Curbside's 3-consecutive-day cap (end ≤ start + 2), so the
+ * picker cannot offer a day the server would reject. Optional — the paid
+ * wizard passes only `min` and is unaffected.
  */
 export function DateField({
   value,
   onChange,
   label = 'On',
   min,
+  max,
 }: {
   value: string;
   onChange: (ymd: string) => void;
   label?: string;
   min?: string;
+  max?: string;
 }) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
@@ -177,7 +183,7 @@ export function DateField({
             {cells.map((day, i) => {
               if (day === null) return <View key={`pad-${i}`} style={{ width: `${100 / 7}%`, height: 34 }} />;
               const ymd = toYMD(viewYear, viewMonth, day);
-              const disabled = Boolean(min && ymd < min);
+              const disabled = Boolean((min && ymd < min) || (max && ymd > max));
               const selected = ymd === value;
               return (
                 <View key={ymd} style={{ width: `${100 / 7}%`, height: 34, padding: 2 }}>

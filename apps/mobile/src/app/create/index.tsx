@@ -208,7 +208,7 @@ export default function CreateFork() {
               icon="pin"
               title="Curbside"
               copy="Yard sales, free pickup items, block celebrations. One photo, a description, and an address."
-              subline="Single-day · 3 free posts every 100 days"
+              subline="Up to 3 days · 1 free post every 100 days"
             />
             <LaneCard
               onPress={() => router.push('/create/event')}
