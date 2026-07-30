@@ -88,11 +88,18 @@ and verified in Cursor/Claude Code.
       bug (AppScreens.jsx:404, :1009) — production ignores it.
 - [ ] **Share button** (device share sheet).
 - [ ] **Gallery swipe + social links rendering** on Review.
-- [ ] **Published events appear in Workspace** (real write + read-back).
-      Per-event RSVPs / Saves display lands here too, zero-suppressed — the
-      two aggregate tiles were removed from the Me hub card on 2026-07-29
-      because they answered a question no host asks. `workspace_stats` (0015)
-      already returns all four numbers.
+- [x] **Published events appear in Workspace — DONE 2026-07-30.** The stub is
+      replaced by the real host screen: stats tiles, "+ New event", the
+      workspace's PUBLISHED listings (ended ones collapsed into "Past · N"
+      through the newly shared `hasEnded()` util), per-event RSVP + Save chips
+      (zero-suppressed, via `workspace_event_stats` in **0017** — saves are
+      own-rows RLS so the count has to be a server read), an owner-only
+      destructive delete, and the dormant multi-workspace picker.
+      Listings need no read RPC — member RLS + 0011's column grants already
+      cover them.
+      **Still open, deliberately out of that scope:** drafts /
+      `pending_payment` never appear on this screen; event editing and
+      cancellation; the Organizer Profile + its editor; stats drill-downs.
 - [x] **Workspace read path + stats RPC — DONE (0015, 2026-07-23).**
       Member-scoped `workspace_stats` (4 computed numbers,
       `app`-definer/`public`-invoker), `workspaces.created_by` column-privacy
@@ -127,6 +134,14 @@ and verified in Cursor/Claude Code.
       stemming rule, and a wrong one is worse than none ("Crafts"→"Craft" reads
       fine, but naive stemming mangles real words) — so wait for evidence that
       hosts actually create the duplicate pairs before picking a rule.
+- [ ] **Entry fork keeps the tab bar; the forms hide it** (decided 2026-07-30,
+      amends the create-flow chrome lock). `create/index.tsx` lives in the root
+      Stack today, outside `(tabs)`, so the fork currently hides the bar along
+      with everything else. The rule is chrome-less **once there is input to
+      lose**: the fork is a browsing decision with nothing typed yet, so a host
+      who opened it by mistake should be able to leave the way they came. The
+      Curbside form and every wizard step keep hiding it. Pairs with the exit
+      affordance below — same problem (getting out), different halves of it.
 - [ ] **Wizard exit affordance** — persistent X/close on all wizard + checkout
       steps with a discard-draft confirmation. Pairs with the in-tabs success
       screen restructure (round-2 walk): the create flow is a focused,
@@ -142,8 +157,13 @@ and verified in Cursor/Claude Code.
       Standard 5-12-20 / Plus 15-29-49), socials moved to Standard. DONE in prototype.
 - [x] **Curbside quota — DONE (0008), RULES CHANGED 2026-07-29 (0016).**
       Now **1 free post per rolling 100-day window, spanning up to 3
-      consecutive days** (was 3 single-day posts). Computed on demand, never a
-      stored counter. Two triggers: quota on BEFORE INSERT, span on BEFORE
+      consecutive days** (was 3 single-day posts). The rolling window is
+      computed on demand, never a stored integer. **NOT DONE as of 2026-07-30:
+      what it counts.** As applied it counts live `events` rows keyed by
+      workspace, so deleting the post — or the workspace — refunds the free
+      lane. Repointing it to a user-keyed consumption ledger is LOCKED and
+      tracked in the Data Lifecycle section; this item stays checked for the
+      RULES, not for the source. Two triggers: quota on BEFORE INSERT, span on BEFORE
       INSERT **OR UPDATE** (`starts_at`/`ends_at` are in 0011's UPDATE grant,
       so insert-only was bypassable). At quota the mini form renders the
       CONVERSION screen ("You've used your free post — Standard is $5"), an
@@ -194,6 +214,17 @@ and verified in Cursor/Claude Code.
       into this 2026-07-29 and reverted all three files, so the repo is clean
       but has no lint. Worth fixing separately — typecheck is currently the
       only automated gate, and it won't catch unused vars or dead code.
+      **STATUS CHANGED 2026-07-30 — "the repo is clean" is no longer true.**
+      Running `npx expo lint` during the Workspace build bootstrapped it again
+      and this time it WORKED: it reported 58 problems (55 errors) across the
+      app, a real standing baseline. But the bootstrap only half-landed —
+      `eslint` + `eslint-config-expo` are in `node_modules` and
+      `apps/mobile/eslint.config.js` exists **untracked**, while
+      `package.json` declares neither. So lint works on this machine and would
+      vanish on a fresh `npm install`. **Decide one way or the other:** finish
+      it (add the devDependencies, commit the config, then work the 58-problem
+      baseline down) or revert the stray file again. Leaving it half-installed
+      is the worst of the three.
 - [ ] **In-context App Store rating prompt** (OS API, fire at happy moments,
       e.g. after an RSVP). The Settings "Rate Sparked" row was removed on purpose.
 - [ ] **Privacy wiring:** Location toggle MIRRORS the OS permission (deep-link to
@@ -296,6 +327,81 @@ and verified in Cursor/Claude Code.
 
 ---
 
+## DATA LIFECYCLE — soft delete / archive / quota ledger (LOCKED 2026-07-30)
+
+> Rulings live in SPARKED_STATE "Architecture Decision 8". This section is the
+> unbuilt work they imply. **Nothing here is built yet** — today event deletion
+> exists only as the Workspace screen's whole-workspace hard cascade.
+
+- [ ] **Soft-delete read-path enforcement — EVERY event read filters
+      `deleted_at is null`.** This is the item that makes soft delete real: the
+      column is trivial, the discipline is not, and ONE missed read path means a
+      deleted event resurfaces in front of the public. So the build starts by
+      ENUMERATING the read paths, then verifying each one individually rather
+      than assuming a pattern held. Known paths as of 2026-07-30:
+      1. **Feed RPC** (`app.events_feed`, 0005) — the distance-ranked list.
+      2. **Detail RPC** (`app.event_detail`, 0007) — must 404, not return a
+         hidden row.
+      3. **Saved select** (`saved.tsx`) — reads `events` directly by id list.
+      4. **Me hub's next-saved preview** (`me.tsx`) — a second direct read, easy
+         to miss because it looks like part of Saved.
+      5. **Workspace listings** (`workspace.tsx`) — the host's own list.
+      6. **Event stats** — `workspace_stats` (0015) and `workspace_event_stats`
+         (0017); a deleted event must stop counting toward Active/Upcoming.
+      7. **Organizer Profile** (unbuilt) — upcoming AND past lists.
+      8. **`event_categories` / `event_vendors` policies** — they gate on the
+         parent event's visibility, so the definition of "visible" moves here
+         too.
+      Re-enumerate at build time; this list is a starting point, not a
+      guarantee. A defence worth costing then: make the filter structural (a
+      `visible_events` view or a policy clause) so a NEW read path is safe by
+      default instead of safe by remembering.
+- [ ] **90-day hard-purge trailing job (ROADMAP).** Permanently removes rows
+      past `deleted_at + 90 days`. Deliberately a trailing job and not a
+      cascade-on-delete: the 90 days ARE the dispute-resolution and
+      fat-finger window. Needs a scheduler decision (pg_cron vs. an edge
+      function on a timer) and a rule for what happens to a purged event's
+      ledger rows and any financial records pointing at it — the ledger is
+      immutable and must SURVIVE the purge.
+- [ ] **Curbside quota ledger — table + publish-path insert + repoint the quota
+      function.** Three parts, all required together:
+      1. A ledger table: **`user_id` + timestamp, no content.** User-keyed, not
+         workspace-keyed — workspaces are free to create and delete, so
+         workspace-keying leaks a fresh quota via delete-and-recreate.
+      2. An insert on the Curbside publish path, in the same transaction as the
+         event insert.
+      3. `app.enforce_curbside_quota` + `curbside_posts_used` repointed from
+         `events` to the ledger. **The rolling window stays computed** — only
+         the source changes.
+      **This closes a live exploit**: as applied (0008/0016) the quota counts
+      live `events` rows by workspace, so deleting the post refunds the free
+      lane. Soft delete does NOT close it by itself — a soft-deleted row still
+      exists, so the count would still hold, but only until the 90-day purge
+      removes it, at which point the quota silently comes back. The ledger is
+      what makes consumption permanent regardless of what happens to the event.
+      GDPR posture: minimal data under legitimate-interest fraud prevention; on
+      erasure the identifier may be hashed while the row keeps functioning.
+      Retention window → pre-launch legal consult.
+- [ ] **Per-event delete + archive / un-archive UI in Workspace.** Today the
+      screen has exactly one destructive control and it takes the whole
+      workspace. Needs: a per-row delete (soft, confirm dialog, no undo offered
+      — the recovery window is ours, not the host's), a per-row archive toggle,
+      and an **Archive section** in Workspace holding archived events with
+      un-archive. Archived events leave ALL public surfaces including the
+      Organizer Profile's past-events list. Archive is a status flag, `deleted_at`
+      is a timestamp; they are independent, not two settings of one field.
+- [ ] **OPEN QUESTION — does "Delete event(s) & Workspace" soft-delete or
+      cascade?** The shipped 0017 action hard-deletes every event through the FK
+      cascade. That predates the soft-delete lock and sits between two of its
+      rules: event deletion is soft, but account/workspace teardown is real
+      erasure. **Needs a ruling before the soft-delete work starts**, because it
+      decides whether `delete_workspace` gets rewritten or documented as a
+      deliberate exception. Related: the ledger repoint makes the quota side of
+      this moot either way (consumption survives the workspace), so this is now
+      purely a dispute-resolution / ledger-integrity question.
+
+---
+
 ## DATA MODEL GUARDRAILS (protect these at schema time)
 
 - [x] **Workspace-owns-events.** Events belong to a workspace, not a user.
@@ -303,6 +409,18 @@ and verified in Cursor/Claude Code.
       account handoff with no migration. Do NOT shortcut to user-owned events.
       ✅ Schema applied (migration 0001: workspaces, memberships,
       events.workspace_id FK, RLS by role).
+      **Teams / roles (ROADMAP) — the architecture is already there; what's
+      left is UI.** `memberships` carries owner/editor/viewer, `app.is_member`
+      takes a role array, and every events policy plus every definer RPC
+      already gates on it (0017's `delete_workspace` is owner-only precisely
+      because the check was available). Remaining work is therefore
+      interface-side: invites, role assignment, and owner-gating the actions
+      an editor shouldn't see. **No schema change anticipated** — which is the
+      payoff this guardrail was bought for. Two things to expect at build time
+      anyway: an invite/pending-membership representation (memberships has no
+      client write path at MVP — owner rows come from a definer trigger), and
+      a decision on what `viewer` actually sees, since nothing reads that role
+      today.
 - [x] **Anonymous browse.** Explore/detail/share open to guests; saving,
       persisting prefs, creating events are account-gated.
       ✅ DB layer applied (0001–0002: anon SELECT on published events/
@@ -324,9 +442,13 @@ and verified in Cursor/Claude Code.
 - [x] **Curbside quota gate — migration 0008.** SCHEMA_PLAN §6.4; the plan
       batched this under `0003_host_content`, which was NEVER applied, so
       Create session 1 pulled it forward as 0008. Computed rolling-100-day
-      count (never a stored counter), before-insert trigger rejects the 4th
-      post, member-scoped UI-count RPC. Behavioral suite **9/9 PASS**. At
-      quota the form shows the CONVERSION screen (invitation, not an error).
+      count (never a stored counter), before-insert trigger, member-scoped
+      UI-count RPC. Behavioral suite **9/9 PASS**. At quota the form shows the
+      CONVERSION screen (invitation, not an error).
+      *Two things on this line are now historical, not current:* it rejected
+      the **4th** post (0016 retargeted that to the 2nd), and it counts live
+      `events` rows (2026-07-30 locks a user-keyed ledger — Data Lifecycle
+      section). Left as a record of what 0008 shipped.
 - [x] **Curbside attribution — migration 0009.** `events.curbside_anonymous`
       display-only flag; feed + detail RPCs mask `organizer_name` server-side.
       Full model in SPARKED_STATE "CREATE EVENT — CURBSIDE" lock.
@@ -480,6 +602,12 @@ and verified in Cursor/Claude Code.
       the bare street and the full `…, Green Valley, AZ 85614` form), then
       verifies. Seeded demo events are excluded explicitly. Deletes cascade to
       categories / vendors / saves / rsvps. DEV ONLY — never against prod.
+      **Exempt from the soft-delete lock, deliberately:** this is a
+      service-role maintenance tool for removing QA cruft, not a host action.
+      It hard-deletes on purpose and should keep doing so — a soft-deleted test
+      listing is still a row in the way. When the quota ledger lands, decide
+      whether cleanup also clears the ledger rows those test posts consumed
+      (it probably should, or repeat QA walks will hit the quota).
 
 ---
 

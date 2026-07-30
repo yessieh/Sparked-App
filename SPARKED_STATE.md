@@ -199,6 +199,70 @@ untouched (still the signup invitation).
 
 
 
+### WORKSPACE SCREEN — THE HOST SURFACE (BUILT 2026-07-30)
+
+Replaces the header-only stub. Top to bottom: **header (back · WORKSPACE
+eyebrow · name, carried over from the stub) → ACTIVE + UPCOMING stat tiles →
+"+ New event" gradient CTA → published listings → muted destructive delete
+row.** Coordinator surface: built mobile-first, structured desktop-worthy
+(column widens 560 → 880 past `breakpoints.desktop`, listings go two-across).
+Nothing is gated at any width; the full desktop batch still runs once at the end.
+
+- **Listings need NO read RPC.** `events_select_public` (0001) already exposes
+  every row of a workspace to its members, and 0011's per-column grants cover
+  everything the card renders — so this is a direct `events` select filtered
+  `workspace_id = <ws> AND status = 'published'`. **Published only**: drafts and
+  `pending_payment` are deliberately absent (drafts management is its own arc).
+  `publish_fee_cents` is never selected — the EventStub is consumer-facing data
+  only, per the locked price rule.
+- **Stats are the Me hub's two numbers, larger** — the same `workspace_stats`
+  (0015) `active_listings` / `upcoming_events`, one surface per stat instead of
+  two tiles sharing a card. Informational, so no gradient. Both always render,
+  zero included.
+- **Past section reuses Saved's pattern exactly** — collapsed by default,
+  session-only state, most-recent-first, muted header rather than brand orange.
+  The ended-test was EXTRACTED to `hasEnded()` in `lib/eventTime.ts` and BOTH
+  screens now call it, so there is one definition of "ended" in the app and the
+  section header can never disagree with the countdown chip inside it. Live
+  events (started, not finished) are not past.
+- **Per-event engagement chips: RSVP + Saves, zero-suppressed independently.**
+  Rendered through an opt-in `counts` prop on the shared compact EventStub, so
+  Saved and Explore are byte-identical to before (no prop ⇒ the old quiet
+  "N RSVPs" line). Chips are NEUTRAL outlined, never green or gold — green is
+  semantic (going/free) and gold reads as save-ACTIVE, and an engagement tally
+  is neither. **Counts must be a server read**: `saves` is own-rows RLS, so a
+  client counting saves sees only its own.
+- **Delete is genuinely destructive and says so.** Muted row (trash icon,
+  danger-tinted border, never gradient) → a confirm dialog stating the three
+  consequences plainly: every event including drafts, removed from everyone's
+  Saved lists, cannot be undone. Confirm → `delete_workspace` (0017) → back to
+  Me, which shows the dashed invitation again. **Custom Modal, NOT
+  `Alert.alert`** — multi-button Alert is a no-op on react-native-web.
+  Owner-only in the UI as well as the RPC: editors write events, but ending the
+  business is not theirs.
+  **PENDING RECONCILIATION (2026-07-30):** as shipped this is a HARD cascade
+  delete of the events, which predates the soft-delete lock (Architecture
+  Decision 8) and has not been reconciled with it. The screen also has no
+  per-event delete or archive yet — both are tracked. Until that lands, this
+  button is the only delete a host has, and it takes everything.
+- **Multi-workspace picker: WIRED, DORMANT.** At 2+ the screen shows one row per
+  workspace (name + its own Active/Upcoming) before any workspace's content, and
+  Back from inside a workspace returns to the picker. At exactly 1 it never
+  renders — the single workspace loads directly and a solo host never learns the
+  concept exists (architecture lock #3). Picker rows each call `workspace_stats`
+  themselves; N calls for N workspaces, acceptable because N is 2–3 by the time
+  anyone sees it and the alternative is a schema addition for a dormant path.
+- **Empty state** (workspace exists, zero published events): stats, CTA and the
+  delete row all stay; only the list goes quiet with "No published events yet."
+- **Anonymous curbside posts show the real workspace name here.** 0009's mask is
+  a CONSUMER display rule; hiding a host's own listing from them would be a bug,
+  not privacy.
+- **Focus refresh, never polling** (architecture lock #4) — a host lands here
+  straight from publishing and the new listing has to be present.
+- Accepted degradation: if the counts RPC fails but the listings read succeeds,
+  the rows still render and the RSVP chip falls back to the public
+  `events.rsvp_count`; only the save chip is lost.
+
 ---
 
 ## CREATE EVENT — CURBSIDE + SHARED FORM PATTERNS (LOCKED 2026-07-15)
@@ -251,10 +315,14 @@ untouched (still the signup invitation).
 - **Curbside free-tier rules — CHANGED 2026-07-29 (migration 0016).
   ONE free post per rolling 100-day window, spanning up to THREE consecutive
   days.** Supersedes "3 free single-day posts per 100 days" everywhere in this
-  document. Still COMPUTED on demand from
-  `created_at > now() - interval '100 days'` — never a stored counter (the
-  locked principle: store what only transactions change, compute what time
-  changes). At 1, the mini form renders the CONVERSION screen ("You've used
+  document. The WINDOW is still computed on demand, never a stored integer —
+  what time changes cannot be a counter — but **what gets counted changed on
+  2026-07-30: an immutable consumption LEDGER keyed on `user_id`, not live
+  `events` rows keyed on `workspace_id`.** As applied, 0008/0016 count
+  `events` where `created_at > now() - interval '100 days'`, which means
+  deleting the post refunds the quota and deleting the WORKSPACE refunds it
+  again; see Architecture Decision 8 for the ruling and the tracker for the
+  repoint. At 1, the mini form renders the CONVERSION screen ("You've used
   your free post — Standard is $5"), an invitation, not an error.
   **Two triggers, deliberately not one:**
   - `events_curbside_quota` — BEFORE **INSERT** only. On UPDATE the row being
@@ -343,8 +411,10 @@ order a host meets it:
 1. **Entry fork** — "What are you posting?" → Curbside (free) or Event (paid).
 2. **Curbside mini-form + quota** — auto-tagged; **1 free post per rolling
    100 days, up to 3 consecutive days** (**0016**, superseding 0008's
-   3-single-day rule; computed never counted), block-at-quota renders the
-   CONVERSION screen. Display-only anonymity via `curbside_anonymous`
+   3-single-day rule), block-at-quota renders the CONVERSION screen. As
+   applied, the count reads live `events` rows by workspace; repointing it to a
+   user-keyed consumption ledger is LOCKED (Architecture Decision 8) and
+   tracked. Display-only anonymity via `curbside_anonymous`
    (**0009**) with RPC name-masking; anonymous posts read **"Local host"**.
 3. **5-step paid wizard** — Basics → When/Where → **Tier** → Details → Review.
    All state parent-owned, so back-nav and tier switches never lose a field.
@@ -476,6 +546,16 @@ confirmation, published events in Workspace.
   `(tabs)` group, so the tab bar returns structurally rather than being
   redrawn. Checkout `router.replace()`s there on success, which also drops the
   finished create stack out from under the Back gesture.
+- **AMENDED 2026-07-30 — the ENTRY FORK keeps the tab bar; only the forms hide
+  it.** The rule is not "the create flow is chrome-less," it is **chrome-less
+  once there is input to lose.** The fork ("What are you posting?") is a
+  BROWSING decision — nothing has been typed, and a host who opened it by
+  mistake should be able to leave the way they arrived rather than hunting for
+  Back. The Curbside mini form and every wizard step hide the tab bar, because
+  there a stray tab tap costs unsaved input. **Implementation delta:**
+  `create/index.tsx` sits in the root Stack today, outside `(tabs)`, so it
+  currently hides the bar — this decision is recorded ahead of the code, and
+  the change is tracked.
 
 ---
 
@@ -563,6 +643,66 @@ confirmation, published events in Workspace.
   and Explore filters). Onboarding shows a distilled subset; Settings exposes the fuller list.
 - **Custom interests: PARKED to Code stage** (taxonomy-pollution/moderation decision).
 
+### 8. Data lifecycle — delete / archive / quota ledger (LOCKED 2026-07-30)
+
+Three verbs now exist for "make this event go away," and they are deliberately
+distinct. **Cancel** (existing refunds lock) = the event was going to happen and
+isn't; it stays VISIBLE, greyed, because attendees need to know. **Archive** =
+the host is tidying their storefront; reversible. **Delete** = the host wants it
+gone; irreversible to them, but not to us.
+
+- **Event deletion is SOFT DELETE (LOCKED).** A `deleted_at` timestamp, never a
+  row removal. A soft-deleted event is hidden from EVERY read surface — feed,
+  search, Saved, Workspace, Organizer Profile, event detail — and **the host
+  cannot recover it from the UI**: to them the action is final, and the copy
+  must not imply otherwise. A trailing job hard-purges at 90 days (Code-stage
+  roadmap, tracked).
+  **Three reasons, all of which need the row to still exist:** dispute
+  resolution (a chargeback or a report arrives after the host has deleted the
+  evidence), a fat-finger recovery window we can honor via support even though
+  the UI offers no undo, and ledger integrity — money and quota records point at
+  event rows, and yanking them out from under a financial trail is how books
+  stop balancing.
+- **Archive is a SEPARATE host-facing verb (LOCKED).** Reversible,
+  host-initiated. An archived event leaves ALL public surfaces — **including the
+  Organizer Profile's past-events list**, because archive means "off my
+  storefront," not "hidden from the feed" — and moves to an Archive section in
+  Workspace. Un-archive puts it back. Mechanically a status flag, **distinct
+  from `deleted_at`**: they are not two settings of one field, and an event can
+  be archived without being deleted or deleted without ever being archived.
+- **The Curbside quota counts an immutable CONSUMPTION LEDGER, not live event
+  rows (LOCKED — this closes an exploit).** Publishing a free Curbside post
+  writes a ledger row; deleting or archiving the event never removes it.
+  **This SUPERSEDES the "computed on demand, never a stored counter" rule
+  everywhere in this document.** That rule was right about time — a rolling
+  window still can't be a stored integer — but wrong about the source: counting
+  live rows means the host deletes the post and the quota comes back.
+  The 0008/0016 descriptions below remain accurate as a record of what was
+  APPLIED; the repoint is tracked as unbuilt work.
+  - **Keyed on `user_id`, NOT `workspace_id`.** Workspaces are free to create
+    and free to delete (the Workspace screen ships exactly that button), so
+    workspace-keying hands out a fresh quota via delete-and-recreate — a second
+    door to the same exploit. The person is the thing that's scarce.
+  - **Minimal data by design:** an identifier and a timestamp, no post content.
+    Retained under **legitimate-interest fraud prevention**, which is what lets
+    it survive an erasure request; on account erasure the identifier may be
+    hashed or otherwise anonymized while the row keeps doing its one job.
+    Retention window goes to the pre-launch legal consult.
+- **Account deletion is REAL ERASURE on request** — the existing delete-cascade
+  spec is unchanged. Personal data is purged; a solo workspace and its events
+  die with the account. Soft-delete is a HOST-facing convenience, not a way to
+  keep a departed user's data: the two are different requests and get different
+  answers. Retention windows (including the ledger's) go to the pre-launch legal
+  consult.
+
+**OPEN — needs a ruling, do not assume either way:** the shipped Workspace
+"Delete event(s) & Workspace" action HARD-deletes its events through the FK
+cascade (0017). That predates this lock and now sits between two of its rules —
+event deletion is soft, but account/workspace teardown is real erasure. Deciding
+it means choosing whether workspace teardown is closer to "the host deleted some
+events" (soft, with the 90-day purge) or "the account is gone" (cascade).
+Tracked in the tracker's Data Lifecycle section; unresolved here on purpose.
+
 ---
 
 ## PROVEN SCREENS (Design-verified, ready for Claude Code handoff)
@@ -574,7 +714,8 @@ confirmation, published events in Workspace.
 | **Event detail** | ✅ Proven | Info card = full-width ticket (stripe/perforation/countdown). Category pills → outlined badges. RSVP "stamp" interaction (stripe turns green, Going chip + count, STAMPED mark animates in, CTA → confirmed). 1–3 photo gallery (swipeable hero w/ peek, gradient-pill dots, "1/3" counter, thumbnail strip w/ gold ring). "I'm Going" gradient primary; "Share" secondary outline. |
 | **Saved page** | ✅ Proven · **PAST SECTION ADDED 2026-07-29** | Ticket stubs grouped Tonight / This Weekend / Coming Up (section renders only if populated). Compact EventStub variant. Green "Going" / muted "Saved" chips + RSVP count. **Ended events now collapse into a "Past · N" section at the bottom** — see the Saved grouping lock below. |
 | **Logged-out "Me"** | ✅ Proven | Signup invitation (not empty shell). Lists what an account unlocks. Browse + share stay open to guests. |
-| **Workspace slot** (Me hub) | ✅ Proven · **WIRED 2026-07-23 · REVISED 2026-07-29** | Three states off the real 0015 read path (`me.tsx`): non-host (`useMyWorkspace()` → null) = dashed "+ Create your first event" invitation (**navigates only — no workspace is created**, see the publish-time lock above); host = solid stats card — workspace name + **2 tiles (Active / Upcoming)** from `useWorkspaceStats()`, no gradient, taps `/workspace`; skeleton holds while the membership read resolves (never flashes the invitation, and its silhouette matches the 2-tile card so the slot doesn't reflow). **RSVPs / Saves were REMOVED from this card** — they are per-event numbers, and an aggregate "saves across everything" answered a question no host asks; they move to per-event display on the Workspace screen, zero-suppressed. The RPC still returns all four. At 2+ workspaces the slot shows ONE card — the most recently created (picker still DORMANT). `app/workspace.tsx` is a **STUB** (header + name only). |
+| **Workspace slot** (Me hub) | ✅ Proven · **WIRED 2026-07-23 · REVISED 2026-07-29** | Three states off the real 0015 read path (`me.tsx`): non-host (`useMyWorkspace()` → null) = dashed "+ Create your first event" invitation (**navigates only — no workspace is created**, see the publish-time lock above); host = solid stats card — workspace name + **2 tiles (Active / Upcoming)** from `useWorkspaceStats()`, no gradient, taps `/workspace`; skeleton holds while the membership read resolves (never flashes the invitation, and its silhouette matches the 2-tile card so the slot doesn't reflow). **RSVPs / Saves were REMOVED from this card** — they are per-event numbers, and an aggregate "saves across everything" answered a question no host asks; they move to per-event display on the Workspace screen, zero-suppressed. The RPC still returns all four. At 2+ workspaces the slot shows ONE card — the most recently created (picker still DORMANT). |
+| **Workspace screen** (host) | ✅ **BUILT 2026-07-30** | `app/workspace.tsx` — header · ACTIVE/UPCOMING tiles · "+ New event" · published listings with Past collapse and per-event RSVP/save chips · destructive delete row. Migration 0017. See the lock below. |
 | **Create Event** | ✅ **ARC COMPLETE (2026-07-23)** | Mobile-first **5-step** wizard (Basics → When/Where → **Tier** → Details → Review → mock Stripe checkout). Live collapsible EventStub preview + "Preview full listing" through the real Event Detail. Transactional per-event duration-band pricing (NO subscription), publish fee stamped server-side by 0010. Plus site map + vendor pins + directory (0013). See "Paid wizard" locks + the arc summary below. |
 
 ### Create Event — pricing spine (LOCKED)
@@ -639,8 +780,11 @@ Create Event's tier step (per-day model is DEAD everywhere):
   **up to 3 consecutive days**.
   **1 free post per rolling 100 days** (CHANGED 2026-07-29, migration 0016 — supersedes the
   original 3-single-day-posts rule; casual neighbors free, every-weekend posters graduate to
-  Standard). Computed on demand, never a stored counter; enforced by two triggers (quota on
-  INSERT, span on INSERT OR UPDATE) — full rules in "Curbside free-tier rules" above.
+  Standard). The rolling window is computed on demand, never a stored integer, but the thing
+  it counts is an immutable **consumption ledger keyed on `user_id`** (LOCKED 2026-07-30,
+  Architecture Decision 8) — counting live event rows let a host delete the post, or the whole
+  workspace, and get the free lane back. Enforced by two triggers (quota on INSERT, span on
+  INSERT OR UPDATE) — full rules in "Curbside free-tier rules" above.
   $1 gate held in reserve if spam materializes (free→$1 is an easy story; don't launch with it).
 - **Curbside category rules:** auto-tagged "Curbside" (mini form has NO category picker),
   Curbside category is FIRST in every category lineup (new-term exposure), EXCLUDED from the
@@ -692,8 +836,14 @@ Create Event's tier step (per-day model is DEAD everywhere):
    suggestion box (free-text) under them to collect feedback on this growth area.
 8. **saves + rsvps = two independent tables** (an event can be saved AND going
    at once). Pattern rule that decided it: STORE what only transactions change
-   (rsvp_count via trigger), COMPUTE what time changes (curbside quota =
-   trailing-100-day count). See SCHEMA_PLAN §11.
+   (rsvp_count via trigger), COMPUTE what time changes (the curbside quota's
+   trailing-100-day WINDOW). See SCHEMA_PLAN §11.
+   **AMENDED 2026-07-30 — the rule needed a third clause: never compute over
+   MUTABLE rows.** The quota's window is still computed, but it now counts an
+   immutable consumption ledger rather than live `events` rows, because rows a
+   host can delete make any count over them a refund button. Time decides
+   whether you store or compute; mutability decides what you're allowed to
+   compute over. Full ruling in Architecture Decision 8.
 9. **Extensions install `with schema extensions` — never public.** PostGIS in
    public exposed spatial_ref_sys read-write through the Data API
    (extension-owned: can't RLS/revoke it). Fixed by relocation in 0003;
@@ -731,7 +881,24 @@ stats), 0016 curbside rule change (**1 free post per rolling 100 days, span
 `starts_at`/`ends_at` sit in 0011's UPDATE grant; 6/6 behavioral —
 first-post allowed, second rejected `curbside_quota_exhausted`, widest legal
 71:59:59 span allowed, 4-day rejected `curbside_span_too_long`,
-insert-then-widen-via-UPDATE rejected, paid-tier 14-day span still allowed).
+insert-then-widen-via-UPDATE rejected, paid-tier 14-day span still allowed),
+0017 workspace host screen (**APPLIED 2026-07-30**; two `app`-definer /
+`public`-invoker pairs and nothing else — no new tables, columns or counters).
+`workspace_event_stats(workspace_id)` returns one row per PUBLISHED event with
+`rsvp_count` + `save_count`: a SIBLING of `workspace_stats` rather than an
+extension of it, because that function returns exactly ONE aggregate row and the
+dormant picker depends on that shape. RSVPs come from the existing
+`events.rsvp_count` counter so the host's chip is byte-identical to the public
+card's; saves are counted server-side because `saves` is own-rows RLS and no
+client can total them. `delete_workspace(workspace_id)` is OWNER-only and
+RAISES `not_an_owner` / 42501 for anyone else — unlike the read paths, a
+destructive call that silently no-ops is the wrong shape. It deletes ONE row;
+the existing FK cascade (workspaces → memberships/events → event_categories /
+saves / rsvps / event_vendors) is what actually removes the events from
+everyone's Saved lists, and it returns the event count (all statuses, drafts
+included). Verified anon-denied 42501 on both, matching the `workspace_stats`
+baseline. **Flagged for 0004_payments:** once real orders exist, a workspace
+with settled payments should be soft-deleted or blocked rather than cascaded.
 **Migrations apply from files via `npx supabase db push --linked`, never
 pasted** — remote history verified matching the repo 2026-07-29, all 16 rows
 `local == remote` (0013 had drifted from a dashboard paste and was repaired
