@@ -290,14 +290,16 @@ export default function EventDetailView({
                 </View>
                 {/* Curbside attribution lives IN the ticket — minimized
                     display, full internal accountability (ruling 2026-07-15).
-                    Paid tiers keep the ORGANIZER block below instead. */}
-                {event.tier_id === 'curbside' && (
+                    Paid tiers keep the ORGANIZER block below instead.
+                    ANONYMOUS curbside posts are the exception: they get the
+                    standard Organizer section instead of a ticket row, because
+                    the old row asserted the poster was "verified" and Sparked
+                    verifies nobody. */}
+                {event.tier_id === 'curbside' && event.organizer_name && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
                     <Ionicons name="person-circle-outline" size={15} color={theme.colors.textFaint} />
                     <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 12, color: theme.colors.textFaint }}>
-                      {event.organizer_name
-                        ? `Posted by ${event.organizer_name.split(/\s+/)[0]} · community member`
-                        : 'Posted by a verified neighbor'}
+                      {`Posted by ${event.organizer_name.split(/\s+/)[0]} · community member`}
                     </Text>
                   </View>
                 )}
@@ -503,6 +505,38 @@ export default function EventDetailView({
                   </View>
                   <Text style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 15, letterSpacing: -0.15, color: theme.colors.text }}>
                     {event.organizer_name}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* ANONYMOUS curbside — the same Organizer anatomy, reading
+                "Local host". Says only what's true: someone local posted this.
+                No verification is claimed because none is performed.
+                Deliberately NOT tappable and NOT gradient — there's no profile
+                behind it, and gradient is reserved for actionable elements. */}
+            {event.tier_id === 'curbside' && !event.organizer_name && (
+              <View style={{ borderTopWidth: 1, borderTopColor: theme.colors.divider, paddingTop: 18, marginBottom: 26 }}>
+                <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: theme.fontSizes.eyebrow, fontWeight: '900', letterSpacing: 2.2, textTransform: 'uppercase', color: brand.ignitionGold }}>
+                  Organizer
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12 }}>
+                  <View
+                    style={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: 19,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: theme.colors.iconChipBg,
+                      borderWidth: 1,
+                      borderColor: theme.colors.cardBorder,
+                    }}
+                  >
+                    <Ionicons name="person-outline" size={17} color={theme.colors.textMuted} />
+                  </View>
+                  <Text style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 15, letterSpacing: -0.15, color: theme.colors.text }}>
+                    Local host
                   </Text>
                 </View>
               </View>

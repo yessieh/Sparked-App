@@ -374,8 +374,10 @@ export default function EventStub({
           <Text numberOfLines={1} style={[styles.metaLine, { color: theme.colors.textMuted, fontFamily: theme.fonts.bodyMedium }]}>
             {eventDateLabel(event.starts_at)} · {eventTimeLabel(event.starts_at, event.ends_at)}
           </Text>
+          {/* Last-resort label for an anonymous curbside post with no venue.
+              "Local host", never "verified" — Sparked verifies nobody. */}
           <Text numberOfLines={1} style={[styles.metaLine, { color: theme.colors.textMuted, fontFamily: theme.fonts.bodyMedium }]}>
-            {event.venue_name ?? event.organizer_name ?? 'Verified neighbor'}
+            {event.venue_name ?? event.organizer_name ?? 'Local host'}
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 10 }}>
             <StatusChip going={going} saved={saved} />
@@ -480,7 +482,7 @@ export default function EventStub({
               {eventDateLabel(event.starts_at)} · {eventTimeLabel(event.starts_at, event.ends_at)}
             </Text>
             <Text numberOfLines={1} style={[styles.metaLine, { color: theme.colors.textMuted, fontFamily: theme.fonts.bodyMedium }]}>
-              {event.venue_name ?? event.organizer_name ?? 'Verified neighbor'}
+              {event.venue_name ?? event.organizer_name ?? 'Local host'}
               {typeof event.distance_miles === 'number' ? ` · ${event.distance_miles.toFixed(1)} mi` : ''}
             </Text>
             {/* price + quiet social proof — "N going" only when N > 0 */}
