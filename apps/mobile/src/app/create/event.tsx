@@ -67,7 +67,7 @@ import {
   priceCents,
 } from '../../lib/pricing';
 import { supabase } from '../../lib/supabase';
-import { getOrCreateWorkspace } from '../../lib/workspace';
+import { getOrCreateWorkspace, getOwnWorkspaceId } from '../../lib/workspace';
 import { brand, breakpoints, useTheme } from '../../theme';
 import { categoryColor } from '../../theme/categoryColors';
 import { SubHeader } from './index';
@@ -905,6 +905,13 @@ export default function EventWizard() {
 
   // Creating events is account territory (architecture lock #2: browsing is
   // anonymous, creating is not).
+  //
+  // READ-ONLY setup: opening the wizard no longer creates a workspace — that
+  // happens in toCheckout(), immediately before the draft insert. The preview's
+  // organizer name survives the change because a workspace is NAMED from the
+  // profile display name when it's created, so the string a not-yet-host sees
+  // in the preview is the same string their workspace will carry. Existing
+  // hosts still get their real (possibly renamed) workspace name.
   useEffect(() => {
     if (loading) return;
     if (!session) {
@@ -919,10 +926,14 @@ export default function EventWizard() {
           .eq('id', session.user.id)
           .single();
         const name = profile?.display_name ?? session.user.email ?? 'My workspace';
-        const ws = await getOrCreateWorkspace(session.user.id, name);
+        const ws = await getOwnWorkspaceId();
         setWorkspaceId(ws);
-        const { data: wsRow } = await supabase.from('workspaces').select('name').eq('id', ws).single();
-        setWorkspaceName(wsRow?.name ?? name);
+        if (ws) {
+          const { data: wsRow } = await supabase.from('workspaces').select('name').eq('id', ws).single();
+          setWorkspaceName(wsRow?.name ?? name);
+        } else {
+          setWorkspaceName(name);
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       }
@@ -1067,11 +1078,22 @@ export default function EventWizard() {
    * the 0010 guard trigger would reject us if we tried.
    */
   const toCheckout = useCallback(async () => {
-    if (!workspaceId || !canPublish) return;
+    if (!session || !canPublish) return;
     setBusy(true);
     setError(null);
     try {
       const point = await geocode(address.trim());
+      // Become a host HERE, not at wizard entry — the draft row below carries
+      // workspace_id, which is set once at insert and immutable afterwards
+      // (0011 withholds it from the UPDATE grant), so this is the last moment
+      // it can be decided. Sequential with the insert, same action. Existing
+      // hosts short-circuit to a fetch inside getOrCreateWorkspace. On
+      // re-entry (draftId set) the row already has its workspace and the
+      // fetched workspaceId is reused.
+      const ws =
+        workspaceId ??
+        (await getOrCreateWorkspace(session.user.id, workspaceName || session.user.email || 'My workspace'));
+      setWorkspaceId(ws);
       // workspace_id is set ONCE at insert and is immutable: an event can never
       // change workspaces, so 0011 deliberately withholds it from
       // authenticated's UPDATE column grant. Resending it on a re-entry
@@ -1099,7 +1121,7 @@ export default function EventWizard() {
       } else {
         const { data, error: insertError } = await supabase
           .from('events')
-          .insert({ workspace_id: workspaceId, ...editable })
+          .insert({ workspace_id: ws, ...editable })
           .select('id')
           .single();
         if (insertError) throw new Error(insertError.message);
@@ -1136,7 +1158,7 @@ export default function EventWizard() {
     } finally {
       setBusy(false);
     }
-  }, [workspaceId, canPublish, address, title, desc, tier, startsAt, endsAt, venueName, feeCents, draftId, cats, vendors]);
+  }, [session, workspaceId, workspaceName, canPublish, address, title, desc, tier, startsAt, endsAt, venueName, feeCents, draftId, cats, vendors]);
 
   const next = () => {
     if (step < REVIEW_STEP) setStep((s) => s + 1);
