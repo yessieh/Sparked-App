@@ -136,6 +136,69 @@ Constant across ALL variants:
 - **Card tap-through → Event Detail: CONFIRMED WANTED from both Explore and
   Saved** — lands with the Event Detail stage, not before.
 
+### ME HUB LAYOUT (BUILT 2026-07-29)
+
+Signed-in Me, top to bottom — **logo → profile header → workspace slot →
+Saved preview card → five settings rows → Sign out.** Signed-out Me is
+untouched (still the signup invitation).
+
+- **There is NO settings gear, anywhere. The rows ARE settings.** Deliberate
+  divergence from the frozen reference, which routes them through a separate
+  `SettingsScreen` behind a gear — one less hop to a five-row list. Rows, in
+  locked order: Interests & blocks · Notifications · Privacy · Appearance ·
+  Help & feedback. Each is label + chevron on card/surface tokens, no
+  gradient, no icon chip (the reference's `LinkRow` is transparent with an
+  icon chip and dividers — also deliberately not followed). All five open
+  STUBS (title + "Coming soon") at `settings/*`; the real screens are a later
+  arc.
+- **Workspace slot** — three states, 2 tiles. See the proven-screens table row.
+- **Saved preview card** — the workspace card's anatomy applied to the
+  consumer side: bookmark chip + "SAVED" eyebrow + chevron, whole card taps to
+  the Saved tab. Body is a ticket fragment — **title | perforation |
+  Montserrat countdown** — through the shared `Perforation` and
+  `eventCountdown`, so it cannot drift from the EventStub.
+  - **Shows the next upcoming-OR-LIVE saved event**, from the union of
+    saved/going. "Next" = soonest event that hasn't ENDED, so a multi-day
+    festival already under way reads NOW/LIVE rather than being skipped for
+    something further out. Matches how the Saved tab's Past split treats live
+    events.
+  - **Empty state forks its destinations** (the copy promised Explore while
+    the card delivered Saved): the header still taps to Saved, and the body
+    becomes its own link, "Explore events near you →", to Explore. Split
+    STRUCTURALLY — the container is a plain View holding two SIBLING
+    Pressables, because a nested Pressable behaves differently per platform
+    (RN's responder system lets the inner win; on web the DOM click bubbles
+    and BOTH fire).
+  - Loading holds a muted body — never flashes "nothing coming up" at someone
+    who has something coming up. This required a `loaded` flag on the
+    engagement provider: an empty saved-set before the first read resolves is
+    indistinguishable from "nothing saved".
+
+### SAVED GROUPING — PAST SECTION (LOCKED 2026-07-29)
+
+- **Ended events collapse into a "Past · N" section at the bottom**, chevron
+  to expand, **collapse state session-only** (in-memory, nothing persisted —
+  reopening Saved starts collapsed). Rows are the same compact EventStub in
+  their existing ENDED state, sorted **most-recent-first**. No Going-first
+  partition inside Past — that rule surfaces commitments you still have to
+  keep, and a finished event has none.
+- **The bug it fixes:** `savedBucket` reads `starts_at` against two
+  forward-looking windows only, so every past event fell through its default
+  `return 'coming'` — a card stamped ENDED sitting under a header promising it
+  hadn't happened yet. Measured on real data before the fix: **7 of the 10
+  events in "Coming Up" had already ended.**
+- **"Ended" derives from `eventCountdown`, the same util the card's chip
+  renders from** (locked client-side-time rule), so the section split and the
+  chip can never disagree. This also gets live events right for free: started
+  but not ended reads LIVE, **not** past, and stays in its upcoming bucket.
+- **Subtitle counts UPCOMING only**; Past carries its own count. This forced a
+  split of the old single `unionTotal`, which was also gating the filter pills
+  and the empty state — without it, a user whose events had all ended would
+  lose their pills and be told to go bookmark something while their history
+  sat right below.
+
+
+
 ---
 
 ## CREATE EVENT — CURBSIDE + SHARED FORM PATTERNS (LOCKED 2026-07-15)
@@ -155,23 +218,67 @@ Constant across ALL variants:
   gradient-selected day, min=today) is the parallel shared date pattern.
   Both live in `components/pickers.tsx` for reuse.
 - **Curbside attribution — minimized display, full internal accountability.**
-  Curbside events show NO ORGANIZER section; attribution folds into the
+  NAMED curbside posts show NO ORGANIZER section; attribution folds into the
   ticket info card as "Posted by {first name} · community member" (first
   name = first token of the profile display name). The Curbside form carries
-  a "Post without my name" toggle: ON → public surfaces read "Posted by a
-  verified neighbor" and cards fall back to "Verified neighbor". DISPLAY
-  ONLY — the row stays fully attributed to the workspace/account internally;
-  quota, moderation, and reports NEVER change. Implemented via
-  `events.curbside_anonymous` (0009) with server-side name-masking in the
-  feed + detail RPCs (an anonymized name never leaves the DB). Accepted
-  limit: the workspace_id→workspaces join is still API-visible; true
-  column-level privacy is later hardening.
+  a "Post without my name" toggle. DISPLAY ONLY — the row stays fully
+  attributed to the workspace/account internally; quota, moderation, and
+  reports NEVER change. Implemented via `events.curbside_anonymous` (0009)
+  with server-side name-masking in the feed + detail RPCs (an anonymized name
+  never leaves the DB). Accepted limit: the workspace_id→workspaces join is
+  still API-visible; true column-level privacy is later hardening.
+- **Anonymous Curbside identity = "Local host" — DECIDED 2026-07-29,
+  supersedes "verified neighbor" entirely.** An anonymous post renders the
+  STANDARD Organizer section (eyebrow + avatar chip + name) reading
+  **"Local host"**, with a neutral non-gradient chip and NO tap-through —
+  there is no profile behind it. Cards fall back to "Local host" on the venue
+  line for the same reason.
+  **Why the old copy had to go: we verify nothing.** "Verified neighbor"
+  asserted a check Sparked does not perform, on the app's most-seen surface.
+  That is a consumer-representation risk that sits OUTSIDE Section 230 — 230
+  shields us from liability for what users post, not for claims *we* make
+  about them in our own UI. The toggle's helper copy states the trade plainly:
+  "Your post will show 'Local host' instead of your name. It stays tied to
+  your account — you keep full access to this listing."
+  **Standing rule: no "verified" language anywhere in the product** until
+  something is actually verified.
 - **Paid events keep the full ORGANIZER block** (name, avatar, tap-through
   when the Organizer Profile stage lands) — the minimized attribution model
   is Curbside-ONLY.
 - **Curbside address geocoding = Nominatim** (OpenStreetMap, no key, plain
   fetch) for dev/MVP. Swap to a paid geocoder at scale — tracked. Shared by
   both create flows via `lib/geocode.ts` — ONE geocode interface.
+- **Curbside free-tier rules — CHANGED 2026-07-29 (migration 0016).
+  ONE free post per rolling 100-day window, spanning up to THREE consecutive
+  days.** Supersedes "3 free single-day posts per 100 days" everywhere in this
+  document. Still COMPUTED on demand from
+  `created_at > now() - interval '100 days'` — never a stored counter (the
+  locked principle: store what only transactions change, compute what time
+  changes). At 1, the mini form renders the CONVERSION screen ("You've used
+  your free post — Standard is $5"), an invitation, not an error.
+  **Two triggers, deliberately not one:**
+  - `events_curbside_quota` — BEFORE **INSERT** only. On UPDATE the row being
+    edited is itself inside the window, so a combined trigger would count it
+    and reject every edit a host makes to their own post.
+  - `events_curbside_span` — BEFORE **INSERT OR UPDATE**, because `starts_at`
+    and `ends_at` both sit in the authenticated UPDATE column grant (0011).
+    Insert-only would be trivially bypassed: post one compliant day, then
+    widen it to a fortnight.
+  The mini form's date field is now Start + optional End, the End picker
+  capped at start + 2 days (`max` prop on the shared `DateField`), so the
+  picker cannot offer a span the server rejects. Copy: "Up to 3 consecutive
+  days — perfect for a weekend sale."
+- **ACCEPTED at MVP: the span cap is a 72-HOUR DURATION, not a calendar-day
+  count.** A trigger has no client timezone with which to bucket `timestamptz`
+  into local dates — the same limitation that made `publish_paid_event` take
+  an explicit `tz` argument for its duration band; the server's own zone would
+  be wrong for the host. Consequence, stated plainly: a hand-crafted request
+  could touch FOUR calendar days while staying under 72 hours (e.g. Fri 23:00
+  → Mon 22:00). **The mini form cannot produce this** — its widest legal post
+  is 00:00 day 1 → 23:59:59 day 3 = 71:59:59. The cap's purpose is to keep
+  week-long listings off the free lane, and a hard 72-hour ceiling does that.
+  Fix if it ever matters: pass the client tz through the insert path (RPC
+  instead of a bare insert) and bucket local dates there.
 
 ### Paid wizard (tier + checkout + publish built 2026-07-16; LOCKED rulings)
 
@@ -234,10 +341,11 @@ The whole creation path is built and walked end to end. What exists, in the
 order a host meets it:
 
 1. **Entry fork** — "What are you posting?" → Curbside (free) or Event (paid).
-2. **Curbside mini-form + quota** — auto-tagged, single-day, 3 free posts per
-   rolling 100 days enforced server-side (migration **0008**, computed never
-   counted), block-at-0 renders the CONVERSION screen. Display-only anonymity
-   via `curbside_anonymous` (**0009**) with RPC name-masking.
+2. **Curbside mini-form + quota** — auto-tagged; **1 free post per rolling
+   100 days, up to 3 consecutive days** (**0016**, superseding 0008's
+   3-single-day rule; computed never counted), block-at-quota renders the
+   CONVERSION screen. Display-only anonymity via `curbside_anonymous`
+   (**0009**) with RPC name-masking; anonymous posts read **"Local host"**.
 3. **5-step paid wizard** — Basics → When/Where → **Tier** → Details → Review.
    All state parent-owned, so back-nav and tier switches never lose a field.
 4. **Tier + band pricing** — ONE clean total per tier for the draft's band,
@@ -256,6 +364,43 @@ order a host meets it:
 **Still open for this area (all tracked, none blocking):** real Stripe, real
 image uploads, WYSIWYG description editor, wizard exit affordance, geocode
 confirmation, published events in Workspace.
+
+### Workspace creation happens at PUBLISH, not at entry (LOCKED 2026-07-29)
+
+- **Becoming a host is earned by publishing.** Opening the create flow creates
+  nothing. Previously `getOrCreateWorkspace()` fired from three places —
+  including the Me hub invitation tap, which *discarded the returned id
+  entirely* — so anyone who tapped "Create your first event" and backed out
+  owned an empty workspace and stared at a 0/0 stats card forever.
+- **The two publish-time call sites:**
+  - **Curbside** — inside `post()`, immediately before the event insert.
+  - **Paid wizard** — top of `toCheckout()`, the Review CTA
+    "Continue to payment", immediately before the draft insert.
+  Both are `workspaceId ?? await getOrCreateWorkspace(...)`, sequential with
+  the insert in the same action. Existing hosts are unaffected:
+  `getOrCreateWorkspace` fetches first and returns early, so it is a no-op
+  beyond one read.
+- **Why the wizard lands at the Review CTA and not at checkout success:**
+  the event row is written at `toCheckout()` as `status='pending_payment'`;
+  the checkout screen only calls `publish_paid_event` on a row that already
+  exists. `workspace_id` is set once at insert and is immutable (0011
+  withholds it from the UPDATE grant), so this is the LAST moment it can be
+  decided without restructuring the publish pipeline.
+- **Residual, accepted:** a host who completes all five steps, taps
+  "Continue to payment", then abandons checkout still becomes a host with a
+  0/0 card — `workspace_stats` counts only `status='published'`, so the
+  `pending_payment` draft doesn't register. Far narrower than the old
+  entry-time leak (it costs a full wizard of intent), and closing it needs the
+  deferred-insert rework tracked separately.
+- **Nothing mid-flow needs the workspace to exist**, verified when this moved:
+  the Curbside quota needs the COUNT (no workspace ⇒ provably zero posts), and
+  the wizard preview needs the NAME (a workspace is named from the profile
+  display name at creation, so a not-yet-host sees the identical string). Both
+  entry-time reads are now fetch-only `getOwnWorkspaceId()`.
+- **Failure state, accepted at MVP:** if the event insert fails after the
+  workspace is created, the user owns an empty workspace and sees the 0/0
+  card. Nothing rolls back; their next publish reuses that same workspace. No
+  cleanup built.
 
 ### Paid wizard (structure built 2026-07-16; LOCKED rulings)
 
@@ -398,7 +543,7 @@ confirmation, published events in Workspace.
   Fields greyed/non-interactive when the row toggle is OFF.
 - **Fit-gate:** Push + Nearby auto-disable and LOCK until ≥1 interest is selected. Locked state
   is visually DISTINCT from user-toggled-off and shows a tappable "Add interests to enable →"
-  deep-link to Settings → Interests & blocks. Weekly digest is NOT gated — it's the fallback for
+  deep-link to the Me hub's Interests & blocks row. Weekly digest is NOT gated — it's the fallback for
   no-interest users (area's top events, weekend-weighted).
 - **Quiet hours:** default 9PM–9AM, user-editable. Reached via a subordinate "Quiet hours" link
   under Push (not its own row); link stays visible even when Push is fit-gate-locked.
@@ -407,8 +552,10 @@ confirmation, published events in Workspace.
   prompt for temporary/permanent override.
 
 ### 7. Interests & blocks (Settings home)
-- **Persistent home:** first row of Settings → Account. Previously onboarding-only; this screen
-  is the source of truth (real storage = Code stage).
+- **Persistent home:** the FIRST of the five settings rows on the Me hub (production has no
+  Settings screen and no gear — see "ME HUB LAYOUT"; the reference's "Settings → Account"
+  grouping does not exist). Previously onboarding-only; this screen is the source of truth
+  (real storage = Code stage; the route is a stub as of 2026-07-29).
 - **Three mutually-exclusive buckets:** I'm into / Undecided / Not for me — a category lives in
   exactly ONE. Tapping moves it live; counts update.
 - **Peek + expand caps:** I'm into 5 / Undecided 6 / Not for me 3; "Show more (N)" only past cap.
@@ -425,9 +572,9 @@ confirmation, published events in Workspace.
 | **Filter finder** (Explore) | ✅ Proven | Inline expanding field; overlays dimmed feed (NOT full-screen). Matches filters only (interests/price/when/distance) via a **filter registry** array — new filters auto-searchable. Exact substring-on-label match (no fuzzy/keyword). Live "N nearby" counts computed from real events. Contiguous-only highlight. |
 | **Radius overflow** | ✅ Proven | SEARCH results only — feed stays strict in-radius. Triggers when in-radius matches < 3. Expansion cap `min(radius×1.5, radius+15mi)`. Overflow cards stepped-back, show BOTH "+X mi past radius" AND true total distance. Respects active filters. Finder counts stay strictly in-radius. **Demo distances are a hardcoded `mi` field — production MUST compute from real geography (PostGIS).** |
 | **Event detail** | ✅ Proven | Info card = full-width ticket (stripe/perforation/countdown). Category pills → outlined badges. RSVP "stamp" interaction (stripe turns green, Going chip + count, STAMPED mark animates in, CTA → confirmed). 1–3 photo gallery (swipeable hero w/ peek, gradient-pill dots, "1/3" counter, thumbnail strip w/ gold ring). "I'm Going" gradient primary; "Share" secondary outline. |
-| **Saved page** | ✅ Proven | Ticket stubs grouped Tonight / This Weekend / Coming Up (section renders only if populated). Compact EventStub variant. Green "Going" / muted "Saved" chips + RSVP count. |
+| **Saved page** | ✅ Proven · **PAST SECTION ADDED 2026-07-29** | Ticket stubs grouped Tonight / This Weekend / Coming Up (section renders only if populated). Compact EventStub variant. Green "Going" / muted "Saved" chips + RSVP count. **Ended events now collapse into a "Past · N" section at the bottom** — see the Saved grouping lock below. |
 | **Logged-out "Me"** | ✅ Proven | Signup invitation (not empty shell). Lists what an account unlocks. Browse + share stay open to guests. |
-| **Workspace slot** (Me hub) | ✅ Proven · **WIRED 2026-07-23** | Two states, now off the real 0015 read path (`me.tsx`): non-host (`useMyWorkspace()` → null) = dashed "+ Create your first event" invitation (taps into create flow, workspace created silently); host = solid stats card — workspace name + 4 tiles (Active / Upcoming / RSVPs / Saves) from `useWorkspaceStats()`, no gradient, taps `/workspace`. A skeleton holds while the membership read resolves (never flashes the invitation). At 2+ workspaces the slot shows ONE card — the most recently created (picker still DORMANT, no multi-workspace UI). `app/workspace.tsx` is a **STUB** (header + name only) — the real Workspace screen is the next prompt. |
+| **Workspace slot** (Me hub) | ✅ Proven · **WIRED 2026-07-23 · REVISED 2026-07-29** | Three states off the real 0015 read path (`me.tsx`): non-host (`useMyWorkspace()` → null) = dashed "+ Create your first event" invitation (**navigates only — no workspace is created**, see the publish-time lock above); host = solid stats card — workspace name + **2 tiles (Active / Upcoming)** from `useWorkspaceStats()`, no gradient, taps `/workspace`; skeleton holds while the membership read resolves (never flashes the invitation, and its silhouette matches the 2-tile card so the slot doesn't reflow). **RSVPs / Saves were REMOVED from this card** — they are per-event numbers, and an aggregate "saves across everything" answered a question no host asks; they move to per-event display on the Workspace screen, zero-suppressed. The RPC still returns all four. At 2+ workspaces the slot shows ONE card — the most recently created (picker still DORMANT). `app/workspace.tsx` is a **STUB** (header + name only). |
 | **Create Event** | ✅ **ARC COMPLETE (2026-07-23)** | Mobile-first **5-step** wizard (Basics → When/Where → **Tier** → Details → Review → mock Stripe checkout). Live collapsible EventStub preview + "Preview full listing" through the real Event Detail. Transactional per-event duration-band pricing (NO subscription), publish fee stamped server-side by 0010. Plus site map + vendor pins + directory (0013). See "Paid wizard" locks + the arc summary below. |
 
 ### Create Event — pricing spine (LOCKED)
@@ -483,14 +630,17 @@ Create Event's tier step (per-day model is DEAD everywhere):
 
 | Tier | Single-day | Multi (2–4) | Extended (5+) |
 |---|---|---|---|
-| **Curbside** (free) | Free | — (single-day only) | — |
+| **Curbside** (free) | Free | — (up to 3 consecutive days, one span) | — |
 | **Standard** | $5 | $12 | $20 |
 | **Plus** | $15 | $29 | $49 |
 
 - **Curbside** (rebranded from "Pop-up" tier — the CONSUMER CATEGORY "Pop-Ups" still exists
-  separately for businesses): community lane. 1 photo, description, address, single-day.
-  **3 free posts per rolling 100 days** (credit quota — casual neighbors free, every-weekend
-  posters graduate to Standard). Quota display-only in prototype; ledger = Code stage.
+  separately for businesses): community lane. 1 photo, description, address,
+  **up to 3 consecutive days**.
+  **1 free post per rolling 100 days** (CHANGED 2026-07-29, migration 0016 — supersedes the
+  original 3-single-day-posts rule; casual neighbors free, every-weekend posters graduate to
+  Standard). Computed on demand, never a stored counter; enforced by two triggers (quota on
+  INSERT, span on INSERT OR UPDATE) — full rules in "Curbside free-tier rules" above.
   $1 gate held in reserve if spam materializes (free→$1 is an easy story; don't launch with it).
 - **Curbside category rules:** auto-tagged "Curbside" (mini form has NO category picker),
   Curbside category is FIRST in every category lineup (new-term exposure), EXCLUDED from the
@@ -574,10 +724,18 @@ argument NAMES are load-bearing for PostgREST), 0015 workspace read path
 `public`-invoker — plus `workspaces.created_by` column-privacy lockdown closing
 an organizer→auth-user-id leak on the public Organizer-Profile grant, plus a
 `saves(event_id)` index; consumed by `lib/workspace.ts` `useMyWorkspace()` /
-`useWorkspaceStats()`, UI is a later prompt). **Migrations apply from files
-via `npx supabase db push --linked`, never pasted** — remote history verified
-matching the repo 2026-07-23 (0013 had drifted from a dashboard paste and was
-repaired with `migration repair --status applied`). Advisor baseline steady at
+`useWorkspaceStats()` — **UI SHIPPED 2026-07-29**, Me hub reads 2 of the 4
+stats), 0016 curbside rule change (**1 free post per rolling 100 days, span
+≤ 3 days**: `app.enforce_curbside_quota` retargeted 3 → 1, new
+`app.enforce_curbside_span` on BEFORE INSERT **OR UPDATE** because
+`starts_at`/`ends_at` sit in 0011's UPDATE grant; 6/6 behavioral —
+first-post allowed, second rejected `curbside_quota_exhausted`, widest legal
+71:59:59 span allowed, 4-day rejected `curbside_span_too_long`,
+insert-then-widen-via-UPDATE rejected, paid-tier 14-day span still allowed).
+**Migrations apply from files via `npx supabase db push --linked`, never
+pasted** — remote history verified matching the repo 2026-07-29, all 16 rows
+`local == remote` (0013 had drifted from a dashboard paste and was repaired
+with `migration repair --status applied`). Advisor baseline steady at
 0 errors / 3 accepted warnings (SCHEMA_PLAN §10.7 — two rls_auto_enable
 platform warnings + leaked-password protection, Pro-gated on the Free plan;
 DECIDED 2026-07-09: enable with the launch-prep Pro upgrade).

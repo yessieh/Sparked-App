@@ -89,6 +89,33 @@ and verified in Cursor/Claude Code.
 - [ ] **Share button** (device share sheet).
 - [ ] **Gallery swipe + social links rendering** on Review.
 - [ ] **Published events appear in Workspace** (real write + read-back).
+      Per-event RSVPs / Saves display lands here too, zero-suppressed — the
+      two aggregate tiles were removed from the Me hub card on 2026-07-29
+      because they answered a question no host asks. `workspace_stats` (0015)
+      already returns all four numbers.
+- [x] **Workspace read path + stats RPC — DONE (0015, 2026-07-23).**
+      Member-scoped `workspace_stats` (4 computed numbers,
+      `app`-definer/`public`-invoker), `workspaces.created_by` column-privacy
+      lockdown (closed an organizer→auth-user-id leak on the public Organizer
+      Profile grant), `saves(event_id)` index. Consumed by `useMyWorkspace()` /
+      `useWorkspaceStats()`.
+- [x] **Workspace creation moved to PUBLISH time — DONE 2026-07-29.**
+      No longer created on create-flow entry. Curbside creates inside `post()`;
+      the paid wizard creates at the top of `toCheckout()` (the Review CTA
+      "Continue to payment"). The Me hub invitation now navigates only — it
+      previously created a workspace and threw the id away, so tap-and-abandon
+      users became hosts with an empty 0/0 card.
+- [ ] **Paid wizard writes the event row at the REVIEW CTA, not at checkout
+      success** — `status='pending_payment'`, before the checkout screen
+      renders; checkout only calls `publish_paid_event` on the existing row.
+      `workspace_id` is immutable after insert (0011 withholds it from the
+      UPDATE grant), so that insert is the last moment a workspace can be
+      created. **Consequence:** abandoning AT checkout still leaves a host with
+      an empty 0/0 card (`workspace_stats` counts only `published`).
+      **Known possible rework if checkout abandonment materializes:** defer the
+      draft insert until after payment — checkout would take the whole draft
+      instead of an `eventId`, and `publish_paid_event`'s contract (takes an
+      existing event id) would need reworking. Not worth doing on speculation.
 - [ ] **Real Stripe checkout** — replace the mock Apple Pay / Google Pay / Link
       / Card screen. Payment marks in prototype are hand-drawn approximations;
       production uses real SDK-rendered buttons under brand guidelines.
@@ -113,10 +140,18 @@ and verified in Cursor/Claude Code.
 
 - [x] Canonical `PRICING_TIERS`, per-day killed, prices locked (Curbside free /
       Standard 5-12-20 / Plus 15-29-49), socials moved to Standard. DONE in prototype.
-- [ ] **Curbside credit ledger.** Per-workspace counter, rolling 100-day window,
-      decrement on post, block at 0. The block-at-0 moment is a CONVERSION screen
-      ("you've used your 3 free posts — Standard is $5"), not an error. Prototype
-      shows the quota copy only.
+- [x] **Curbside quota — DONE (0008), RULES CHANGED 2026-07-29 (0016).**
+      Now **1 free post per rolling 100-day window, spanning up to 3
+      consecutive days** (was 3 single-day posts). Computed on demand, never a
+      stored counter. Two triggers: quota on BEFORE INSERT, span on BEFORE
+      INSERT **OR UPDATE** (`starts_at`/`ends_at` are in 0011's UPDATE grant,
+      so insert-only was bypassable). At quota the mini form renders the
+      CONVERSION screen ("You've used your free post — Standard is $5"), an
+      invitation, not an error. 6/6 behavioral PASS.
+      **Accepted:** the span cap is a 72-HOUR duration, not a calendar-day
+      count — a trigger has no client tz. A hand-crafted request could touch 4
+      calendar days under 72h; the mini form cannot. Fix if it matters: pass tz
+      through the insert path.
 - [ ] **Curbside category enforcement server-side** — auto-tag on free posts,
       reject Curbside on paid events (prototype only hides the picker options).
 - [ ] **Refund enforcement** off the event's `starts_at`: 100% at 72+ hrs, 50%
@@ -134,6 +169,31 @@ and verified in Cursor/Claude Code.
 - [ ] **Email service** (Resend/Postmark or similar): weekly digest, payment
       receipts (Stripe receipts OK if configured — deliberate), auth emails,
       cancellation notices. Pick early — digest is a core retention channel.
+- [ ] **PRE-LAUNCH BLOCKER — re-enable "Confirm email" + configure real SMTP.**
+      Two halves of one gate, both required before real signups:
+      1. **Confirm email is currently OFF** in Supabase Auth (turned off for
+         dev convenience so test accounts don't need a round-trip). It must go
+         back ON — without it anyone can register an address they don't own.
+      2. **The built-in mailer caps at 2 emails/hour** and is explicitly not
+         for production. It cannot carry live signups, let alone the weekly
+         digest. Custom SMTP (Resend/Postmark, same pick as above) has to be
+         configured on the **new PROD project** before the confirm toggle is
+         worth flipping — otherwise confirmations silently rate-limit and
+         signups appear broken.
+      Sequence: pick provider → configure SMTP on prod → enable confirm email →
+      verify a real signup round-trip on a release build.
+- [ ] **Pricing screen isn't built yet.** BUILD_PLAN stage 5 item 9. When it
+      lands, its Curbside description MUST read the new rule — **1 free post
+      per rolling 100 days, up to 3 consecutive days** — not the original
+      3-single-day copy that still lives in the frozen `design-reference`
+      `PRICING_TIERS`. There is no `description` column on `tiers`, so this
+      copy has no production home yet and can't drift until it does.
+- [ ] **No working lint setup in the repo.** `npm run lint` → `expo lint`
+      bootstraps `eslint` + `eslint-config-expo` into `package.json`, writes an
+      `eslint.config.js`, then fails with "Cannot find module 'eslint'". Ran
+      into this 2026-07-29 and reverted all three files, so the repo is clean
+      but has no lint. Worth fixing separately — typecheck is currently the
+      only automated gate, and it won't catch unused vars or dead code.
 - [ ] **In-context App Store rating prompt** (OS API, fire at happy moments,
       e.g. after an RSVP). The Settings "Rate Sparked" row was removed on purpose.
 - [ ] **Privacy wiring:** Location toggle MIRRORS the OS permission (deep-link to
@@ -345,6 +405,54 @@ and verified in Cursor/Claude Code.
 
 ---
 
+## ME HUB & SAVED (built 2026-07-29)
+
+- [x] **Me hub layout — DONE.** Signed-in Me is logo → profile header →
+      workspace slot (3 states) → Saved preview card → five settings rows →
+      Sign out. **No settings gear anywhere — the rows ARE settings**
+      (Interests & blocks · Notifications · Privacy · Appearance · Help &
+      feedback), each opening a STUB at `settings/*`. Signed-out Me untouched.
+- [x] **Workspace stats card trimmed to ACTIVE + UPCOMING — DONE.** RSVPs /
+      Saves removed; they move to per-event display on the Workspace screen
+      (tracked above). Skeleton silhouette updated to match so the slot
+      doesn't reflow when stats land.
+- [x] **Saved preview card on the Me hub — DONE.** Workspace-card anatomy
+      (bookmark chip + SAVED eyebrow + chevron) over a ticket-fragment body:
+      title | perforation | countdown, through the shared `Perforation` +
+      `eventCountdown` so it can't drift from the EventStub. Previews the next
+      upcoming-**or-live** saved event. Empty state forks its two
+      destinations — header → Saved tab, "Explore events near you →" →
+      Explore — as SIBLING Pressables, not nested (nested behaves differently
+      on RN vs web: web bubbles and fires both).
+- [x] **Saved tab "Past" grouping — DONE.** Ended events collapse into
+      "Past · N" at the bottom, chevron to expand, **collapse state
+      session-only**, sorted most-recent-first. "Ended" derives from
+      `eventCountdown` — the same util the card's chip renders — so the split
+      and the chip can never disagree; live/in-progress events are NOT past.
+      Fixed a real bug: 7 of the 10 events under "Coming Up" had already ended,
+      because `savedBucket` only ever looked forward from `starts_at`.
+      Subtitle now counts upcoming only.
+- [x] **Anonymous Curbside identity copy — DONE (see PRICING & CURBSIDE).**
+      "Verified neighbor" is gone from every surface; anonymous posts render
+      the standard Organizer section reading **"Local host"**. **Standing
+      rule: no "verified" language in the product until something is actually
+      verified** — claiming a check we don't perform is a
+      consumer-representation risk that sits outside Section 230, which covers
+      what USERS post, not claims WE make about them.
+
+---
+
+## POST-LAUNCH POLISH (not blockers — revisit once real usage exists)
+
+- [ ] **Saved preview card — more festive / engaging visual treatment.** The
+      card is correct and consistent with the workspace card, but it is
+      restrained where it could carry some delight: this is the surface that
+      tells someone their weekend has something in it. Deliberately not
+      designed further pre-launch — worth doing once there's real saved-event
+      behavior to design against.
+
+---
+
 ## STANDING PROCEDURES (not TODOs — how this project operates)
 
 - [x] **Migrations apply FROM FILES via the CLI — never pasted.** The repo's
@@ -360,6 +468,11 @@ and verified in Cursor/Claude Code.
       `supabase migration repair --status applied 20260723000013`. That is the
       remedy for a pasted migration; **never** `db push` a migration whose
       objects already exist — it re-runs and fails. 0011/0012 were fine.
+      **Applied through 0016** (0016 = curbside 1-post/3-day rules,
+      2026-07-29). History verified 2026-07-29: 16 rows, every one
+      `local == remote`. Full per-migration detail lives in SPARKED_STATE's
+      "Applied migrations" paragraph — that list is the authoritative one; keep
+      it current rather than duplicating it here.
 - [x] **QA cleanup runs from `scripts/qa-cleanup.sql`** — not ad-hoc DELETEs.
       The standing QA address is **`18680 S Nogales Hwy`**; use it for every
       test listing. The script previews, deletes (prefix-matched, because the
