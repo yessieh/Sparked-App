@@ -42,8 +42,11 @@ import EventStub, { type FeedEvent } from '../components/EventStub';
 import { hasEnded } from '../lib/eventTime';
 import { supabase } from '../lib/supabase';
 import {
+  archiveEvent,
+  deleteEvent,
   deleteWorkspace,
   fetchWorkspaceEventStats,
+  unarchiveEvent,
   useMyWorkspace,
   useWorkspaceStats,
   type Workspace,
@@ -63,11 +66,13 @@ interface WorkspaceEventRow {
   venue_name: string | null;
   entry_fee_cents: number;
   rsvp_count: number;
+  deleted_at: string | null;
+  archived_at: string | null;
   event_categories: { category_id: string }[];
 }
 
 const EVENT_COLUMNS =
-  'id,title,starts_at,ends_at,venue_name,entry_fee_cents,rsvp_count,event_categories(category_id)';
+  'id,title,starts_at,ends_at,venue_name,entry_fee_cents,rsvp_count,deleted_at,archived_at,event_categories(category_id)';
 
 type Counts = Map<string, { rsvps: number; saves: number }>;
 
@@ -472,9 +477,15 @@ function WorkspaceDetail({
   // Session-only, collapsed by default — the same contract as Saved's Past
   // section. Nothing is persisted; reopening the screen starts collapsed.
   const [pastOpen, setPastOpen] = useState(false);
+  const [archivedOpen, setArchivedOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Event action menu — which event (if any) is showing the ⋯ menu.
+  const [actionEventId, setActionEventId] = useState<string | null>(null);
+  // Delete confirmation — which event (if any) is being deleted.
+  const [eventToDelete, setEventToDelete] = useState<{ id: string; title: string } | null>(null);
+  const [deleteEventLoading, setDeleteEventLoading] = useState(false);
 
   const workspaceId = workspace.id;
 
@@ -489,6 +500,7 @@ function WorkspaceDetail({
         .select(EVENT_COLUMNS)
         .eq('workspace_id', workspaceId)
         .eq('status', 'published')
+        .is('deleted_at', null)
         .order('starts_at', { ascending: true }),
       fetchWorkspaceEventStats(workspaceId).catch((e: unknown) =>
         e instanceof Error ? e : new Error(String(e)),
@@ -517,9 +529,10 @@ function WorkspaceDetail({
     }, [load, refreshStats]),
   );
 
-  const { upcoming, past } = useMemo(() => {
+  const { upcoming, past, archived } = useMemo(() => {
     const up: FeedEvent[] = [];
     const done: FeedEvent[] = [];
+    const arch: FeedEvent[] = [];
     for (const r of rows ?? []) {
       const event: FeedEvent = {
         id: r.id,
@@ -536,14 +549,21 @@ function WorkspaceDetail({
         rsvp_count: r.rsvp_count,
         categories: r.event_categories.map((c) => c.category_id),
       };
-      // Same util the card's countdown chip renders from, so the Past header
-      // and the chip inside it can never disagree. Live events are NOT past.
-      if (hasEnded(r.starts_at, r.ends_at)) done.push(event);
-      else up.push(event);
+      // Archived events go into their own section (0019).
+      if (r.archived_at) {
+        arch.push(event);
+      } else if (hasEnded(r.starts_at, r.ends_at)) {
+        // Same util the card's countdown chip renders from, so the Past header
+        // and the chip inside it can never disagree. Live events are NOT past.
+        done.push(event);
+      } else {
+        up.push(event);
+      }
     }
     // Rows arrive starts_at ASCENDING: upcoming is already soonest-first, and
     // the reverse puts "just finished" at the top of Past. Matches Saved.
-    return { upcoming: up, past: done.reverse() };
+    // Archived stays in arrival order.
+    return { upcoming: up, past: done.reverse(), archived: arch };
   }, [rows, workspace.name]);
 
   const onConfirmDelete = async () => {
@@ -561,6 +581,39 @@ function WorkspaceDetail({
     }
   };
 
+  const onArchiveEvent = async (eventId: string) => {
+    setActionEventId(null);
+    try {
+      await archiveEvent(eventId);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const onUnarchiveEvent = async (eventId: string) => {
+    setActionEventId(null);
+    try {
+      await unarchiveEvent(eventId);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const onConfirmDeleteEvent = async () => {
+    if (!eventToDelete) return;
+    setDeleteEventLoading(true);
+    try {
+      await deleteEvent(eventToDelete.id);
+      setEventToDelete(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setDeleteEventLoading(false);
+    }
+  };
+
   // Listings go two-across on a desktop-width coordinator screen; one column on
   // a phone. Below the breakpoint this resolves to the plain stacked list.
   const listRow = {
@@ -570,19 +623,91 @@ function WorkspaceDetail({
   };
   const listItem = { width: isDesktop ? ('48%' as const) : ('100%' as const) };
 
-  const renderStubs = (items: FeedEvent[]) => (
+  const renderStubs = (items: FeedEvent[], isArchived: boolean = false) => (
     <View style={listRow}>
       {items.map((e) => (
-        <View key={e.id} style={listItem}>
+        <View key={e.id} style={[listItem, { position: 'relative' }]}>
           <EventStub
             event={e}
             variant="compact"
-            // Falls back to the public RSVP counter (and no save chip) if the
-            // member-scoped stats read is what failed — a degraded chip row
-            // beats a blank one.
             counts={counts.get(e.id) ?? { rsvps: e.rsvp_count ?? 0, saves: 0 }}
             onTap={() => router.push({ pathname: '/event/[id]', params: { id: e.id } })}
           />
+          {/* Overflow menu button — top-right corner. */}
+          <Pressable
+            onPress={() => setActionEventId(actionEventId === e.id ? null : e.id)}
+            accessibilityLabel="Event actions"
+            accessibilityRole="button"
+            style={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Text style={{ color: 'white', fontSize: 18, fontWeight: 'bold' }}>⋯</Text>
+          </Pressable>
+          {/* Action menu — appears when the event's action button is pressed. */}
+          {actionEventId === e.id && (
+            <View
+              style={{
+                position: 'absolute',
+                top: 44,
+                right: 8,
+                backgroundColor: theme.colors.cardBg,
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: theme.colors.cardBorder,
+                zIndex: 10,
+                minWidth: 140,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.15,
+                shadowRadius: 8,
+                elevation: 5,
+              }}
+            >
+              {isArchived ? (
+                <Pressable
+                  onPress={() => onUnarchiveEvent(e.id)}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    borderBottomWidth: 1,
+                    borderBottomColor: theme.colors.divider,
+                  }}
+                >
+                  <Text style={{ fontSize: 13, color: theme.colors.text }}>Unarchive</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPress={() => onArchiveEvent(e.id)}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    borderBottomWidth: 1,
+                    borderBottomColor: theme.colors.divider,
+                  }}
+                >
+                  <Text style={{ fontSize: 13, color: theme.colors.text }}>Archive</Text>
+                </Pressable>
+              )}
+              <Pressable
+                onPress={() => {
+                  setEventToDelete({ id: e.id, title: e.title });
+                  setActionEventId(null);
+                }}
+                style={{ paddingHorizontal: 12, paddingVertical: 10 }}
+              >
+                <Text style={{ fontSize: 13, color: theme.colors.danger }}>Delete</Text>
+              </Pressable>
+            </View>
+          )}
         </View>
       ))}
     </View>
@@ -745,6 +870,56 @@ function WorkspaceDetail({
                   {pastOpen && renderStubs(past)}
                 </View>
               )}
+
+              {/* ARCHIVED (0019) — reversible archive. Same collapse pattern as Past.
+                  Archived events have their own section after Past. */}
+              {archived.length > 0 && (
+                <View>
+                  <Pressable
+                    onPress={() => setArchivedOpen((o) => !o)}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: archivedOpen }}
+                    accessibilityLabel={`Archived, ${archived.length} ${archived.length === 1 ? 'event' : 'events'}`}
+                    style={({ pressed }) => ({
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 10,
+                      paddingVertical: 6,
+                      marginBottom: archivedOpen ? 13 : 0,
+                      opacity: pressed ? 0.6 : 1,
+                    })}
+                  >
+                    <Text
+                      style={{
+                        fontFamily: theme.fonts.displayBlack,
+                        fontWeight: '900',
+                        fontSize: 13,
+                        letterSpacing: 1.8,
+                        textTransform: 'uppercase',
+                        color: theme.colors.textMuted,
+                      }}
+                    >
+                      Archived
+                    </Text>
+                    <Text
+                      style={{
+                        fontFamily: theme.fonts.displayExtraBold,
+                        fontSize: 11,
+                        color: theme.colors.textFaint,
+                      }}
+                    >
+                      {archived.length}
+                    </Text>
+                    <View style={{ flex: 1, height: 1, backgroundColor: theme.colors.divider }} />
+                    <Ionicons
+                      name={archivedOpen ? 'chevron-up' : 'chevron-down'}
+                      size={15}
+                      color={theme.colors.textFaint}
+                    />
+                  </Pressable>
+                  {archivedOpen && renderStubs(archived, true)}
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -801,6 +976,117 @@ function WorkspaceDetail({
         onCancel={() => setConfirmOpen(false)}
         onConfirm={onConfirmDelete}
       />
+
+      {/* Delete event confirmation (0019) — same pattern as workspace delete but
+          for a single event. Irreversible soft delete. */}
+      <Modal
+        animationType="fade"
+        transparent
+        visible={eventToDelete !== null}
+        onRequestClose={() => setEventToDelete(null)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingHorizontal: 16,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: theme.colors.cardBg,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: theme.colors.cardBorder,
+              padding: 24,
+              maxWidth: 360,
+              width: '100%',
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: theme.fonts.displayBlack,
+                fontWeight: '900',
+                fontSize: 18,
+                color: theme.colors.text,
+                marginBottom: 12,
+              }}
+            >
+              Delete "{eventToDelete?.title}"?
+            </Text>
+            <Text
+              style={{
+                fontFamily: theme.fonts.bodyMedium,
+                fontSize: 13,
+                lineHeight: 19,
+                color: theme.colors.textFaint,
+                marginBottom: 24,
+              }}
+            >
+              This event will be hidden from all views and cannot be recovered. Your consumption credit will remain.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <Pressable
+                onPress={() => setEventToDelete(null)}
+                disabled={deleteEventLoading}
+                style={{
+                  flex: 1,
+                  borderRadius: theme.radii.lg,
+                  borderWidth: 1,
+                  borderColor: theme.colors.cardBorder,
+                  paddingVertical: 14,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: deleteEventLoading ? 0.6 : 1,
+                }}
+              >
+                <Text
+                  style={{
+                    fontFamily: theme.fonts.displayExtraBold,
+                    fontWeight: '800',
+                    fontSize: 14,
+                    color: theme.colors.text,
+                  }}
+                >
+                  Cancel
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={onConfirmDeleteEvent}
+                disabled={deleteEventLoading}
+                style={{
+                  flex: 1,
+                  borderRadius: theme.radii.lg,
+                  borderWidth: 1,
+                  borderColor: 'rgba(239,68,68,0.55)',
+                  backgroundColor: 'rgba(239,68,68,0.16)',
+                  paddingVertical: 14,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: deleteEventLoading ? 0.6 : 1,
+                }}
+              >
+                {deleteEventLoading ? (
+                  <ActivityIndicator color={theme.colors.danger} />
+                ) : (
+                  <Text
+                    style={{
+                      fontFamily: theme.fonts.displayExtraBold,
+                      fontWeight: '800',
+                      fontSize: 14,
+                      color: theme.colors.danger,
+                    }}
+                  >
+                    Delete
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }

@@ -583,6 +583,7 @@ function SignedInMe() {
         .select('id,title,starts_at,ends_at')
         .in('id', ids)
         .eq('status', 'published')
+        .is('deleted_at', null)
         .or(
           `starts_at.gte.${nowISO},ends_at.gte.${nowISO},and(ends_at.is.null,starts_at.gte.${graceISO})`,
         )

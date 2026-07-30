@@ -186,6 +186,40 @@ export async function deleteWorkspace(workspaceId: string): Promise<number> {
   return (data as number | null) ?? 0;
 }
 
+/**
+ * Soft-deletes a single event (0019 — Architecture Decision 8). Irreversible
+ * to the host. The event is hidden from all read paths and survives 90 days for
+ * auditing, then hard-purged by a job.
+ *
+ * MEMBER ONLY (owner/editor).
+ */
+export async function deleteEvent(eventId: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_event', { event_id: eventId });
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Archive a single event (0019 — reversible). The event disappears from all
+ * PUBLIC surfaces (feed, search, detail, Saved, Organizer Profile) but remains
+ * visible to the workspace members in Workspace.
+ *
+ * MEMBER ONLY (owner/editor).
+ */
+export async function archiveEvent(eventId: string): Promise<void> {
+  const { error } = await supabase.rpc('archive_event', { event_id: eventId });
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Unarchive a single event (0019 — reversible archive).
+ *
+ * MEMBER ONLY (owner/editor).
+ */
+export async function unarchiveEvent(eventId: string): Promise<void> {
+  const { error } = await supabase.rpc('unarchive_event', { event_id: eventId });
+  if (error) throw new Error(error.message);
+}
+
 /** Hook form of {@link fetchWorkspaceStats}. Pass `null` to hold off (e.g.
  * before the workspace id is known); re-fetches when the id changes. */
 export function useWorkspaceStats(workspaceId: string | null): {

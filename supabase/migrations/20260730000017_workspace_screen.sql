@@ -55,6 +55,7 @@ as $$
     (select count(*)::int from public.saves s where s.event_id = e.id)
   from public.events e
   where e.workspace_id = p_workspace_id
+    and e.deleted_at is null
     and e.status = 'published'
     and app.is_member(p_workspace_id, array['owner', 'editor', 'viewer']);
 $$;

@@ -121,7 +121,7 @@ export default function CheckoutScreen() {
     if (!eventId) return;
     (async () => {
       const [{ data: ev, error: evError }, { data: tp }] = await Promise.all([
-        supabase.from('events').select('id,title,tier_id,status,starts_at,ends_at').eq('id', eventId).single(),
+        supabase.from('events').select('id,title,tier_id,status,starts_at,ends_at').eq('id', eventId).is('deleted_at', null).single(),
         supabase.from('tier_prices').select('tier_id,duration_band,amount_cents'),
       ]);
       if (evError) setError(evError.message);

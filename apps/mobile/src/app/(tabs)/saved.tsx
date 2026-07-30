@@ -177,6 +177,7 @@ export default function Saved() {
       )
       .in('id', ids)
       .eq('status', 'published')
+      .is('deleted_at', null)
       .order('starts_at', { ascending: true });
     if (eventsError) setError(eventsError.message);
     else {

@@ -60,7 +60,9 @@ as $$
   from public.events e
   join public.workspaces w on w.id = e.workspace_id
   cross join origin o
-  where e.status = 'published'
+  where e.deleted_at is null
+    and e.archived_at is null
+    and e.status = 'published'
     and e.location is not null
     and st_dwithin(e.location, o.pt, radius_miles * 1609.344)
   order by st_distance(e.location, o.pt) asc; -- distance ONLY, no other factors
@@ -124,5 +126,6 @@ as $$
     e.cancelled_at
   from public.events e
   join public.workspaces w on w.id = e.workspace_id
-  where e.id = event_detail.event_id;
+  where e.deleted_at is null
+    and e.id = event_detail.event_id;
 $$;

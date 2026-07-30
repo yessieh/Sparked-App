@@ -74,18 +74,24 @@ as $$
   select
     (select count(*)::int from public.events e
        where e.workspace_id = p_workspace_id
+         and e.deleted_at is null
+         and e.archived_at is null
          and e.status = 'published'
          and coalesce(e.ends_at, e.starts_at) >= now())      as active_listings,
     (select count(*)::int from public.events e
        where e.workspace_id = p_workspace_id
+         and e.deleted_at is null
+         and e.archived_at is null
          and e.status = 'published'
          and e.starts_at > now())                            as upcoming_events,
     (select count(*)::int from public.rsvps r
        join public.events e on e.id = r.event_id
-       where e.workspace_id = p_workspace_id)                as total_rsvps,
+       where e.workspace_id = p_workspace_id
+         and e.deleted_at is null)                           as total_rsvps,
     (select count(*)::int from public.saves s
        join public.events e on e.id = s.event_id
-       where e.workspace_id = p_workspace_id)                as total_saves
+       where e.workspace_id = p_workspace_id
+         and e.deleted_at is null)                           as total_saves
   where app.is_member(p_workspace_id, array['owner', 'editor', 'viewer']);
 $$;
 

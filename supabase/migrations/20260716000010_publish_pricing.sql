@@ -120,7 +120,7 @@ declare
   band text;
   amount integer;
 begin
-  select * into ev from public.events e where e.id = publish_paid_event.event_id;
+  select * into ev from public.events e where e.id = publish_paid_event.event_id and e.deleted_at is null;
   if not found then
     raise exception 'event_not_found' using errcode = '42704';
   end if;
