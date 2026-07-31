@@ -35,7 +35,6 @@ as $$
   select e.publish_fee_cents
   from public.events e
   where e.id = p_event_id
-    and e.deleted_at is null
     and app.is_member(e.workspace_id, array['owner', 'editor', 'viewer']);
 $$;
 

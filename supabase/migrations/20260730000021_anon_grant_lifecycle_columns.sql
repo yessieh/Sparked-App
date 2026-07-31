@@ -1,0 +1,42 @@
+-- ============================================================================
+-- 0021 — HOTFIX: grant anon SELECT on deleted_at / archived_at.
+--
+-- 0020 broke the signed-out storefront and I caught it on the post-apply probe.
+-- Both consumer read paths returned `42501 permission denied for table events`
+-- for anon: the Explore feed (`events_within_radius`) and the ticket
+-- (`event_detail`). Signed-in users were unaffected the whole time, because
+-- 0019 granted these two columns to `authenticated` only.
+--
+-- WHY IT HAPPENED — the distinction that caught me out:
+--
+--   * An RLS POLICY expression is evaluated internally by the executor. It can
+--     reference any column regardless of what the caller may read. That is why
+--     0019's `events_select_public` has referenced `deleted_at`/`archived_at`
+--     for anon since it shipped, with no grant and no error.
+--
+--   * A SECURITY INVOKER FUNCTION BODY is the caller's own query. Every column
+--     it touches — including ones that appear only in a WHERE clause and are
+--     never returned — is checked against the caller's column privileges.
+--
+-- 0019's grant was scoped to `authenticated` on the explicit reasoning that no
+-- anon path filtered on these columns. That was true when written. 0020 created
+-- exactly such a path, and did not revisit the grant.
+--
+-- WHY GRANTING TO ANON LEAKS NOTHING: `events_select_public` already restricts
+-- anon to rows where `deleted_at is null and archived_at is null`. For every
+-- row anon can read, both columns are provably NULL. The grant discloses no
+-- information; it only lets the executor check a predicate whose answer is
+-- already fixed.
+--
+-- Considered and rejected: making the feed/detail functions SECURITY DEFINER
+-- (changes their security posture and re-introduces the advisor lint that 0012
+-- and 0014 exist to remove), and dropping the explicit filters back out of 0020
+-- (that would restore the bug where a host sees their own archived event on
+-- Explore, since the policy's member branch permits archived by design).
+--
+-- FORWARD-ONLY, deliberately: 0019 and 0020 are applied and are therefore
+-- history. Editing either to widen the grant is precisely the mistake this
+-- session repaired. See CLAUDE.md.
+-- ============================================================================
+
+grant select (deleted_at, archived_at) on public.events to anon;
