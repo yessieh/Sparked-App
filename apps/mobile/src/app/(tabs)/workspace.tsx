@@ -37,10 +37,10 @@ import {
   useWindowDimensions,
 } from 'react-native';
 
-import { GradientButton } from '../components/AuthControls';
-import EventStub, { type FeedEvent } from '../components/EventStub';
-import { hasEnded } from '../lib/eventTime';
-import { supabase } from '../lib/supabase';
+import { GradientButton } from '../../components/AuthControls';
+import EventStub, { type FeedEvent } from '../../components/EventStub';
+import { hasEnded } from '../../lib/eventTime';
+import { supabase } from '../../lib/supabase';
 import {
   archiveEvent,
   deleteEvent,
@@ -50,8 +50,8 @@ import {
   useMyWorkspace,
   useWorkspaceStats,
   type Workspace,
-} from '../lib/workspace';
-import { brand, breakpoints, useTheme } from '../theme';
+} from '../../lib/workspace';
+import { brand, breakpoints, useTheme } from '../../theme';
 
 type Theme = ReturnType<typeof useTheme>;
 
@@ -638,6 +638,11 @@ function WorkspaceDetail({
             onPress={() => setActionEventId(actionEventId === e.id ? null : e.id)}
             accessibilityLabel="Event actions"
             accessibilityRole="button"
+            // bgDeep, not a translucent black: this button sits on card art,
+            // and the palette names bgDeep as the overlay token precisely
+            // because it is OPAQUE in both modes (#0f1a30 / #ffffff). The
+            // previous rgba(0,0,0,0.5) was both a raw color and unreadable over
+            // a light image. borderStrong gives it an edge against busy art.
             style={{
               position: 'absolute',
               top: 8,
@@ -645,24 +650,30 @@ function WorkspaceDetail({
               width: 32,
               height: 32,
               borderRadius: 8,
-              backgroundColor: 'rgba(0,0,0,0.5)',
+              backgroundColor: theme.colors.bgDeep,
+              borderWidth: 1,
+              borderColor: theme.colors.borderStrong,
               alignItems: 'center',
               justifyContent: 'center',
             }}
           >
-            <Text style={{ color: 'white', fontSize: 18, fontWeight: 'bold' }}>⋯</Text>
+            <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: 'bold' }}>⋯</Text>
           </Pressable>
           {/* Action menu — appears when the event's action button is pressed. */}
           {actionEventId === e.id && (
             <View
+              // Same reasoning as the button, and this is the one that was
+              // actually broken: cardBg is rgba(255,255,255,0.04) in dark mode
+              // — 4% white, which over card art is a menu you can see straight
+              // through. A floating surface needs an opaque one.
               style={{
                 position: 'absolute',
                 top: 44,
                 right: 8,
-                backgroundColor: theme.colors.cardBg,
+                backgroundColor: theme.colors.bgDeep,
                 borderRadius: 8,
                 borderWidth: 1,
-                borderColor: theme.colors.cardBorder,
+                borderColor: theme.colors.borderStrong,
                 zIndex: 10,
                 minWidth: 140,
                 shadowColor: '#000',

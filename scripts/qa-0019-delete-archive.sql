@@ -1,6 +1,10 @@
 -- ============================================================================
 -- BEHAVIORAL SUITE — soft delete + archive (migration 0019, read-path filters
--- repaired by 0020).
+-- repaired by 0020, attendee-history exception added by 0022).
+--
+-- Section (g) covers the amended Architecture Decision 8 rule: what already
+-- happened stays in the attendee's record, what hasn't yet is the host's to
+-- withdraw. Sections (a)–(f) are the original 0019/0020 contract, unchanged.
 --
 -- WHERE TO RUN: Supabase dashboard → SQL Editor, on the DEV project
 -- (`Sparked-App`, ref kzynvvdggooqgtnprhrm). Never against prod.
@@ -124,16 +128,56 @@ exception when others then
 end;
 $fn$;
 
+-- The ticket, as p_user. Proves an attendee can still OPEN their history row
+-- (0022), and that a stranger cannot.
+create function pg_temp.detail_visible_to(p_user uuid, p_event uuid)
+returns integer language plpgsql as $fn$
+declare n integer;
+begin
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', p_user::text, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  select count(*) into n from public.event_detail(p_event, 32.0, -111.0);
+  execute 'reset role';
+  return n;
+exception when others then
+  execute 'reset role';
+  raise;
+end;
+$fn$;
+
+-- The storefront, as p_user. The history exception must NEVER reach this.
+create function pg_temp.feed_visible_to(p_user uuid, p_event uuid)
+returns integer language plpgsql as $fn$
+declare n integer;
+begin
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', p_user::text, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  select count(*) into n
+    from public.events_within_radius(32.0, -111.0, 25.0) f where f.id = p_event;
+  execute 'reset role';
+  return n;
+exception when others then
+  execute 'reset role';
+  raise;
+end;
+$fn$;
+
 do $$
 declare
   u_a     uuid;  -- the host
   u_b     uuid;  -- a consumer / non-member
+  u_c     uuid;  -- (0022) a STRANGER: neither host nor attendee. May be null.
   ws_a    uuid;
   ws_b    uuid;
   ev_del  uuid;
   ev_arch uuid;
   ev_curb uuid;
   ev_saved uuid;
+  ev_past_arch   uuid;  -- (0022)
+  ev_past_del    uuid;  -- (0022)
+  ev_future_arch uuid;  -- (0022)
   n       integer;
   err     text;
   qa_addr constant text := '18680 S Nogales Hwy';
@@ -145,6 +189,10 @@ begin
   ---------------------------------------------------------------------------
   select id into u_a from public.profiles order by created_at limit 1;
   select id into u_b from public.profiles where id <> u_a order by created_at limit 1;
+  -- A third identity for the 0022 stranger checks. Optional: if the dev project
+  -- only has two profiles, g6–g8 report as skipped rather than failing.
+  select id into u_c from public.profiles
+   where id not in (u_a, u_b) order by created_at limit 1;
 
   if u_a is null or u_b is null then
     perform pg_temp.rec('00. fixtures', 'at least two profiles exist',
@@ -285,9 +333,13 @@ begin
   end;
 
   ---------------------------------------------------------------------------
-  -- (f) A DELETED EVENT LEAVES OTHER PEOPLE'S SAVED LISTS.
+  -- (f) A DELETED **FUTURE** EVENT LEAVES OTHER PEOPLE'S SAVED LISTS.
   -- Host B publishes, consumer A saves it, host B deletes it. Both assertions
   -- run as A through the real Saved join with no filter of their own.
+  --
+  -- This IS case (c) of the amended rule (0022): what has not happened yet is
+  -- the host's to withdraw, so a future deletion takes it out of the attendee's
+  -- list completely. Section (g) covers the cases where it must NOT.
   ---------------------------------------------------------------------------
   insert into public.events (workspace_id, title, tier_id, status, starts_at, ends_at, address)
   values (ws_b, 'QA 0019 saved-by-someone-else', 'standard', 'published',
@@ -307,6 +359,93 @@ begin
   n := pg_temp.saved_visible_to(u_a, ev_saved);
   perform pg_temp.rec('f2. host''s delete removes it from the consumer''s Saved',
     '0', n::text, n = 0);
+
+  ---------------------------------------------------------------------------
+  -- (g) THE ATTENDEE-HISTORY EXCEPTION (0022).
+  --
+  -- A host may withdraw what has not happened. They may not rewrite what has.
+  -- Every event below is in the PAST (ended ~10 days ago), which is the hinge
+  -- the whole rule turns on.
+  ---------------------------------------------------------------------------
+
+  -- (g1/g2) ARCHIVE a past event that someone attended.
+  insert into public.events (workspace_id, title, tier_id, status, starts_at, ends_at, address, location)
+  values (ws_b, 'QA 0022 past + archived', 'standard', 'published',
+          now() - interval '10 days', now() - interval '10 days' + interval '3 hours',
+          qa_addr, qa_pt)
+  returning id into ev_past_arch;
+
+  insert into public.saves (user_id, event_id) values (u_a, ev_past_arch);
+
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', u_b::text, 'role', 'authenticated')::text, true);
+  perform app.archive_event(ev_past_arch);
+
+  n := pg_temp.saved_visible_to(u_a, ev_past_arch);
+  perform pg_temp.rec('g1. archived PAST event stays in the attendee''s Saved',
+    '1 — history is theirs, not the host''s', n::text, n = 1);
+
+  n := pg_temp.feed_visible_to(u_a, ev_past_arch);
+  perform pg_temp.rec('g2. …and is still gone from that same attendee''s feed',
+    '0', n::text, n = 0);
+
+  n := pg_temp.detail_visible_to(u_a, ev_past_arch);
+  perform pg_temp.rec('g3. …and the attendee can still OPEN it',
+    '1 — the history row must not be a dead link', n::text, n = 1);
+
+  -- (g4/g5) DELETE a past event that someone attended.
+  insert into public.events (workspace_id, title, tier_id, status, starts_at, ends_at, address, location)
+  values (ws_b, 'QA 0022 past + deleted', 'standard', 'published',
+          now() - interval '10 days', now() - interval '10 days' + interval '3 hours',
+          qa_addr, qa_pt)
+  returning id into ev_past_del;
+
+  -- RSVP rather than a save, so has_attendance is proven on both tables.
+  insert into public.rsvps (user_id, event_id) values (u_a, ev_past_del);
+
+  perform app.delete_event(ev_past_del);
+
+  n := pg_temp.visible_to(u_a, ev_past_del);
+  perform pg_temp.rec('g4. deleted PAST event stays visible to its ATTENDEE (via RSVP)',
+    '1 — has_attendance covers rsvps, not just saves', n::text, n = 1);
+
+  n := pg_temp.feed_visible_to(u_a, ev_past_del);
+  perform pg_temp.rec('g5. …and is absent from the feed for that attendee',
+    '0', n::text, n = 0);
+
+  -- (g6–g8) A STRANGER — no save, no RSVP, not a member — sees it on NO path.
+  -- This is the assertion that keeps the exception an EXCEPTION.
+  if u_c is null then
+    perform pg_temp.rec('g6-g8. non-attendee checks',
+      'a third profile to test with',
+      'SKIPPED — only two profiles exist in this project', true);
+  else
+    n := pg_temp.visible_to(u_c, ev_past_arch);
+    perform pg_temp.rec('g6. non-attendee: archived past event, direct read',
+      '0', n::text, n = 0);
+
+    n := pg_temp.visible_to(u_c, ev_past_del);
+    perform pg_temp.rec('g7. non-attendee: deleted past event, direct read',
+      '0', n::text, n = 0);
+
+    n := pg_temp.detail_visible_to(u_c, ev_past_arch);
+    perform pg_temp.rec('g8. non-attendee: archived past event, ticket',
+      '0', n::text, n = 0);
+  end if;
+
+  -- (g9) The exception is gated on ENDED, not merely on attendance: a FUTURE
+  -- archived event the attendee saved must still disappear from their Saved.
+  insert into public.events (workspace_id, title, tier_id, status, starts_at, ends_at, address, location)
+  values (ws_b, 'QA 0022 future + archived', 'standard', 'published',
+          now() + interval '20 days', now() + interval '20 days 3 hours', qa_addr, qa_pt)
+  returning id into ev_future_arch;
+
+  insert into public.saves (user_id, event_id) values (u_a, ev_future_arch);
+  perform app.archive_event(ev_future_arch);
+
+  n := pg_temp.saved_visible_to(u_a, ev_future_arch);
+  perform pg_temp.rec('g9. archived FUTURE event is withdrawn from Saved',
+    '0 — not yet history, so still the host''s to pull', n::text, n = 0);
 end;
 $$;
 

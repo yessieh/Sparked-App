@@ -36,6 +36,11 @@ interface SavedEventRow {
   entry_fee_cents: number;
   rsvp_count: number;
   curbside_anonymous: boolean;
+  /** Set once the host withdrew the listing (0019). Read-only to clients; the
+   * server decides whether such a row reaches us at all (0022 attendee-history
+   * branch), these two only decide how it is filed and rendered. */
+  archived_at: string | null;
+  deleted_at: string | null;
   workspaces: { name: string } | null;
   event_categories: { category_id: string }[];
 }
@@ -170,14 +175,19 @@ export default function Saved() {
       setRows([]);
       return;
     }
+    // NO deleted_at / archived_at filter here, deliberately (0022). Saved is
+    // the ONE read path where a withdrawn listing may still appear: what
+    // already happened stays in the attendee's record. The RLS policy is what
+    // decides admission — it hands back an archived or deleted event only when
+    // it has ENDED and this user has a save or RSVP on it. Filtering here would
+    // simply re-close the exception the policy exists to open.
     const { data, error: eventsError } = await supabase
       .from('events')
       .select(
-        'id,title,starts_at,ends_at,venue_name,entry_fee_cents,rsvp_count,curbside_anonymous,workspaces(name),event_categories(category_id)',
+        'id,title,starts_at,ends_at,venue_name,entry_fee_cents,rsvp_count,curbside_anonymous,archived_at,deleted_at,workspaces(name),event_categories(category_id)',
       )
       .in('id', ids)
       .eq('status', 'published')
-      .is('deleted_at', null)
       .order('starts_at', { ascending: true });
     if (eventsError) setError(eventsError.message);
     else {
@@ -204,6 +214,11 @@ export default function Saved() {
     );
     const buckets: Record<SavedBucket, FeedEvent[]> = { tonight: [], weekend: [], coming: [] };
     const past: FeedEvent[] = [];
+    // Events the host DELETED. They stay in the attendee's history (0022) but
+    // event_detail still filters deleted_at, so their rows must not offer a tap
+    // that would land on an empty screen. Archived events are NOT in here —
+    // event_detail has no archive filter, so those still open normally.
+    const inert = new Set<string>();
     for (const r of visible) {
       const event: FeedEvent = {
         id: r.id,
@@ -229,7 +244,16 @@ export default function Saved() {
       // free: an event that has started but not ended reads LIVE, not ENDED, so
       // it stays in its upcoming bucket exactly as the Me hub's Saved card
       // treats it. Shared with the Workspace listings' Past section.
-      if (hasEnded(r.starts_at, r.ends_at)) past.push(event);
+      //
+      // WITHDRAWN LISTINGS ARE ALWAYS HISTORY. The policy only returns an
+      // archived or deleted row once the SERVER's clock says it ended, but the
+      // section split runs on the DEVICE's clock. At the boundary — or on a
+      // skewed device — hasEnded could disagree and file a withdrawn listing
+      // under Tonight, which is exactly the state the amended rule forbids.
+      // The flag wins: the server already ruled this is history, so it can only
+      // ever be Past.
+      if (r.deleted_at) inert.add(r.id);
+      if (r.archived_at || r.deleted_at || hasEnded(r.starts_at, r.ends_at)) past.push(event);
       else buckets[savedBucket(r.starts_at)].push(event);
     }
     return {
@@ -246,11 +270,13 @@ export default function Saved() {
       // exists to surface commitments you still have to keep, and a finished
       // event has none.
       past: [...past].reverse(),
+      inert,
     };
   }, [rows, savedIds, goingIds, filter, rsvpDelta]);
 
   const sections = grouped?.upcoming ?? null;
   const past = grouped?.past ?? [];
+  const inert = grouped?.inert ?? new Set<string>();
 
   if (!session) return <SignedOutSaved />;
 
@@ -455,16 +481,27 @@ export default function Saved() {
               {pastOpen && (
                 <View style={{ gap: 16 }}>
                   {past.map((e) => (
-                    <EventStub
-                      key={e.id}
-                      event={e}
-                      variant="compact"
-                      saved={savedIds.has(e.id)}
-                      going={goingIds.has(e.id)}
-                      onToggleSave={() => toggleSave(e.id)}
-                      onToggleGoing={() => toggleRsvp(e.id)}
-                      onTap={() => router.push({ pathname: '/event/[id]', params: { id: e.id } })}
-                    />
+                    // A host-deleted event stays in this list — it happened,
+                    // and that is the attendee's to keep — but it is a RECORD,
+                    // not a listing: no tap target (the ticket is gone) and
+                    // dimmed so it reads as history rather than something still
+                    // on offer. Archived events keep their tap; only deleted
+                    // ones go inert.
+                    <View key={e.id} style={{ opacity: inert.has(e.id) ? 0.55 : 1 }}>
+                      <EventStub
+                        event={e}
+                        variant="compact"
+                        saved={savedIds.has(e.id)}
+                        going={goingIds.has(e.id)}
+                        onToggleSave={() => toggleSave(e.id)}
+                        onToggleGoing={() => toggleRsvp(e.id)}
+                        onTap={
+                          inert.has(e.id)
+                            ? undefined
+                            : () => router.push({ pathname: '/event/[id]', params: { id: e.id } })
+                        }
+                      />
+                    </View>
                   ))}
                 </View>
               )}

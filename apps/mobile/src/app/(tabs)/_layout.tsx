@@ -57,6 +57,13 @@ export default function TabsLayout() {
           is restored the moment the listing goes live, but href:null keeps it
           off the tab bar itself — it's reached only by the checkout redirect. */}
       <Tabs.Screen name="published" options={{ href: null }} />
+      {/* Workspace — the host surface, reached from the Me hub's stats card.
+          Same href:null treatment, for the reason the create-fork ruling gives:
+          chrome goes away only once there is INPUT TO LOSE. Workspace is a
+          destination, not a flow — a host who lands here by mistake should be
+          able to leave the way they came, so it keeps the tab bar. The Curbside
+          form and every wizard step still hide it. */}
+      <Tabs.Screen name="workspace" options={{ href: null }} />
     </Tabs>
   );
 }
