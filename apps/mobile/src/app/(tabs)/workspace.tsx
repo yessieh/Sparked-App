@@ -520,13 +520,31 @@ function WorkspaceDetail({
     }
   }, [workspaceId]);
 
+  /**
+   * THE screen refresh. This surface has TWO independent reads — the listings
+   * (`load`) and the ACTIVE/UPCOMING tiles (`workspace_stats`, via its own
+   * hook) — and every path that changes an event has to run both.
+   *
+   * It exists because they drifted: the focus path refreshed both, but delete,
+   * archive and unarchive each called `load()` alone, so a host could delete
+   * their last event and watch LISTINGS go empty while the tiles still read
+   * ACTIVE 1 / UPCOMING 1 until a manual page refresh. Three call sites, one of
+   * two reads. Anything that mutates an event calls THIS, not `load`, so a
+   * fourth action path inherits both reads instead of having to remember.
+   *
+   * Parallel, not sequential: the reads are independent and the tiles have no
+   * reason to wait on the listings.
+   */
+  const reload = useCallback(async () => {
+    await Promise.all([load(), refreshStats()]);
+  }, [load, refreshStats]);
+
   // Focus refresh, never polling (architecture lock #4): a host lands back here
   // straight from publishing, and the new listing has to be there.
   useFocusEffect(
     useCallback(() => {
-      load();
-      refreshStats();
-    }, [load, refreshStats]),
+      reload();
+    }, [reload]),
   );
 
   const { upcoming, past, archived } = useMemo(() => {
@@ -571,6 +589,19 @@ function WorkspaceDetail({
     setDeleteError(null);
     try {
       await deleteWorkspace(workspaceId);
+      // CLOSE THE DIALOG EXPLICITLY, BEFORE NAVIGATING. This used to rely on
+      // the screen unmounting to take the modal with it, which held only while
+      // Workspace was a root Stack screen — replace() popped it. Now that it
+      // lives in (tabs), replace() just switches tabs and React Navigation
+      // keeps the blurred screen MOUNTED, so `deleting` and `confirmOpen`
+      // survived. And RN-web renders <Modal> through createPortal into a div on
+      // document.body, outside the tab container entirely, so the navigator
+      // hiding the blurred screen did not hide the dialog: the spinner stayed
+      // pinned over the Me hub forever, with the workspace already deleted.
+      // Resetting here is correct whatever the navigator does — it cannot break
+      // again just because a screen moves.
+      setConfirmOpen(false);
+      setDeleting(false);
       // Me refetches its workspace read on focus, so it shows the dashed
       // invitation again on arrival. replace(), not push() — the workspace this
       // stack was showing no longer exists to go back to.
@@ -585,7 +616,7 @@ function WorkspaceDetail({
     setActionEventId(null);
     try {
       await archiveEvent(eventId);
-      await load();
+      await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -595,7 +626,7 @@ function WorkspaceDetail({
     setActionEventId(null);
     try {
       await unarchiveEvent(eventId);
-      await load();
+      await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -606,8 +637,15 @@ function WorkspaceDetail({
     setDeleteEventLoading(true);
     try {
       await deleteEvent(eventToDelete.id);
+      // Same fault as onConfirmDelete, hidden rather than visible: clearing
+      // eventToDelete closes this dialog, so nothing LOOKED stuck — but the
+      // busy flag stayed true for the life of the screen, and the next delete
+      // opened with its confirm button already spinning and disabled, with no
+      // way to finish without leaving Workspace and coming back. Reset it here
+      // rather than leaning on anything else to tidy up.
+      setDeleteEventLoading(false);
       setEventToDelete(null);
-      await load();
+      await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setDeleteEventLoading(false);
