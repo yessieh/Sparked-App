@@ -44,6 +44,7 @@ import EventDetailView, { type EventDetailData, placeholderPhotos } from '../../
 import EventStub, { type FeedEvent } from '../../components/EventStub';
 import MarkdownText from '../../components/MarkdownText';
 import SiteMap from '../../components/SiteMap';
+import { SubHeader } from '../../components/SubHeader';
 import { DateField, TimeField, format12h } from '../../components/pickers';
 import { useAuth } from '../../lib/auth';
 import { geocode, toWktPoint } from '../../lib/geocode';
@@ -70,7 +71,6 @@ import { supabase } from '../../lib/supabase';
 import { getOrCreateWorkspace, getOwnWorkspaceId } from '../../lib/workspace';
 import { brand, breakpoints, useTheme } from '../../theme';
 import { categoryColor } from '../../theme/categoryColors';
-import { SubHeader } from './index';
 
 const STEPS = ['Basics', 'When & Where', 'Tier', 'Details', 'Review'] as const;
 const TIER_STEP = STEPS.indexOf('Tier');

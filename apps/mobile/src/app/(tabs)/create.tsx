@@ -11,46 +11,10 @@ import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
+import { SubHeader } from '../../components/SubHeader';
 import { useAuth } from '../../lib/auth';
 import { supabase } from '../../lib/supabase';
 import { brand, useTheme } from '../../theme';
-
-/** Back chip + eyebrow crumb (reference SubHeader). */
-export function SubHeader({ crumb }: { crumb: string }) {
-  const theme = useTheme();
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 24, paddingTop: 16, paddingBottom: 12 }}>
-      <Pressable
-        onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/me'))}
-        accessibilityLabel="Back"
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: 10,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: theme.colors.iconChipBg,
-          borderWidth: 1,
-          borderColor: theme.colors.cardBorder,
-        }}
-      >
-        <Ionicons name="arrow-back" size={16} color={theme.colors.text} />
-      </Pressable>
-      <Text
-        style={{
-          fontFamily: theme.fonts.bodySemiBold,
-          fontSize: theme.fontSizes.eyebrow,
-          fontWeight: '900',
-          letterSpacing: 2,
-          textTransform: 'uppercase',
-          color: brand.brightOrange,
-        }}
-      >
-        {crumb}
-      </Text>
-    </View>
-  );
-}
 
 interface LaneProps {
   onPress: () => void;

@@ -64,6 +64,16 @@ export default function TabsLayout() {
           able to leave the way they came, so it keeps the tab bar. The Curbside
           form and every wizard step still hide it. */}
       <Tabs.Screen name="workspace" options={{ href: null }} />
+      {/* The create ENTRY FORK ("What are you posting?"). Same href:null
+          treatment, same reason: the ruling is chrome-less once there is INPUT
+          TO LOSE, and the fork is a browsing decision with nothing entered — a
+          user who opened it by mistake should not have the back button as their
+          only exit.
+          ONLY the fork lives here. create/curbside, create/event and
+          create/checkout stay in the root Stack and stay chrome-less, because
+          they hold unsaved input and a stray tab tap losing a half-filled event
+          is worse than one extra back-tap. */}
+      <Tabs.Screen name="create" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -34,6 +34,7 @@ import {
 } from 'react-native';
 
 import { FormField, GradientButton, SecondaryButton } from '../../components/AuthControls';
+import { SubHeader } from '../../components/SubHeader';
 import { DateField, TimeField, format12h } from '../../components/pickers';
 import { useAuth } from '../../lib/auth';
 import { geocode, toWktPoint } from '../../lib/geocode';
@@ -46,7 +47,6 @@ import {
   getOwnWorkspaceId,
 } from '../../lib/workspace';
 import { brand, useTheme } from '../../theme';
-import { SubHeader } from './index';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]?\d|2[0-3]):[0-5]\d$/;

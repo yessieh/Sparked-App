@@ -27,6 +27,7 @@ import {
 import Svg, { Path } from 'react-native-svg';
 
 import { GradientButton, SecondaryButton } from '../../components/AuthControls';
+import { SubHeader } from '../../components/SubHeader';
 import {
   type TierPrice,
   bandLabel,
@@ -37,7 +38,6 @@ import {
 } from '../../lib/pricing';
 import { supabase } from '../../lib/supabase';
 import { brand, useTheme } from '../../theme';
-import { SubHeader } from './index';
 
 type Method = 'applepay' | 'googlepay' | 'link' | 'card';
 

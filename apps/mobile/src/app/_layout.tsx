@@ -51,7 +51,10 @@ function ThemedStack() {
       {/* workspace moved into (tabs) so it keeps the tab bar — it is a
           destination, not a flow with input to lose. It is declared there with
           href:null, not here. */}
-      <Stack.Screen name="create/index" />
+      {/* create/index moved into (tabs) as create.tsx so the fork keeps the tab
+          bar — nothing is entered yet, so leaving costs nothing. Declared there
+          with href:null, not here. The three screens below hold unsaved input
+          and stay in this chrome-less Stack. */}
       <Stack.Screen name="create/curbside" />
       <Stack.Screen name="create/event" />
       <Stack.Screen name="create/checkout" />
