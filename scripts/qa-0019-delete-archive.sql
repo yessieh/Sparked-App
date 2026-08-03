@@ -14,29 +14,40 @@
 -- clears to get a clean slate. Section 3 should reproduce section 1 exactly.
 --
 -- ---------------------------------------------------------------------------
--- REWRITTEN 2026-07-30. The first version of this file could not run and, where
--- it did run, proved less than it claimed. Five faults, all fixed here:
+-- REWRITTEN 2026-07-30. The first version could not run and, where it did,
+-- proved less than it claimed: event_detail called with four arguments (it
+-- takes three), PostGIS called in `public` when 0003 moved it to `extensions`,
+-- a nonexistent 'paid' tier, visibility assertions that hardcoded the very
+-- predicate under test while running as RLS-bypassing postgres, and no archive
+-- check against the quota ledger.
 --
---  1. `event_detail` was called with FOUR arguments; it takes three
---     (event_id, origin_lat, origin_lng). Hard error, outside any exception
---     handler, so the transaction aborted and the result grid never rendered.
---  2. PostGIS was called as `public.st_setsrid` / `public.st_makepoint`, but
---     migration 0003 relocated PostGIS to the `extensions` schema. Also a hard
---     error. Fixed by pinning search_path once, below.
---  3. `tier_id = 'paid'` is not a tier. The three are curbside / standard /
---     plus (0001). FK violation. Now uses 'standard'.
---  4. **The visibility assertions proved nothing.** This script runs as
---     `postgres`, which BYPASSES RLS, and several assertions hardcoded
---     `deleted_at is null` / `archived_at is null` in their own WHERE clause —
---     so they asserted their own predicate, not the server's. Every
---     RLS-dependent assertion now runs through a helper that switches to the
---     `authenticated` ROLE, which is the only way the policy actually engages.
---     The test queries carry NO delete/archive predicate of their own.
---  5. Only delete was checked against the quota ledger; archive was not.
+-- IDENTITY DRIFT FIXED 2026-08-02. Running it surfaced a sixth fault, and the
+-- most insidious: **the read helpers set `request.jwt.claims` and never put it
+-- back.** Each one silently reassigned the acting identity for everything after
+-- it, so five privileged calls ran as the wrong person:
 --
--- WHAT THE REPAIR CHANGED IN THE RESULTS: a2, a3 and b2 exercise the function
--- bodies that 0020 fixed. Before 0020 they FAILED (the filters lived only in
--- edited migration files that had never been applied). They should pass now.
+--   (c) unarchive_event  — ran as u_b against u_a's workspace  ← the reported
+--                          `42501 not_an_editor`
+--   (d) archive_event / delete_event on the curbside event — same
+--   (g4) delete_event    — ran as u_a against u_b's workspace
+--   (g9) archive_event   — ran as u_c against u_b's workspace
+--
+-- And one that would NOT have announced itself: (d)'s curbside INSERT fires
+-- 0018's consume trigger, which attributes the ledger row to
+-- `coalesce(auth.uid(), w.created_by)`. Acting as u_b, the credit landed under
+-- u_b, so d1 and d4 would have reported 0 and read as a quota-ledger product
+-- bug when the ledger was working perfectly.
+--
+-- Fixed twice over, deliberately:
+--   1. Every helper now SAVES and RESTORES the prior claims, so reading as
+--      someone can never change who is acting. That removes the drift engine.
+--   2. Every privileged call is preceded by an explicit `pg_temp.act_as(...)`,
+--      so each site states its own identity and is auditable on sight instead
+--      of depending on what the previous section happened to leave behind.
+--
+-- WHAT THE 0020 REPAIR CHANGED IN THE RESULTS: a2, a3 and b2 exercise the
+-- function bodies that 0020 fixed. Before 0020 they FAILED (the filters lived
+-- only in edited migration files that had never been applied).
 -- ============================================================================
 
 
@@ -79,28 +90,47 @@ end;
 $fn$;
 
 -- ---------------------------------------------------------------------------
--- THE TWO HELPERS THAT MAKE THE VISIBILITY ASSERTIONS REAL.
+-- IDENTITY. `act_as` is the ONLY thing that changes who is acting, and every
+-- privileged call names its own identity by calling it first. Nothing infers
+-- the actor from context.
+-- ---------------------------------------------------------------------------
+create function pg_temp.act_as(p_user uuid)
+returns void language plpgsql as $fn$
+begin
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', p_user::text, 'role', 'authenticated')::text, true);
+end;
+$fn$;
+
+-- ---------------------------------------------------------------------------
+-- THE HELPERS THAT MAKE THE VISIBILITY ASSERTIONS REAL.
 --
 -- Fixtures need postgres privileges; RLS needs a non-superuser role. So each
--- read assertion hops into `authenticated` for the duration of one query and
--- hops straight back. Neither helper filters on deleted_at or archived_at —
--- the POLICY is what is under test, and a test that restates the rule it is
--- checking is not a test.
+-- read hops into `authenticated` for the duration of one query and hops
+-- straight back. Neither the role NOR the claims survive the call — reading as
+-- someone must not change who is acting, which is the bug that made five
+-- privileged calls run as the wrong person.
+--
+-- No helper filters on deleted_at or archived_at: the POLICY is what is under
+-- test, and a test that restates the rule it is checking is not a test.
 -- ---------------------------------------------------------------------------
 
 -- Direct table read, as p_user. This is the shape workspace.tsx uses.
 create function pg_temp.visible_to(p_user uuid, p_event uuid)
 returns integer language plpgsql as $fn$
-declare n integer;
+declare
+  n     integer;
+  prior text := current_setting('request.jwt.claims', true);
 begin
-  perform set_config('request.jwt.claims',
-    json_build_object('sub', p_user::text, 'role', 'authenticated')::text, true);
+  perform pg_temp.act_as(p_user);
   execute 'set local role authenticated';
   select count(e.id) into n from public.events e where e.id = p_event;
   execute 'reset role';
+  perform set_config('request.jwt.claims', coalesce(prior, ''), true);
   return n;
 exception when others then
   execute 'reset role';
+  perform set_config('request.jwt.claims', coalesce(prior, ''), true);
   raise;
 end;
 $fn$;
@@ -109,10 +139,11 @@ $fn$;
 -- see. Mirrors saved.tsx (`.in('id', ids).eq('status','published')`).
 create function pg_temp.saved_visible_to(p_user uuid, p_event uuid)
 returns integer language plpgsql as $fn$
-declare n integer;
+declare
+  n     integer;
+  prior text := current_setting('request.jwt.claims', true);
 begin
-  perform set_config('request.jwt.claims',
-    json_build_object('sub', p_user::text, 'role', 'authenticated')::text, true);
+  perform pg_temp.act_as(p_user);
   execute 'set local role authenticated';
   select count(e.id) into n
   from public.saves s
@@ -121,9 +152,11 @@ begin
     and e.id = p_event
     and e.status = 'published';
   execute 'reset role';
+  perform set_config('request.jwt.claims', coalesce(prior, ''), true);
   return n;
 exception when others then
   execute 'reset role';
+  perform set_config('request.jwt.claims', coalesce(prior, ''), true);
   raise;
 end;
 $fn$;
@@ -132,16 +165,19 @@ $fn$;
 -- (0022), and that a stranger cannot.
 create function pg_temp.detail_visible_to(p_user uuid, p_event uuid)
 returns integer language plpgsql as $fn$
-declare n integer;
+declare
+  n     integer;
+  prior text := current_setting('request.jwt.claims', true);
 begin
-  perform set_config('request.jwt.claims',
-    json_build_object('sub', p_user::text, 'role', 'authenticated')::text, true);
+  perform pg_temp.act_as(p_user);
   execute 'set local role authenticated';
   select count(*) into n from public.event_detail(p_event, 32.0, -111.0);
   execute 'reset role';
+  perform set_config('request.jwt.claims', coalesce(prior, ''), true);
   return n;
 exception when others then
   execute 'reset role';
+  perform set_config('request.jwt.claims', coalesce(prior, ''), true);
   raise;
 end;
 $fn$;
@@ -149,25 +185,28 @@ $fn$;
 -- The storefront, as p_user. The history exception must NEVER reach this.
 create function pg_temp.feed_visible_to(p_user uuid, p_event uuid)
 returns integer language plpgsql as $fn$
-declare n integer;
+declare
+  n     integer;
+  prior text := current_setting('request.jwt.claims', true);
 begin
-  perform set_config('request.jwt.claims',
-    json_build_object('sub', p_user::text, 'role', 'authenticated')::text, true);
+  perform pg_temp.act_as(p_user);
   execute 'set local role authenticated';
   select count(*) into n
     from public.events_within_radius(32.0, -111.0, 25.0) f where f.id = p_event;
   execute 'reset role';
+  perform set_config('request.jwt.claims', coalesce(prior, ''), true);
   return n;
 exception when others then
   execute 'reset role';
+  perform set_config('request.jwt.claims', coalesce(prior, ''), true);
   raise;
 end;
 $fn$;
 
 do $$
 declare
-  u_a     uuid;  -- the host
-  u_b     uuid;  -- a consumer / non-member
+  u_a     uuid;  -- host A, owns ws_a
+  u_b     uuid;  -- host B, owns ws_b; also the consumer in (b)/(c)
   u_c     uuid;  -- (0022) a STRANGER: neither host nor attendee. May be null.
   ws_a    uuid;
   ws_b    uuid;
@@ -185,7 +224,9 @@ declare
             st_setsrid(st_makepoint(-111.0, 32.0), 4326)::extensions.geography;
 begin
   ---------------------------------------------------------------------------
-  -- Fixtures
+  -- Fixtures. ws_a is owned by u_a, ws_b by u_b — every privileged call below
+  -- acts as the owner of the workspace it targets, except (e), which acts as a
+  -- non-member ON PURPOSE.
   ---------------------------------------------------------------------------
   select id into u_a from public.profiles order by created_at limit 1;
   select id into u_b from public.profiles where id <> u_a order by created_at limit 1;
@@ -216,8 +257,7 @@ begin
           now() + interval '10 days', now() + interval '10 days 3 hours', qa_addr, qa_pt)
   returning id into ev_del;
 
-  perform set_config('request.jwt.claims',
-    json_build_object('sub', u_a::text, 'role', 'authenticated')::text, true);
+  perform pg_temp.act_as(u_a);                      -- ws_a owner
   perform app.delete_event(ev_del);
 
   n := pg_temp.visible_to(u_a, ev_del);
@@ -243,6 +283,7 @@ begin
   -- A consumer saves it BEFORE it is archived.
   insert into public.saves (user_id, event_id) values (u_b, ev_arch);
 
+  perform pg_temp.act_as(u_a);                      -- ws_a owner
   perform app.archive_event(ev_arch);
 
   n := pg_temp.visible_to(u_a, ev_arch);
@@ -260,6 +301,7 @@ begin
   ---------------------------------------------------------------------------
   -- (c) UNARCHIVE restores it everywhere it was removed from.
   ---------------------------------------------------------------------------
+  perform pg_temp.act_as(u_a);                      -- ws_a owner (was u_b's read)
   perform app.unarchive_event(ev_arch);
 
   select count(*) into n from public.events_within_radius(32.0, -111.0, 10.0) f where f.id = ev_arch;
@@ -272,7 +314,13 @@ begin
 
   ---------------------------------------------------------------------------
   -- (d) THE QUOTA LEDGER IS IMMUNE TO BOTH VERBS (0018 × 0019).
+  --
+  -- act_as BEFORE the insert, not just before the verbs: the consume trigger
+  -- attributes the credit to coalesce(auth.uid(), w.created_by), so the acting
+  -- identity here decides WHOSE ledger row this is. Get it wrong and d1/d4
+  -- report 0 and look like a ledger bug.
   ---------------------------------------------------------------------------
+  perform pg_temp.act_as(u_a);                      -- ws_a owner; credit lands on u_a
   insert into public.events (workspace_id, title, tier_id, status, starts_at, ends_at, address)
   values (ws_a, 'QA 0019 curbside ledger', 'curbside', 'published',
           now() + interval '1 day', now() + interval '1 day 4 hours', qa_addr)
@@ -283,34 +331,63 @@ begin
   perform pg_temp.rec('d1. publishing curbside consumed a credit',
     '1 ledger row linked to the event', n::text || ' row(s)', n = 1);
 
+  perform pg_temp.act_as(u_a);                      -- ws_a owner
   perform app.archive_event(ev_curb);
   select count(*) into n from public.curbside_quota_ledger
    where user_id = u_a and event_id = ev_curb;
   perform pg_temp.rec('d2. ARCHIVE does not touch the ledger',
     '1 row, still linked to the event', n::text || ' row(s)', n = 1);
 
+  -- CORRECTED 2026-08-02. This used to assert `event_id is null` and failed at
+  -- 0 — correctly. It was written for 0018, when the only thing that removed an
+  -- event was a real DELETE. 0019 introduced a SOFT delete verb and reused the
+  -- word, and the expectation was carried over without being re-derived.
+  -- app.delete_event only sets deleted_at; the events row stays, so the FK's
+  -- ON DELETE SET NULL never fires and event_id stays populated. Orphaning is a
+  -- PURGE-time event, not a delete-time one — see d5.
+  perform pg_temp.act_as(u_a);                      -- ws_a owner
   perform app.delete_event(ev_curb);
   select count(*) into n from public.curbside_quota_ledger
+   where user_id = u_a and event_id = ev_curb;
+  perform pg_temp.rec('d3. SOFT delete does not touch the ledger either',
+    '1 row, event_id STILL set', n::text || ' row(s)', n = 1);
+
+  perform pg_temp.rec('d4. the credit is still spent after both HOST verbs',
+    'app.curbside_credits_used = 1',
+    app.curbside_credits_used(u_a)::text,
+    app.curbside_credits_used(u_a) = 1);
+
+  ---------------------------------------------------------------------------
+  -- (d5/d6) THE HARD-DELETE PATH — what ON DELETE SET NULL actually exists for,
+  -- and what nothing in this suite was covering while d3 was wrong.
+  --
+  -- Reachable today via app.delete_workspace's cascade (0017) and qa-cleanup,
+  -- and later via the 90-day purge job. The ledger row must OUTLIVE the event
+  -- row entirely — that is the whole mechanism that stops delete-and-recreate
+  -- refunding a free post.
+  ---------------------------------------------------------------------------
+  delete from public.events where id = ev_curb;     -- a real DELETE, as postgres
+
+  select count(*) into n from public.curbside_quota_ledger
    where user_id = u_a and event_id is null;
-  perform pg_temp.rec('d3. DELETE leaves the ledger row orphaned, not removed',
+  perform pg_temp.rec('d5. HARD delete orphans the ledger row, does not remove it',
     '1 row with event_id NULL', n::text || ' row(s)', n = 1);
 
-  perform pg_temp.rec('d4. the credit is still spent after both verbs',
+  perform pg_temp.rec('d6. the credit survives the event row vanishing entirely',
     'app.curbside_credits_used = 1',
     app.curbside_credits_used(u_a)::text,
     app.curbside_credits_used(u_a) = 1);
 
   ---------------------------------------------------------------------------
   -- (e) A NON-MEMBER cannot delete or archive someone else's event.
+  -- The ONLY place the actor is deliberately not the owner.
   ---------------------------------------------------------------------------
   insert into public.events (workspace_id, title, tier_id, status, starts_at, ends_at, address)
   values (ws_a, 'QA 0019 authz target', 'standard', 'published',
           now() + interval '12 days', now() + interval '12 days 3 hours', qa_addr)
   returning id into ev_saved;
 
-  -- Act as B, who has no membership in ws_a.
-  perform set_config('request.jwt.claims',
-    json_build_object('sub', u_b::text, 'role', 'authenticated')::text, true);
+  perform pg_temp.act_as(u_b);                      -- NOT a member of ws_a — the point
 
   begin
     perform app.delete_event(ev_saved);
@@ -322,6 +399,7 @@ begin
       'rejected: not_an_editor', err, err = 'not_an_editor');
   end;
 
+  perform pg_temp.act_as(u_b);                      -- NOT a member of ws_a
   begin
     perform app.archive_event(ev_saved);
     perform pg_temp.rec('e2. non-member archive',
@@ -352,8 +430,7 @@ begin
   perform pg_temp.rec('f1. consumer sees the saved event beforehand',
     '1', n::text, n = 1);
 
-  perform set_config('request.jwt.claims',
-    json_build_object('sub', u_b::text, 'role', 'authenticated')::text, true);
+  perform pg_temp.act_as(u_b);                      -- ws_b owner
   perform app.delete_event(ev_saved);
 
   n := pg_temp.saved_visible_to(u_a, ev_saved);
@@ -365,10 +442,11 @@ begin
   --
   -- A host may withdraw what has not happened. They may not rewrite what has.
   -- Every event below is in the PAST (ended ~10 days ago), which is the hinge
-  -- the whole rule turns on.
+  -- the whole rule turns on. All three are owned by ws_b / u_b; u_a is the
+  -- attendee.
   ---------------------------------------------------------------------------
 
-  -- (g1/g2) ARCHIVE a past event that someone attended.
+  -- (g1–g3) ARCHIVE a past event that someone attended.
   insert into public.events (workspace_id, title, tier_id, status, starts_at, ends_at, address, location)
   values (ws_b, 'QA 0022 past + archived', 'standard', 'published',
           now() - interval '10 days', now() - interval '10 days' + interval '3 hours',
@@ -377,8 +455,7 @@ begin
 
   insert into public.saves (user_id, event_id) values (u_a, ev_past_arch);
 
-  perform set_config('request.jwt.claims',
-    json_build_object('sub', u_b::text, 'role', 'authenticated')::text, true);
+  perform pg_temp.act_as(u_b);                      -- ws_b owner
   perform app.archive_event(ev_past_arch);
 
   n := pg_temp.saved_visible_to(u_a, ev_past_arch);
@@ -403,6 +480,7 @@ begin
   -- RSVP rather than a save, so has_attendance is proven on both tables.
   insert into public.rsvps (user_id, event_id) values (u_a, ev_past_del);
 
+  perform pg_temp.act_as(u_b);                      -- ws_b owner (was u_a's read)
   perform app.delete_event(ev_past_del);
 
   n := pg_temp.visible_to(u_a, ev_past_del);
@@ -441,6 +519,8 @@ begin
   returning id into ev_future_arch;
 
   insert into public.saves (user_id, event_id) values (u_a, ev_future_arch);
+
+  perform pg_temp.act_as(u_b);                      -- ws_b owner (was u_c's read)
   perform app.archive_event(ev_future_arch);
 
   n := pg_temp.saved_visible_to(u_a, ev_future_arch);

@@ -84,11 +84,14 @@ where (e.address like '18680 S Nogales Hwy%' or e.address like '123 Rainbow Road
 -- 3. VERIFY.
 --    qa_rows_remaining: QA listings still present (must be 0).
 --    seed_events: the seeded demo set, untouched (9 anon-visible today).
---    orphan_quota_rows: ledger rows whose event is gone but which were NOT
---      cleared above. Expect a small steady number — every legitimately
---      deleted real post leaves one, on purpose. It is NOT an error; watch it
---      only for sudden jumps, which would mean QA posts are escaping 2a
---      (usually because a test listing used the wrong address).
+--    orphan_quota_rows: ledger rows whose event ROW is gone — which means a
+--      HARD delete: the workspace cascade (0017), this script, or later the
+--      90-day purge. A host's own "Delete" is SOFT (0019) — it only sets
+--      deleted_at, the events row stays, so the FK's ON DELETE SET NULL never
+--      fires and those ledger rows keep a populated event_id. So expect this
+--      to sit near-flat, NOT to tick up with every post a host deletes. It is
+--      NOT an error; watch only for sudden jumps, which would mean QA posts
+--      are escaping 2a (usually a test listing that used the wrong address).
 -- ---------------------------------------------------------------------------
 select
   (select count(*) from public.events e
