@@ -1,0 +1,465 @@
+// Organizer Profile — the PUBLIC host page and the anonymous-browse backlink
+// target. Reached from an event's Organizer block and from the host's own
+// Workspace screen.
+//
+// Root Stack, sibling of event/[id]: both are deep-linkable public content
+// pages, and consistency between them beats the create-flow chrome rule, which
+// is scoped to that flow. (Whether a cold deep-link arrival should get a tab
+// bar is parked and applies to event/[id] identically — not decided here.)
+//
+// DATA: one call to `organizer_profile` (0023), anon-callable. The RPC already
+// does the work this screen must not redo:
+//   • archived and deleted events are filtered out SERVER-side, explicitly —
+//     NOT via events_select_public, whose member branch would show a host their
+//     own archived events here and whose 0022 attendee-history branch would
+//     resurface an archived event for a visitor who happened to save it;
+//   • anonymous Curbside posts are excluded entirely, because listing one under
+//     the organizer's name would deanonymize it;
+//   • past is capped at 50, most-recent-first.
+// So this screen sorts nothing and filters nothing. If a future change needs
+// different events, it belongs in the RPC.
+//
+// CONSUMER-FACING DATA ONLY (locked EventStub rule): no tier, no publish fee,
+// no host economics. The payload carries tier_id; FeedEvent has no such field
+// and it is deliberately never mapped.
+//
+// LOGO: placeholder always. `logo_path` has no storage bucket behind it, so it
+// is read and ignored; the fallback is the Me hub's gradient-initials chip.
+
+import { Ionicons } from '@expo/vector-icons';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import React, { useCallback, useMemo, useState } from 'react';
+import { ActivityIndicator, Linking, Pressable, ScrollView, Text, View } from 'react-native';
+
+import { GradientFill, SecondaryButton } from '../../components/AuthControls';
+import EventStub, { type FeedEvent } from '../../components/EventStub';
+import { useAuth } from '../../lib/auth';
+import { useEngagement } from '../../lib/engagement';
+import { supabase } from '../../lib/supabase';
+import { brand, useTheme } from '../../theme';
+
+type Theme = ReturnType<typeof useTheme>;
+
+/** One event as `organizer_profile` returns it. No organizer_name (it is the
+ * same organizer for every row) and no distance_miles (this surface has no
+ * origin) — both supplied or omitted when mapping to FeedEvent. */
+interface ProfileEvent {
+  id: string;
+  title: string;
+  starts_at: string;
+  ends_at: string | null;
+  venue_name: string | null;
+  entry_fee_cents: number;
+  rsvp_count: number;
+  categories: string[] | null;
+}
+
+interface OrganizerProfile {
+  id: string;
+  name: string;
+  bio: string | null;
+  location_text: string | null;
+  website: string | null;
+  socials: Record<string, string>;
+  logo_path: string | null;
+  upcoming: ProfileEvent[];
+  past: ProfileEvent[];
+}
+
+/** Up to two uppercase initials, the Me hub's derivation. */
+function initialsOf(name: string): string {
+  return name
+    .split(/\s+/)
+    .map((w) => w[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
+
+/** Bare host for display — a full URL in a button reads as noise. */
+function prettyUrl(url: string): string {
+  return url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+}
+
+// ---------------------------------------------------------------------------
+// Header — logo chip + name + location + bio, then the secondary link row.
+// ---------------------------------------------------------------------------
+function ProfileHeader({ theme, profile }: { theme: Theme; profile: OrganizerProfile }) {
+  const socialEntries = Object.entries(profile.socials ?? {}).filter(([, v]) => !!v);
+
+  return (
+    <View style={{ marginBottom: 30 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+        {/* Placeholder always — logo_path has no pipeline behind it yet. Same
+            anatomy as the Me hub's avatar so the two read as one system. */}
+        <View
+          style={{
+            width: 64,
+            height: 64,
+            borderRadius: 32,
+            overflow: 'hidden',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: theme.shadows.cta,
+          }}
+        >
+          <GradientFill />
+          <Text
+            style={{
+              fontFamily: theme.fonts.displayBlack,
+              fontWeight: '900',
+              fontSize: 24,
+              letterSpacing: -0.24,
+              color: brand.navy,
+            }}
+          >
+            {initialsOf(profile.name) || '·'}
+          </Text>
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text
+            style={{
+              fontFamily: theme.fonts.bodySemiBold,
+              fontSize: theme.fontSizes.eyebrow,
+              fontWeight: '900',
+              letterSpacing: 2,
+              textTransform: 'uppercase',
+              color: brand.brightOrange,
+            }}
+          >
+            Organizer
+          </Text>
+          <Text
+            style={{
+              fontFamily: theme.fonts.displayBlack,
+              fontWeight: '900',
+              fontSize: 22,
+              letterSpacing: -0.22,
+              color: theme.colors.text,
+              marginTop: 2,
+            }}
+          >
+            {profile.name}
+          </Text>
+          {!!profile.location_text && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 5 }}>
+              <Ionicons name="location-outline" size={13} color={theme.colors.textMuted} />
+              <Text
+                numberOfLines={1}
+                style={{
+                  fontFamily: theme.fonts.bodyMedium,
+                  fontSize: 13,
+                  color: theme.colors.textMuted,
+                }}
+              >
+                {profile.location_text}
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+
+      {!!profile.bio && (
+        <Text
+          style={{
+            fontFamily: theme.fonts.bodyMedium,
+            fontSize: theme.fontSizes.bodySm,
+            lineHeight: 21,
+            color: theme.colors.textMuted,
+            marginTop: 16,
+          }}
+        >
+          {profile.bio}
+        </Text>
+      )}
+
+      {/* Secondary outline, never gradient: the gradient is reserved for host
+          and monetization ACTIONS, and an outbound link is neither. */}
+      {(!!profile.website || socialEntries.length > 0) && (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 18 }}>
+          {!!profile.website && (
+            <View style={{ minWidth: 150 }}>
+              <SecondaryButton onPress={() => Linking.openURL(profile.website as string)}>
+                {prettyUrl(profile.website)}
+              </SecondaryButton>
+            </View>
+          )}
+          {socialEntries.map(([platform, handle]) => (
+            <View key={platform} style={{ minWidth: 130 }}>
+              <SecondaryButton
+                onPress={() => {
+                  const target = /^https?:\/\//.test(handle) ? handle : `https://${handle}`;
+                  Linking.openURL(target);
+                }}
+              >
+                {platform}
+              </SecondaryButton>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+export default function OrganizerProfileScreen() {
+  const theme = useTheme();
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const { session } = useAuth();
+  const { savedIds, goingIds, toggleSave, toggleRsvp, refresh, rsvpDelta } = useEngagement();
+
+  const [profile, setProfile] = useState<OrganizerProfile | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Session-only and collapsed by default — the same contract as Saved's and
+  // Workspace's Past sections.
+  const [pastOpen, setPastOpen] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!id) return;
+    const { data, error: rpcError } = await supabase.rpc('organizer_profile', {
+      workspace_id: id,
+    });
+    if (rpcError) {
+      setError(rpcError.message);
+      return;
+    }
+    // Zero rows is the RPC's 404: a real workspace always yields exactly one.
+    const row = ((data ?? []) as OrganizerProfile[])[0] ?? null;
+    setError(null);
+    setNotFound(row === null);
+    setProfile(row);
+  }, [id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+      refresh();
+    }, [load, refresh]),
+  );
+
+  // Anonymous engagement taps invite an account rather than failing — the same
+  // progressive gating Explore uses. The feed never gates; neither does this.
+  const gated = useCallback(
+    (action: () => void) => () => {
+      if (session) action();
+      else router.push({ pathname: '/auth', params: { mode: 'signup' } });
+    },
+    [session],
+  );
+
+  const toFeedEvent = useCallback(
+    (e: ProfileEvent): FeedEvent => ({
+      id: e.id,
+      title: e.title,
+      // The RPC omits organizer_name — one organizer for the whole page — so
+      // it comes from the header. Same as the Workspace listings.
+      organizer_name: profile?.name ?? null,
+      starts_at: e.starts_at,
+      ends_at: e.ends_at,
+      venue_name: e.venue_name,
+      entry_fee_cents: e.entry_fee_cents,
+      rsvp_count: (e.rsvp_count ?? 0) + rsvpDelta(e.id),
+      categories: e.categories,
+      // distance_miles deliberately absent: no origin on this surface.
+    }),
+    [profile?.name, rsvpDelta],
+  );
+
+  const upcoming = useMemo(
+    () => (profile?.upcoming ?? []).map(toFeedEvent),
+    [profile?.upcoming, toFeedEvent],
+  );
+  const past = useMemo(
+    () => (profile?.past ?? []).map(toFeedEvent),
+    [profile?.past, toFeedEvent],
+  );
+
+  const renderStub = (e: FeedEvent) => (
+    <EventStub
+      key={e.id}
+      event={e}
+      variant="compact"
+      saved={savedIds.has(e.id)}
+      going={goingIds.has(e.id)}
+      onToggleSave={gated(() => toggleSave(e.id))}
+      onToggleGoing={gated(() => toggleRsvp(e.id))}
+      onTap={() => router.push({ pathname: '/event/[id]', params: { id: e.id } })}
+    />
+  );
+
+  const back = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)'));
+
+  return (
+    <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
+      {/* Back chip only — no eyebrow here, the profile header carries it. */}
+      <View style={{ paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8 }}>
+        <Pressable
+          onPress={back}
+          accessibilityLabel="Back"
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: theme.colors.iconChipBg,
+            borderWidth: 1,
+            borderColor: theme.colors.cardBorder,
+          }}
+        >
+          <Ionicons name="arrow-back" size={16} color={theme.colors.text} />
+        </Pressable>
+      </View>
+
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          paddingHorizontal: 24,
+          paddingTop: 8,
+          paddingBottom: 48,
+          maxWidth: 560,
+          width: '100%',
+          alignSelf: 'center',
+        }}
+      >
+        {error ? (
+          <Text
+            style={{
+              fontFamily: theme.fonts.bodyMedium,
+              fontSize: 13,
+              lineHeight: 19,
+              color: theme.colors.danger,
+              paddingVertical: 24,
+            }}
+          >
+            Couldn&apos;t load this organizer: {error}
+          </Text>
+        ) : notFound ? (
+          <Text
+            style={{
+              fontFamily: theme.fonts.bodyMedium,
+              fontSize: 13,
+              color: theme.colors.textMuted,
+              paddingVertical: 24,
+            }}
+          >
+            This organizer isn&apos;t available.
+          </Text>
+        ) : profile === null ? (
+          <View style={{ paddingVertical: 48, alignItems: 'center' }}>
+            <ActivityIndicator color={brand.brightOrange} />
+          </View>
+        ) : (
+          <>
+            <ProfileHeader theme={theme} profile={profile} />
+
+            {upcoming.length === 0 && past.length === 0 ? (
+              // The profile header still stands: an organizer with nothing
+              // listed is a real organizer, not an error.
+              <Text
+                style={{
+                  fontFamily: theme.fonts.bodyMedium,
+                  fontSize: 13,
+                  color: theme.colors.textFaint,
+                  paddingVertical: 8,
+                }}
+              >
+                No public events right now.
+              </Text>
+            ) : (
+              <View style={{ gap: 26 }}>
+                {upcoming.length > 0 && (
+                  <View>
+                    <View
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 }}
+                    >
+                      <Text
+                        style={{
+                          fontFamily: theme.fonts.displayBlack,
+                          fontWeight: '900',
+                          fontSize: 13,
+                          letterSpacing: 1.8,
+                          textTransform: 'uppercase',
+                          color: brand.brightOrange,
+                        }}
+                      >
+                        Upcoming
+                      </Text>
+                      <Text
+                        style={{
+                          fontFamily: theme.fonts.displayExtraBold,
+                          fontSize: 11,
+                          color: theme.colors.textFaint,
+                        }}
+                      >
+                        {upcoming.length}
+                      </Text>
+                      <View
+                        style={{ flex: 1, height: 1, backgroundColor: 'rgba(252,163,17,0.25)' }}
+                      />
+                    </View>
+                    <View style={{ gap: 16 }}>{upcoming.map(renderStub)}</View>
+                  </View>
+                )}
+
+                {/* PAST — muted rather than brand-orange, collapsed by default:
+                    a reference drawer, not a section competing for attention.
+                    Server already ordered it most-recent-first and capped it. */}
+                {past.length > 0 && (
+                  <View>
+                    <Pressable
+                      onPress={() => setPastOpen((o) => !o)}
+                      accessibilityRole="button"
+                      accessibilityState={{ expanded: pastOpen }}
+                      accessibilityLabel={`Past, ${past.length} ${past.length === 1 ? 'event' : 'events'}`}
+                      style={({ pressed }) => ({
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 10,
+                        paddingVertical: 6,
+                        marginBottom: pastOpen ? 13 : 0,
+                        opacity: pressed ? 0.6 : 1,
+                      })}
+                    >
+                      <Text
+                        style={{
+                          fontFamily: theme.fonts.displayBlack,
+                          fontWeight: '900',
+                          fontSize: 13,
+                          letterSpacing: 1.8,
+                          textTransform: 'uppercase',
+                          color: theme.colors.textMuted,
+                        }}
+                      >
+                        Past
+                      </Text>
+                      <Text
+                        style={{
+                          fontFamily: theme.fonts.displayExtraBold,
+                          fontSize: 11,
+                          color: theme.colors.textFaint,
+                        }}
+                      >
+                        {past.length}
+                      </Text>
+                      <View style={{ flex: 1, height: 1, backgroundColor: theme.colors.divider }} />
+                      <Ionicons
+                        name={pastOpen ? 'chevron-up' : 'chevron-down'}
+                        size={15}
+                        color={theme.colors.textFaint}
+                      />
+                    </Pressable>
+                    {pastOpen && <View style={{ gap: 16 }}>{past.map(renderStub)}</View>}
+                  </View>
+                )}
+              </View>
+            )}
+          </>
+        )}
+      </ScrollView>
+    </View>
+  );
+}

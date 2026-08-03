@@ -1052,6 +1052,11 @@ export default function EventWizard() {
       rsvp_count: 0,
       categories: cats.length ? cats : null,
       distance_miles: null,
+      // NULL on purpose, not merely unset: a null workspace_id renders the
+      // organizer block as plain text with no tap target, which is what a
+      // preview should be. Making it live would offer a way OUT of the wizard
+      // mid-draft — the one place the chrome rule says leaving is expensive.
+      workspace_id: null,
       cancelled_at: null,
     }),
     [title, desc, workspaceName, tier, startsAt, endsAt, venueName, address, feeCents, cats],

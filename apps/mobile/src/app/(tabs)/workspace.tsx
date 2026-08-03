@@ -805,6 +805,40 @@ function WorkspaceDetail({
           <GradientButton onPress={() => router.push('/create')}>+ New event</GradientButton>
         </View>
 
+        {/* "See what the public sees." Secondary, never gradient — it is
+            navigation to a read-only page, not a host action. Routes to the
+            same public profile a stranger reaches from an event, so what the
+            host previews IS what ships: the RPC filters archived and deleted
+            events server-side for everyone, owner included. */}
+        <Pressable
+          onPress={() =>
+            router.push({ pathname: '/organizer/[id]', params: { id: workspaceId } })
+          }
+          accessibilityRole="link"
+          accessibilityLabel="View public profile"
+          style={({ pressed }) => ({
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            alignSelf: 'flex-start',
+            marginTop: 12,
+            paddingVertical: 8,
+            opacity: pressed ? 0.6 : 1,
+          })}
+        >
+          <Ionicons name="open-outline" size={15} color={theme.colors.textMuted} />
+          <Text
+            style={{
+              fontFamily: theme.fonts.bodySemiBold,
+              fontSize: theme.fontSizes.bodySm,
+              fontWeight: '700',
+              color: theme.colors.textMuted,
+            }}
+          >
+            View public profile
+          </Text>
+        </Pressable>
+
         {/* Listings */}
         <View style={{ marginTop: 30 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 }}>

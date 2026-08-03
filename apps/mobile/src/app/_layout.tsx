@@ -48,6 +48,10 @@ function ThemedStack() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="auth" options={{ presentation: 'modal' }} />
       <Stack.Screen name="event/[id]" />
+      {/* Public Organizer Profile — the anonymous-browse backlink target, and
+          the sibling of event/[id]: both are deep-linkable public content, so
+          they share a home. */}
+      <Stack.Screen name="organizer/[id]" />
       {/* workspace moved into (tabs) so it keeps the tab bar — it is a
           destination, not a flow with input to lose. It is declared there with
           href:null, not here. */}

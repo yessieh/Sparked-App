@@ -14,6 +14,7 @@
 // the surface.
 
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
@@ -50,6 +51,16 @@ export interface EventDetailData {
   categories: string[] | null;
   distance_miles: number | null;
   cancelled_at: string | null;
+  /**
+   * The owning workspace, for the Organizer Profile link (0023).
+   *
+   * NULL when the poster chose "Post without my name" — suppressed server-side
+   * alongside `organizer_name`, not here. This being null IS the anonymity
+   * signal: the tap target keys off it directly rather than re-deriving
+   * anonymity from tier_id or a missing name, because a second implementation
+   * of that rule is a second thing that can drift from the database's.
+   */
+  workspace_id: string | null;
 }
 
 /** Ticket-row icons (prototype _SIcon paths). */
@@ -498,15 +509,51 @@ export default function EventDetailView({
                 <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: theme.fontSizes.eyebrow, fontWeight: '900', letterSpacing: 2.2, textTransform: 'uppercase', color: brand.ignitionGold }}>
                   Organizer
                 </Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12 }}>
-                  <View style={{ width: 38, height: 38, borderRadius: 19, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
-                    <GradientFill />
-                    <Ionicons name="sparkles" size={17} color={brand.navy} />
+                {/* TAP-THROUGH gated on workspace_id, not on tier or name.
+                    0023 nulls the id server-side for an anonymous poster, so a
+                    null here means "there is no profile to reach" and the row
+                    renders inert. Deriving that from tier_id/organizer_name
+                    instead would be a second copy of the anonymity rule, free
+                    to drift from the one the database enforces — and a link
+                    that merely 404s would still confirm a workspace exists. */}
+                {event.workspace_id ? (
+                  <Pressable
+                    onPress={() =>
+                      router.push({
+                        pathname: '/organizer/[id]',
+                        params: { id: event.workspace_id as string },
+                      })
+                    }
+                    accessibilityRole="link"
+                    accessibilityLabel={`View ${event.organizer_name}'s profile`}
+                    style={({ pressed }) => ({
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 12,
+                      marginTop: 12,
+                      opacity: pressed ? 0.6 : 1,
+                    })}
+                  >
+                    <View style={{ width: 38, height: 38, borderRadius: 19, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
+                      <GradientFill />
+                      <Ionicons name="sparkles" size={17} color={brand.navy} />
+                    </View>
+                    <Text style={{ flex: 1, fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 15, letterSpacing: -0.15, color: theme.colors.text }}>
+                      {event.organizer_name}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color={theme.colors.textFaint} />
+                  </Pressable>
+                ) : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12 }}>
+                    <View style={{ width: 38, height: 38, borderRadius: 19, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
+                      <GradientFill />
+                      <Ionicons name="sparkles" size={17} color={brand.navy} />
+                    </View>
+                    <Text style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 15, letterSpacing: -0.15, color: theme.colors.text }}>
+                      {event.organizer_name}
+                    </Text>
                   </View>
-                  <Text style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 15, letterSpacing: -0.15, color: theme.colors.text }}>
-                    {event.organizer_name}
-                  </Text>
-                </View>
+                )}
               </View>
             )}
 
