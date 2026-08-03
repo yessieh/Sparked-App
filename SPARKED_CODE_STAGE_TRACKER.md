@@ -134,14 +134,21 @@ and verified in Cursor/Claude Code.
       stemming rule, and a wrong one is worse than none ("Crafts"→"Craft" reads
       fine, but naive stemming mangles real words) — so wait for evidence that
       hosts actually create the duplicate pairs before picking a rule.
-- [ ] **Entry fork keeps the tab bar; the forms hide it** (decided 2026-07-30,
-      amends the create-flow chrome lock). `create/index.tsx` lives in the root
-      Stack today, outside `(tabs)`, so the fork currently hides the bar along
-      with everything else. The rule is chrome-less **once there is input to
-      lose**: the fork is a browsing decision with nothing typed yet, so a host
-      who opened it by mistake should be able to leave the way they came. The
-      Curbside form and every wizard step keep hiding it. Pairs with the exit
-      affordance below — same problem (getting out), different halves of it.
+- [x] **Entry fork keeps the tab bar; the forms hide it — DONE 2026-08-02.**
+      `create/index.tsx` moved to `(tabs)/create.tsx` with `href: null`, the same
+      treatment as `published.tsx` and `workspace.tsx`. `(tabs)` is a route
+      group, so the URL stays `/create` and all three callers were untouched.
+      The rule held as written — chrome-less **once there is input to lose** —
+      so the Curbside form, every wizard step and checkout stay in the root
+      Stack and stay chrome-less.
+      Two things the move surfaced, worth remembering for the next one: the root
+      Stack's stale `create/index` declaration had to be removed (the identical
+      omission during the `workspace.tsx` move produced a loud
+      `No route named "workspace"` warning), and `SubHeader` — a shared
+      component that lived as a named export of the fork's route file — broke all
+      three wizard screens, so it was extracted to `components/SubHeader.tsx`.
+      **A shared component living in a route file only works while every
+      consumer sits in the same directory.**
 - [ ] **Wizard exit affordance** — persistent X/close on all wizard + checkout
       steps with a discard-draft confirmation. Pairs with the in-tabs success
       screen restructure (round-2 walk): the create flow is a focused,
@@ -178,6 +185,52 @@ and verified in Cursor/Claude Code.
 - [ ] **Cancellation flow:** greyed "Cancelled" card state, advance cancellations
       drop from feed by event day, same-day stays visible greyed; PUSH/EMAIL
       notification to bookmarked/RSVP'd users on cancel.
+
+---
+
+## PRE-LAUNCH COMPLIANCE GATE (data-lifecycle promises we have not kept yet)
+
+> Everything here is a promise the product or the schema already makes and the
+> implementation does not yet honor. Each one is individually small; together
+> they are the difference between a defensible retention story and a stated
+> policy that is simply untrue. **None of it blocks development — all of it
+> blocks real signups.**
+
+- [ ] **BLOCKER — 90-day hard-purge job is UNBUILT.** AD 8 states a 90-day
+      retention window on soft-deleted events, and nothing enforces it: today
+      `deleted_at` rows live forever. **A stated retention window that isn't
+      enforced is worse than none** — it is a claim we would have to defend
+      without evidence, and it converts an honest "we keep this indefinitely for
+      dispute resolution" into a false statement. Either build the job or change
+      the stated window; do not ship the gap. Needs a scheduler decision
+      (pg_cron vs. an edge function on a timer) and an explicit rule that the
+      purge **must not** take the quota-ledger rows with it — the FK's
+      `on delete set null` is what preserves consumption, and this is the path
+      that actually exercises it.
+- [ ] **BLOCKER — privacy policy must name what we actually retain.** Four
+      things it has to cover, none of which are in any draft yet:
+      1. **The Curbside quota ledger as a retained category**, held under
+         **legitimate-interest fraud prevention** — that is the lawful basis
+         that lets it survive an erasure request, and it only works if it is
+         disclosed. Minimal by design (identifier + timestamp, no post content),
+         which is what makes the interest proportionate.
+      2. **The soft-delete retention window** — that a deleted listing is
+         retained for up to 90 days before permanent removal, and why (dispute
+         resolution, support recovery, ledger integrity).
+      3. **Soft-deleted listings** as a category distinct from live ones: a host
+         deleting a listing is not erasure, and the copy in-product must not
+         imply it is.
+      4. **The attendee-history exception** — that a listing you saved or RSVP'd
+         to may remain in your own history after the host withdraws it.
+      Goes to the pre-launch legal consult together with the retention windows.
+- [ ] **"Download my data" export — UNBUILT.** No self-serve export exists.
+      Needs to cover profile, saves, RSVPs, workspaces, events, and the quota
+      ledger. Pairs with the erasure path, which IS specced (real cascade) but
+      has no UI either.
+- [ ] **Re-enable "Confirm email" + real SMTP** — see the detailed item in
+      LAUNCH INFRASTRUCTURE below. Listed here too because it is the same gate:
+      a signup flow that cannot verify an address is a compliance problem, not
+      just a deliverability one.
 
 ---
 
@@ -228,8 +281,22 @@ and verified in Cursor/Claude Code.
       3 `react-hooks/static-components`, 2 `react-hooks/immutability`,
       2 `react-hooks/exhaustive-deps`.
       Do this as its own pass — mixing it into a feature session would bury
-      real changes under formatting churn. Decide the
-      `no-unescaped-entities` rule first; it's a third of the list.
+      real changes under formatting churn. **Start by disabling
+      `react/no-unescaped-entities`, which is very likely the right call and
+      clears 21 of the 55 errors in one line.** The codebase writes raw
+      apostrophes deliberately and everywhere; escaping 21 strings to satisfy a
+      rule nobody wants makes the copy harder to read for no gain. Re-baseline
+      after that and the remaining ~34 become a tractable list.
+      Confirmed still accurate 2026-08-02: lint runs, 55 errors, none introduced
+      by the 0018–0022 work.
+- [ ] **`useWorkspaceStats` double-fetches on Workspace open.** The hook has its
+      own mount effect AND the screen's focus effect calls `refresh`, so opening
+      Workspace fires two `workspace_stats` calls back to back. Harmless — it is
+      a cheap member-scoped read and the second overwrites identical state — and
+      deliberately not fixed inside a feature session, since the hook is shared
+      with the Me hub. Collapse it during a cleanup pass: either drop the hook's
+      internal effect and let callers own the trigger, or have the focus effect
+      skip the first fire.
 - [ ] **In-context App Store rating prompt** (OS API, fire at happy moments,
       e.g. after an RSVP). The Settings "Rate Sparked" row was removed on purpose.
 - [ ] **Privacy wiring:** Location toggle MIRRORS the OS permission (deep-link to
@@ -334,33 +401,56 @@ and verified in Cursor/Claude Code.
 
 ## DATA LIFECYCLE — soft delete / archive / quota ledger (LOCKED 2026-07-30)
 
-> Rulings live in SPARKED_STATE "Architecture Decision 8". This section is the
-> unbuilt work they imply. **Nothing here is built yet** — today event deletion
-> exists only as the Workspace screen's whole-workspace hard cascade.
+> Rulings live in SPARKED_STATE "Architecture Decision 8" (amended 2026-08-02 by
+> the attendee-history rule). **Most of this section is now BUILT** — 0019
+> (columns, RPC trio, RLS rewrite), 0020 (read-path repair), 0021 (anon grants),
+> 0022 (attendee-history exception). What remains unbuilt is the 90-day purge,
+> the hashed-identifier fallback, and Cancel.
 
-- [ ] **Soft-delete read-path enforcement — EVERY event read filters
-      `deleted_at is null`.** This is the item that makes soft delete real: the
-      column is trivial, the discipline is not, and ONE missed read path means a
-      deleted event resurfaces in front of the public. So the build starts by
-      ENUMERATING the read paths, then verifying each one individually rather
-      than assuming a pattern held. Known paths as of 2026-07-30:
-      1. **Feed RPC** (`app.events_feed`, 0005) — the distance-ranked list.
-      2. **Detail RPC** (`app.event_detail`, 0007) — must 404, not return a
-         hidden row.
-      3. **Saved select** (`saved.tsx`) — reads `events` directly by id list.
-      4. **Me hub's next-saved preview** (`me.tsx`) — a second direct read, easy
-         to miss because it looks like part of Saved.
-      5. **Workspace listings** (`workspace.tsx`) — the host's own list.
-      6. **Event stats** — `workspace_stats` (0015) and `workspace_event_stats`
-         (0017); a deleted event must stop counting toward Active/Upcoming.
-      7. **Organizer Profile** (unbuilt) — upcoming AND past lists.
-      8. **`event_categories` / `event_vendors` policies** — they gate on the
-         parent event's visibility, so the definition of "visible" moves here
-         too.
-      Re-enumerate at build time; this list is a starting point, not a
-      guarantee. A defence worth costing then: make the filter structural (a
-      `visible_events` view or a policy clause) so a NEW read path is safe by
-      default instead of safe by remembering.
+- [x] **Soft-delete read-path enforcement — DONE (0019 + 0020 + 0022).** The
+      item that made soft delete real. **The docs said eight read paths; the code
+      had twelve** — re-enumerating instead of trusting the count was the whole
+      job, and three of the extras were the ones that mattered.
+      Client table reads: `saved.tsx`, `me.tsx` next-saved preview,
+      `workspace.tsx` listings, and **`checkout.tsx`** (missed by the doc list).
+      Functions: `public.events_within_radius` (0009 — **INVOKER**, not the
+      `app.events_feed` the old list named), `public.event_detail` (0009 —
+      INVOKER, and it has NO status filter of its own, so it is the path most
+      dependent on the policy), `app.workspace_stats`, `app.workspace_event_stats`,
+      and **`app.event_publish_fee_cents` + `app.publish_paid_event`** (both
+      missed by the doc list; the second would have published a deleted event).
+      Policies: `event_categories_select_public`, `event_vendors_select_public`.
+      Organizer Profile has no route yet, so it is a future path, not a current
+      one; there is no separate search path (search is client-side over the feed).
+      **The structural defence was taken**, as this item hoped: the rewritten
+      `events_select_public` is the chokepoint, so a NEW direct read or invoker
+      function is safe without remembering. Only the four DEFINER functions,
+      which bypass RLS, carry hand-written filters — and getting those wrong is
+      exactly what 0020 had to repair.
+- [x] **Per-event delete / archive / un-archive — DONE (0019, UI + RPCs).**
+      Workspace rows carry a `⋯` overflow menu offering Archive (immediate,
+      reversible) or Delete (confirm dialog, no undo offered — the recovery
+      window is ours, not the host's). Archived events collapse into an
+      "Archived · N" section below Past with un-archive on each row; deleted
+      events vanish from the host's view entirely. `archived_at` is a TIMESTAMP,
+      not a status flag — see AD 8 for the four reasons.
+- [x] **Attendee-history exception — DONE (0022).** What already happened stays
+      in the attendee's record; what hasn't yet is the host's to withdraw. Third
+      branch on `events_select_public` gated on ended + `app.has_attendance`,
+      plus a client-side guard that forces any lifecycle-flagged row into Past
+      regardless of countdown math (server decides admission, client decides
+      section, and the two clocks can disagree). Deleted-ended rows render inert;
+      archived rows keep their tap. Full table in AD 8.
+- [x] **Behavioral suite — DONE, 27 assertions** (`scripts/qa-0019-delete-archive.sql`).
+      Covers delete/archive/un-archive across every read path, ledger immunity to
+      both host verbs AND to a hard delete, non-member authorization, and the
+      attendee-history matrix including the stranger case that keeps the
+      exception an exception. **Ran 24/25 on first execution**; the one failure
+      was a stale assertion, not a product bug (it asserted 0018's hard-delete
+      orphaning against 0019's soft delete). Worth knowing for the next suite:
+      three separate faults in this file surfaced only at paste time, because
+      nothing here can execute SQL against the project — see the dev-connection
+      note in Standing Procedures.
 - [ ] **90-day hard-purge trailing job (ROADMAP).** Permanently removes rows
       past `deleted_at + 90 days`. Deliberately a trailing job and not a
       cascade-on-delete: the 90 days ARE the dispute-resolution and
@@ -402,23 +492,20 @@ and verified in Cursor/Claude Code.
       hashed identifier (email, normalized) stored alongside `user_id` and
       counted as a fallback. Far higher friction than the doors 0018 closed, and
       it collides with erasure semantics — do not build on speculation.
-- [ ] **Per-event delete + archive / un-archive UI in Workspace.** Today the
-      screen has exactly one destructive control and it takes the whole
-      workspace. Needs: a per-row delete (soft, confirm dialog, no undo offered
-      — the recovery window is ours, not the host's), a per-row archive toggle,
-      and an **Archive section** in Workspace holding archived events with
-      un-archive. Archived events leave ALL public surfaces including the
-      Organizer Profile's past-events list. Archive is a status flag, `deleted_at`
-      is a timestamp; they are independent, not two settings of one field.
-- [ ] **OPEN QUESTION — does "Delete event(s) & Workspace" soft-delete or
-      cascade?** The shipped 0017 action hard-deletes every event through the FK
-      cascade. That predates the soft-delete lock and sits between two of its
-      rules: event deletion is soft, but account/workspace teardown is real
-      erasure. **Needs a ruling before the soft-delete work starts**, because it
-      decides whether `delete_workspace` gets rewritten or documented as a
-      deliberate exception. Related: the ledger repoint makes the quota side of
-      this moot either way (consumption survives the workspace), so this is now
-      purely a dispute-resolution / ledger-integrity question.
+- [x] **RESOLVED — "Delete event(s) & Workspace" STAYS a hard cascade**
+      (ruled 2026-07-30). Workspace teardown is the business ending, not
+      housekeeping, so it sits with account erasure rather than with per-event
+      soft delete. `delete_workspace` is unchanged and now documented as a
+      deliberate exception rather than an inherited one. The ledger side is moot
+      — consumption survives via `on delete set null` — and this is the single
+      path where an attendee's history row does disappear, because the event row
+      itself is gone. Accepted.
+- [ ] **Cancel — the third verb, NOT BUILT.** Distinct from both: the event was
+      going to happen and isn't, so the card stays VISIBLE, greyed and stamped,
+      and everyone holding a save or RSVP gets told. Needs the notification
+      channel, so it is gated behind the email/push work in LAUNCH
+      INFRASTRUCTURE. `cancelled_at` already exists and `event_detail` already
+      returns it; nothing writes it yet.
 
 ---
 
@@ -586,12 +673,24 @@ and verified in Cursor/Claude Code.
 
 ## POST-LAUNCH POLISH (not blockers — revisit once real usage exists)
 
-- [ ] **Saved preview card — more festive / engaging visual treatment.** The
-      card is correct and consistent with the workspace card, but it is
-      restrained where it could carry some delight: this is the surface that
-      tells someone their weekend has something in it. Deliberately not
+- [ ] **Saved preview card on the Me hub — more festive / engaging visual
+      treatment.** The card is correct and consistent with the workspace card,
+      but it is restrained where it could carry some delight: this is the surface
+      that tells someone their weekend has something in it. Deliberately not
       designed further pre-launch — worth doing once there's real saved-event
       behavior to design against.
+- [ ] **`Delete ""?` empty-title flash.** Cancelling the per-event delete dialog
+      clears `eventToDelete` before the modal finishes its fade, so the title
+      renders `Delete ""?` for a frame on the way out. Cosmetic and brief, but
+      it looks like a bug. Fix by holding the last title through the exit
+      animation (a ref, or keep the object and drive visibility off a separate
+      boolean) rather than by shortening the animation.
+- [ ] **"Removed by host" chip on inert deleted rows in Saved.** Deleted-and-ended
+      events stay in an attendee's Past (0022) rendered dimmed with no tap
+      target. That reads as "history" but does not say WHY it can't be opened.
+      A small chip would close the gap. Deliberately not invented during the
+      0022 build — the dimming is the minimal honest treatment and the label is
+      a copy/design decision, not an implementation detail.
 
 ---
 
@@ -610,11 +709,27 @@ and verified in Cursor/Claude Code.
       `supabase migration repair --status applied 20260723000013`. That is the
       remedy for a pasted migration; **never** `db push` a migration whose
       objects already exist — it re-runs and fails. 0011/0012 were fine.
-      **Applied through 0018** (0017 = workspace host screen, 0018 = curbside
-      quota consumption ledger, both 2026-07-30). Full per-migration detail
-      lives in SPARKED_STATE's
+      **Applied through 0022** (0019 soft delete + archive, 0020 read-path
+      repair, 0021 anon lifecycle-column grants, 0022 attendee-history
+      exception). Full per-migration detail lives in SPARKED_STATE's
       "Applied migrations" paragraph — that list is the authoritative one; keep
       it current rather than duplicating it here.
+      **NEVER edit an applied migration** — see CLAUDE.md. This is not
+      theoretical: six read-path filters were "fixed" by editing 0009/0010/0012/
+      0015/0017 after they had run, so none of them reached the database and the
+      repo described a schema no database had. `migration list` compares VERSION
+      NUMBERS, never file contents, and reported a clean all-green the entire
+      time. Repaired by 0020.
+- [ ] **No way to execute SQL against the dev project from a session.** There is
+      no `psql`, no `pg` client, no service-role key, and `supabase/.temp/pooler-url`
+      carries no password; `db push` is the only SQL channel, and abusing it as a
+      test harness would violate the migration-history rule above. The
+      consequence is real and repeated: **every QA suite is written blind and
+      first executes when Jas pastes it into the dashboard.** The 0019/0022 suite
+      took three round-trips that way — a wrong function arity, then identity
+      drift across sections, then a stale assertion. Worth deciding whether a
+      dev-only connection string is cheaper than the loop. Dev project only,
+      never prod.
 - [x] **QA cleanup runs from `scripts/qa-cleanup.sql`** — not ad-hoc DELETEs.
       The standing QA address is **`18680 S Nogales Hwy`**; use it for every
       test listing. The script previews, deletes (prefix-matched, because the

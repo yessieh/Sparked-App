@@ -240,11 +240,12 @@ Nothing is gated at any width; the full desktop batch still runs once at the end
   `Alert.alert`** — multi-button Alert is a no-op on react-native-web.
   Owner-only in the UI as well as the RPC: editors write events, but ending the
   business is not theirs.
-  **PENDING RECONCILIATION (2026-07-30):** as shipped this is a HARD cascade
-  delete of the events, which predates the soft-delete lock (Architecture
-  Decision 8) and has not been reconciled with it. The screen also has no
-  per-event delete or archive yet — both are tracked. Until that lands, this
-  button is the only delete a host has, and it takes everything.
+  **RECONCILED (2026-07-30):** this is a HARD cascade delete of the events, and
+  that is now the deliberate ruling rather than an unreconciled leftover —
+  workspace teardown is the business ending, so it sits with account erasure,
+  not with per-event soft delete (Architecture Decision 8). It is no longer the
+  only delete a host has: **per-event delete / archive / un-archive shipped in
+  0019**, so this button is now the whole-business option beside them.
 - **Multi-workspace picker: WIRED, DORMANT.** At 2+ the screen shows one row per
   workspace (name + its own Active/Upcoming) before any workspace's content, and
   Back from inside a workspace returns to the picker. At exactly 1 it never
@@ -653,18 +654,32 @@ confirmation, published events in Workspace.
 
 ### 8. Data lifecycle — delete / archive / quota ledger (LOCKED 2026-07-30)
 
-Three verbs now exist for "make this event go away," and they are deliberately
-distinct. **Cancel** (existing refunds lock) = the event was going to happen and
-isn't; it stays VISIBLE, greyed, because attendees need to know. **Archive** =
-the host is tidying their storefront; reversible. **Delete** = the host wants it
-gone; irreversible to them, but not to us.
+#### The three verbs (LOCKED)
+
+Three verbs exist for "make this event go away," and they are deliberately
+distinct. Each answers a different question, and the difference is who the
+change is *for*:
+
+| Verb | Means | Reversible | Built |
+|---|---|---|---|
+| **Cancel** | It's off — tell everyone. The card stays VISIBLE, greyed, stamped; attendees get a push/email. | n/a | **NOT BUILT** — separate consumer-facing verb, tracked |
+| **Archive** | Off my storefront. Host housekeeping, nobody needs telling. | yes | 0019 |
+| **Delete** | Withdraw the listing. Irreversible to the host, not to us. | no | 0019 |
+
+Cancel is the only one that *announces itself*, because it is the only one where
+someone made a plan that is no longer true. Archive and Delete are the host
+tidying their own shop; the storefront changes and no one is notified.
+
+**History survives all three.** See the attendee-history rule below — it is the
+constraint that shapes what Archive and Delete are actually allowed to do.
 
 - **Event deletion is SOFT DELETE (LOCKED).** A `deleted_at` timestamp, never a
-  row removal. A soft-deleted event is hidden from EVERY read surface — feed,
-  search, Saved, Workspace, Organizer Profile, event detail — and **the host
-  cannot recover it from the UI**: to them the action is final, and the copy
-  must not imply otherwise. A trailing job hard-purges at 90 days (Code-stage
-  roadmap, tracked).
+  row removal. A soft-deleted event leaves every *discovery* surface — feed,
+  search, detail-by-browse, Organizer Profile, Workspace — and **the host cannot
+  recover it from the UI**: to them the action is final, and the copy must not
+  imply otherwise. It does NOT leave the record of people who already attended
+  (see below). A trailing job hard-purges at 90 days (Code-stage roadmap,
+  **UNBUILT — a stated retention window nobody enforces is worse than none**).
   **Three reasons, all of which need the row to still exist:** dispute
   resolution (a chargeback or a report arrives after the host has deleted the
   evidence), a fat-finger recovery window we can honor via support even though
@@ -672,12 +687,60 @@ gone; irreversible to them, but not to us.
   event rows, and yanking them out from under a financial trail is how books
   stop balancing.
 - **Archive is a SEPARATE host-facing verb (LOCKED).** Reversible,
-  host-initiated. An archived event leaves ALL public surfaces — **including the
-  Organizer Profile's past-events list**, because archive means "off my
-  storefront," not "hidden from the feed" — and moves to an Archive section in
-  Workspace. Un-archive puts it back. Mechanically a status flag, **distinct
-  from `deleted_at`**: they are not two settings of one field, and an event can
-  be archived without being deleted or deleted without ever being archived.
+  host-initiated. An archived event leaves the public discovery surfaces —
+  **including the Organizer Profile's past-events list**, because archive means
+  "off my storefront," not "hidden from the feed" — and moves to an
+  "Archived · N" section in Workspace. Un-archive puts it back.
+  **Mechanically an `archived_at` TIMESTAMP, not a status value** (0019), and
+  distinct from `deleted_at`: they are not two settings of one field, and an
+  event can be archived without being deleted or deleted without ever being
+  archived. Four reasons it is not a `status` value, in descending order of how
+  badly it would have bitten: `status` sits in the authenticated UPDATE grant
+  (0011), so a status value would be client-writable and the RPC optional;
+  `status` carries a CHECK constraint and drives publish/pricing/quota logic, so
+  a fifth value means auditing every `status = 'published'` comparison in the
+  system; two independent timestamps express independence, which one enum
+  cannot; and a timestamp records WHEN, which a status discards.
+
+#### Attendee history — the limit on both verbs (LOCKED 2026-08-02, AMENDS the above)
+
+**What already happened stays in the attendee's record. What hasn't happened yet
+is the host's to withdraw.** A host may take down a listing; they may not
+rewrite a stranger's history. Someone who went to a market last month and saved
+it should still find it, whatever the host later does to the listing.
+
+This SUPERSEDES the earlier phrasing that a deleted event is "hidden from EVERY
+read surface" and that an archived event "leaves ALL public surfaces." Both were
+written before the rule existed and were too broad.
+
+| Event state | Feed / search / Organizer Profile | Attendee's Saved — upcoming | Attendee's Saved — Past |
+|---|---|---|---|
+| **Archived** | hidden | hidden | **visible** |
+| **Deleted**, event in the future | hidden | hidden | n/a |
+| **Deleted**, event already ended | hidden | n/a | **visible** |
+
+- **The exception is narrow on purpose.** It requires all three of: the event has
+  ENDED, the caller personally has a save or an RSVP on it, and the status is
+  published/cancelled. A stranger never sees an archived or deleted event on any
+  path — that is what keeps this an exception rather than a hole.
+- Enforced in the `events_select_public` RLS policy as a third branch
+  (0022), backed by definer `app.has_attendance(event_id)`. It could not live in
+  client code: RLS is what denies the attendee, and no client filter can widen a
+  policy. It could not be a Saved-only RPC either, because the history row must
+  remain TAPPABLE and `event_detail` is an invoker function governed by that
+  same policy.
+- **Deleted-and-ended rows render INERT** — dimmed, no tap target. `event_detail`
+  still filters `deleted_at`, so the ticket genuinely is gone; the row is a
+  record, not a listing. **Archived rows keep their tap**, because
+  `event_detail` deliberately has no archive filter and RLS lets the attendee
+  through.
+- **Clock-skew guard (client).** The server decides ADMISSION using the DB clock
+  (`coalesce(ends_at, starts_at + interval '3 hours') < now()`, mirroring
+  `eventCountdown`'s ENDED rule exactly). The client decides SECTION using the
+  device clock. Those can disagree at the boundary, so **any row carrying
+  `archived_at` or `deleted_at` is forced into Past client-side regardless of
+  what the countdown math says.** A withdrawn listing can only ever be history —
+  it must never surface in a Tonight/This Weekend bucket.
 - **The Curbside quota counts an immutable CONSUMPTION LEDGER, not live event
   rows (LOCKED — this closes an exploit).** Publishing a free Curbside post
   writes a ledger row; deleting or archiving the event never removes it.
@@ -703,13 +766,41 @@ gone; irreversible to them, but not to us.
   answers. Retention windows (including the ledger's) go to the pre-launch legal
   consult.
 
-**OPEN — needs a ruling, do not assume either way:** the shipped Workspace
-"Delete event(s) & Workspace" action HARD-deletes its events through the FK
-cascade (0017). That predates this lock and now sits between two of its rules —
-event deletion is soft, but account/workspace teardown is real erasure. Deciding
-it means choosing whether workspace teardown is closer to "the host deleted some
-events" (soft, with the 90-day purge) or "the account is gone" (cascade).
-Tracked in the tracker's Data Lifecycle section; unresolved here on purpose.
+**RESOLVED 2026-07-30 — workspace teardown STAYS a hard cascade.** The shipped
+Workspace "Delete event(s) & Workspace" action hard-deletes its events through
+the FK cascade (0017), and that is now the deliberate answer rather than an
+inherited accident. Tearing down the workspace is closer to "the account is
+gone" than to "the host deleted some events": it is the business ending, not
+housekeeping. The quota side is moot either way — consumption survives in the
+ledger — and the FK's `on delete set null` is exactly what preserves it when the
+event rows vanish. Consequence accepted and stated: this is the one path where
+an attendee's history row does disappear, because the event row itself is gone.
+
+### 9. Reputation and history — if it is ever built (ROADMAP, not MVP)
+
+No reputation system exists and none is planned for MVP. Recording the shape now
+because the attendee-history rule above is the first half of it, and a later
+reputation feature built without these constraints would quietly undo it.
+
+**If it ships, these ship together — not one at a time:**
+
+- **Time-weighting.** A bad season three years ago must not read like last month.
+  Recency is the honest signal; a flat lifetime average punishes anyone who has
+  been around long enough to have a bad week.
+- **Right of reply.** A host can respond to any review of them, publicly, always.
+  A record someone cannot answer is an accusation, not a record.
+- **Management-change markers.** Venues and markets change hands. History
+  attaches to the business, so the record must be able to say "under previous
+  management" or the new operator inherits someone else's reputation.
+
+**NEVER — this is the hard line: no purchased and no discretionary removal of
+history.** Not as a paid tier, not as a support favor, not quietly. The moment
+reputation can be bought off, every clean record becomes unreadable — a reader
+cannot tell "no complaints" from "complaints removed," so the whole surface
+stops carrying information. That would break the same trust promise the
+no-algorithm feed rests on: what you see is what is there, in the order it
+actually is, because nobody paid to change it. Corrections happen through right
+of reply and time-weighting, which are visible, or not at all.
 
 ---
 
@@ -924,10 +1015,69 @@ instead of silently receiving 0. Backfilled every existing non-draft Curbside
 post at its own `created_at`. Verified anon-denied on the new RPC and the
 table, and PGRST202 on the dropped signature; full behavioral suite lives in
 `scripts/qa-0018-quota-ledger.sql`.
+0019 soft delete + archive (**APPLIED 2026-07-30**). Adds
+`events.deleted_at` and `events.archived_at` (both `timestamptz null`), and by
+0011's fail-closed column grants they are **SELECT-only for clients — no INSERT,
+no UPDATE**, so the RPCs are the only way to write them. Three definer+invoker
+pairs, owner/editor gated: `delete_event` (sets `deleted_at`, irreversible to
+the host), `archive_event` / `unarchive_event` (reversible), all raising
+`not_an_editor` for non-members. `events_select_public` rewritten to
+`deleted_at is null AND ((published/cancelled AND archived_at is null) OR
+is_member)`, making the policy the structural chokepoint so a NEW read path is
+safe by default. `event_categories` / `event_vendors` SELECT policies mirrored.
+0018's consume trigger gained `new.deleted_at is null` in its WHEN clause so a
+delete can never re-fire consumption.
+0020 read-path filter REPAIR (**APPLIED 2026-07-30**). 0019's filters for six
+functions were written by EDITING the already-applied migration files
+(0009/0010/0012/0015/0017), so none of them ever reached the database — the
+files and the live schema disagreed silently, and `migration list` cannot detect
+it. Those five files were restored byte-identical and the filters landed here as
+`create or replace`, preserving every signature, OUT column name, security mode
+and search_path pin. What was actually broken until this shipped:
+`workspace_stats` counted deleted AND archived events, so the Active/Upcoming
+tiles disagreed with the listing on sight; `workspace_event_stats` returned
+chips for deleted events; `event_publish_fee_cents` priced them; and
+**`publish_paid_event` would pay for and publish a soft-deleted event** —
+corrected target, since 0014 had moved the real body to
+`app.publish_paid_event` and left `public` a thin wrapper.
+`events_within_radius` gained an explicit `archived_at is null` because the
+policy's member branch deliberately permits archived, so a host was seeing their
+own archived listing on Explore. `event_detail` takes `deleted_at is null` only
+— archived must stay openable by its owner or the Workspace archived rows become
+dead links.
+0021 anon grants for the lifecycle columns (**APPLIED 2026-07-30**, hotfix).
+0020 broke the signed-out storefront: both `events_within_radius` and
+`event_detail` returned `42501 permission denied for table events` for anon.
+An RLS POLICY expression is evaluated internally and needs no caller column
+privilege — which is why 0019's policy had referenced these columns for anon
+since it shipped — but a **SECURITY INVOKER function body is the caller's own
+query**, and every column it touches is privilege-checked, including ones that
+appear only in a WHERE clause. 0019 had granted the two columns to
+`authenticated` only. Granting anon SELECT leaks nothing: RLS already restricts
+anon to rows where both are NULL.
+0022 attendee-history exception (**APPLIED 2026-08-02** — amends Architecture
+Decision 8). New definer `app.has_attendance(event_id)` (granted to **anon and
+authenticated**, load-bearing: the policy carries no `TO` clause, so an anon
+caller without EXECUTE would repeat the 0021 outage). `events_select_public`
+gains a third branch — published/cancelled AND
+`coalesce(ends_at, starts_at + interval '3 hours') < now()` AND
+`has_attendance(id)` — admitting an archived or deleted event to the person who
+actually attended it, after it ended. The ended test mirrors `eventCountdown`
+exactly; drift would let a row through that the client then files under an
+upcoming bucket. `event_categories_select_public` got the same branch so a
+history ticket does not arrive with its category chips stripped;
+`event_vendors` deliberately did not — vendors describe a live market, not a
+record of having gone. Verified anon feed/detail/direct-read all still healthy
+immediately after apply. Behavioral suite (27 assertions) in
+`scripts/qa-0019-delete-archive.sql`.
 **Migrations apply from files via `npx supabase db push --linked`, never
-pasted** — remote history verified matching the repo 2026-07-29, all 16 rows
+pasted** — remote history verified matching the repo 2026-08-02, all 22 rows
 `local == remote` (0013 had drifted from a dashboard paste and was repaired
-with `migration repair --status applied`). Advisor baseline steady at
+with `migration repair --status applied`). **`migration list` compares VERSION
+NUMBERS, never file contents** — it reported a clean all-green throughout the
+0020 drift described above, so an all-green list proves the same migrations ran,
+never that the repo describes the live schema. Editing an applied migration is
+now a named rule in CLAUDE.md. Advisor baseline steady at
 0 errors / 3 accepted warnings (SCHEMA_PLAN §10.7 — two rls_auto_enable
 platform warnings + leaked-password protection, Pro-gated on the Free plan;
 DECIDED 2026-07-09: enable with the launch-prep Pro upgrade).
