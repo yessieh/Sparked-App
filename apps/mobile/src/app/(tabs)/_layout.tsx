@@ -74,6 +74,16 @@ export default function TabsLayout() {
           they hold unsaved input and a stray tab tap losing a half-filled event
           is worse than one extra back-tap. */}
       <Tabs.Screen name="create" options={{ href: null }} />
+      {/* Public CONTENT pages — an event's ticket and an organizer's profile.
+          Both are deep-link and share targets, so a first-time visitor can
+          arrive here cold with no history behind them; without the bar their
+          only control was Back, which goes nowhere. The chrome rule is about
+          unsaved INPUT, not depth, and these have none.
+          Slashed names because neither directory has a _layout.tsx, so Expo
+          Router flattens them into this navigator rather than nesting one —
+          the same way the root Stack has always addressed them. */}
+      <Tabs.Screen name="event/[id]" options={{ href: null }} />
+      <Tabs.Screen name="organizer/[id]" options={{ href: null }} />
     </Tabs>
   );
 }

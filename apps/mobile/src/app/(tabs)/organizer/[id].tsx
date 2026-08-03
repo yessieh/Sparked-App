@@ -31,12 +31,12 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 
-import { GradientFill, SecondaryButton } from '../../components/AuthControls';
-import EventStub, { type FeedEvent } from '../../components/EventStub';
-import { useAuth } from '../../lib/auth';
-import { useEngagement } from '../../lib/engagement';
-import { supabase } from '../../lib/supabase';
-import { brand, useTheme } from '../../theme';
+import { GradientFill, SecondaryButton } from '../../../components/AuthControls';
+import EventStub, { type FeedEvent } from '../../../components/EventStub';
+import { useAuth } from '../../../lib/auth';
+import { useEngagement } from '../../../lib/engagement';
+import { supabase } from '../../../lib/supabase';
+import { brand, useTheme } from '../../../theme';
 
 type Theme = ReturnType<typeof useTheme>;
 
@@ -294,15 +294,39 @@ export default function OrganizerProfileScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
-      {/* Back chip only — no eyebrow here, the profile header carries it. */}
-      <View style={{ paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8 }}>
+      {/* Back chip only — no eyebrow here, the profile header carries it.
+          GEOMETRY MATCHES EVENT DETAIL'S FLOATING BACK CHIP: 40x40 at radius
+          12, top edge at 12, inset 20. Event Detail's cannot move — it is
+          absolutely positioned over the photo hero and paired with the Save
+          chip — so this one aligns to it, and the control stays put when a
+          visitor goes from a ticket to the organizer behind it.
+          The STYLE is deliberately not copied: Event Detail's chip is
+          translucent dark with a white glyph because it sits on a photograph,
+          and the same treatment here would be a dark blob on a plain
+          background. Same place, same size, readable in both contexts. */}
+      <View
+        style={{
+          // Mirrors Event Detail's floating header container exactly —
+          // alignSelf-centred at maxWidth 640 with a 20 inset — so the chip
+          // lands on the same x at every width. Insetting 20 from a FULL-width
+          // container instead would align only on phones and drift 320px apart
+          // on desktop, which is precisely the jump this is meant to remove.
+          alignSelf: 'center',
+          width: '100%',
+          maxWidth: 640,
+          paddingHorizontal: 20,
+          paddingTop: 12,
+          paddingBottom: 8,
+        }}
+      >
         <Pressable
           onPress={back}
           accessibilityLabel="Back"
+          hitSlop={4}
           style={{
-            width: 36,
-            height: 36,
-            borderRadius: 10,
+            width: 40,
+            height: 40,
+            borderRadius: 12,
             alignItems: 'center',
             justifyContent: 'center',
             backgroundColor: theme.colors.iconChipBg,
@@ -310,7 +334,7 @@ export default function OrganizerProfileScreen() {
             borderColor: theme.colors.cardBorder,
           }}
         >
-          <Ionicons name="arrow-back" size={16} color={theme.colors.text} />
+          <Ionicons name="arrow-back" size={18} color={theme.colors.text} />
         </Pressable>
       </View>
 

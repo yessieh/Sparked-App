@@ -14,13 +14,13 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Platform, Text, View } from 'react-native';
 
-import EventDetailView, { type EventDetailData } from '../../components/EventDetailView';
-import { useAuth } from '../../lib/auth';
-import { TEST_ORIGIN } from '../../lib/devOrigin';
-import { useEngagement } from '../../lib/engagement';
-import { supabase } from '../../lib/supabase';
-import { vendorFromRow, type Vendor, type VendorRow } from '../../lib/vendors';
-import { brand, useTheme } from '../../theme';
+import EventDetailView, { type EventDetailData } from '../../../components/EventDetailView';
+import { useAuth } from '../../../lib/auth';
+import { TEST_ORIGIN } from '../../../lib/devOrigin';
+import { useEngagement } from '../../../lib/engagement';
+import { supabase } from '../../../lib/supabase';
+import { vendorFromRow, type Vendor, type VendorRow } from '../../../lib/vendors';
+import { brand, useTheme } from '../../../theme';
 
 export default function EventDetailScreen() {
   const theme = useTheme();
