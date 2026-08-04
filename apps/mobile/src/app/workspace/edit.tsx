@@ -1,5 +1,8 @@
 // Public profile editor — the host-facing side of the Organizer Profile.
-// Reached from a row in Workspace, beside "View public profile".
+// Reached from the edit control ON the public profile itself, which is the only
+// entry: a profile page with its own edit affordance is the internet-native
+// shape, and the second Workspace row that used to sit beside "View public
+// profile" made a menu out of what should be one page.
 //
 // CHROME-LESS BY THE RULE, NOT BY EXCEPTION: this screen holds unsaved input,
 // so it lives in the root Stack with no tab bar. The rule is "chrome-less once
@@ -22,11 +25,12 @@
 // that was never offered.
 
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -36,6 +40,7 @@ import {
 
 import { FormField, GradientButton, GradientFill, SecondaryButton } from '../../components/AuthControls';
 import { SubHeader } from '../../components/SubHeader';
+import { socialUrl, type SocialPlatform } from '../../lib/socialLinks';
 import {
   SOCIAL_FIELDS,
   updateWorkspaceProfile,
@@ -47,10 +52,79 @@ import { brand, useTheme } from '../../theme';
  * than by a round trip. The SERVER is the enforcement — this is courtesy. */
 const LIMITS = { name: 80, bio: 500, location: 120, website: 200, social: 100 };
 
+/** The cap message. `maxLength` means a host cannot actually exceed a limit by
+ * typing — the keystrokes just stop landing, silently, which reads as a broken
+ * keyboard. This says why. It is a HINT, not an error: nothing is blocked. */
+function capHint(value: string, limit: number): string | null {
+  return value.length >= limit ? `Maximum ${limit} characters.` : null;
+}
+
+/**
+ * "Open this link" beside a social field. Inactive (and genuinely inert, not
+ * merely faded) until the value resolves to a URL — a control that looks live
+ * and does nothing is the thing this whole session is removing.
+ *
+ * Opens in a new context rather than navigating away: the host is mid-form with
+ * unsaved input, and checking a link must never cost them the edit.
+ */
+function SocialTestButton({
+  label,
+  value,
+  url,
+  theme,
+}: {
+  label: string;
+  value: string;
+  url: string | null;
+  theme: ReturnType<typeof useTheme>;
+}) {
+  const active = url !== null;
+  // Two different reasons to be off, and a screen reader should get the right
+  // one: nothing typed yet, versus typed something we cannot turn into a link.
+  const inactiveLabel =
+    value.trim().length === 0
+      ? `Test ${label} link — enter a handle first`
+      : `Test ${label} link — not a handle or link we can open`;
+  return (
+    <Pressable
+      onPress={() => url && Linking.openURL(url)}
+      disabled={!active}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !active }}
+      // Worded to dodge the article: "a Instagram" / "an X" cannot both be
+      // right from one template, and this string is read aloud.
+      accessibilityLabel={active ? `Open ${label} link` : inactiveLabel}
+      hitSlop={4}
+      style={({ pressed }) => ({
+        width: 44,
+        height: 44,
+        borderRadius: theme.radii.lg - 2,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: active ? 'rgba(252,163,17,0.12)' : theme.colors.cardBg,
+        borderWidth: 1,
+        borderColor: active ? 'rgba(252,163,17,0.32)' : theme.colors.cardBorder,
+        opacity: active ? (pressed ? 0.6 : 1) : 0.45,
+      })}
+    >
+      <Ionicons
+        name="open-outline"
+        size={17}
+        color={active ? brand.brightOrange : theme.colors.textHint}
+      />
+    </Pressable>
+  );
+}
+
 export default function EditWorkspaceProfile() {
   const theme = useTheme();
+  // The profile page passes the workspace it is showing. Falls back to the
+  // first membership for a cold/deep-link arrival — identical at MVP, where
+  // every host has exactly one workspace, and correct if the dormant
+  // multi-workspace picker ever wakes up.
+  const { id } = useLocalSearchParams<{ id?: string }>();
   const { workspaces, loading } = useMyWorkspace();
-  const workspace = workspaces?.[0] ?? null;
+  const workspace = (id ? workspaces?.find((w) => w.id === id) : null) ?? workspaces?.[0] ?? null;
 
   const [name, setName] = useState<string | null>(null);
   const [bio, setBio] = useState('');
@@ -195,6 +269,11 @@ export default function EditWorkspaceProfile() {
 
         <View style={{ height: 1, backgroundColor: theme.colors.divider, marginVertical: 18 }} />
 
+        {/* Name is the ONE required field, and the only inline message here
+            that is an error rather than a hint — it is the exact condition
+            holding Save shut, said at the field it is about. The server rule
+            (0024 `name_required`) is unchanged and still the enforcement; this
+            surfaces it, it does not re-decide it. */}
         <FormField
           label="Name"
           value={name ?? ''}
@@ -202,6 +281,12 @@ export default function EditWorkspaceProfile() {
           placeholder="Desert Nights Collective"
           maxLength={LIMITS.name}
           autoCapitalize="words"
+          message={
+            trimmedName.length === 0
+              ? 'Name is required — it’s how you appear on every listing.'
+              : capHint(name ?? '', LIMITS.name)
+          }
+          messageTone={trimmedName.length === 0 ? 'error' : 'hint'}
         />
         <FormField
           label="Bio"
@@ -212,6 +297,8 @@ export default function EditWorkspaceProfile() {
           multiline
           numberOfLines={4}
           style={{ minHeight: 96, textAlignVertical: 'top' }}
+          message={capHint(bio, LIMITS.bio)}
+          messageTone="hint"
         />
         <FormField
           label="Location"
@@ -219,6 +306,8 @@ export default function EditWorkspaceProfile() {
           onChangeText={setLocation}
           placeholder="Sahuarita, AZ"
           maxLength={LIMITS.location}
+          message={capHint(location, LIMITS.location)}
+          messageTone="hint"
         />
         <FormField
           label="Website"
@@ -228,6 +317,8 @@ export default function EditWorkspaceProfile() {
           maxLength={LIMITS.website}
           autoCapitalize="none"
           keyboardType="url"
+          message={capHint(website, LIMITS.website)}
+          messageTone="hint"
         />
 
         <Text
@@ -244,17 +335,32 @@ export default function EditWorkspaceProfile() {
         >
           Social links
         </Text>
-        {SOCIAL_FIELDS.map(({ key, label }) => (
-          <FormField
-            key={key}
-            label={label}
-            value={socials[key] ?? ''}
-            onChangeText={(v: string) => setSocials((s) => ({ ...s, [key]: v }))}
-            placeholder={`Your ${label} link or handle`}
-            maxLength={LIMITS.social}
-            autoCapitalize="none"
-          />
-        ))}
+        {SOCIAL_FIELDS.map(({ key, label }) => {
+          const value = socials[key] ?? '';
+          const url = socialUrl(key as SocialPlatform, value);
+          return (
+            <FormField
+              key={key}
+              label={label}
+              value={value}
+              onChangeText={(v: string) => setSocials((s) => ({ ...s, [key]: v }))}
+              placeholder={`Your ${label} link or handle`}
+              maxLength={LIMITS.social}
+              autoCapitalize="none"
+              accessory={<SocialTestButton label={label} value={value} url={url} theme={theme} />}
+              // Only ever a HINT. The server stores any string inside the
+              // length cap, so an unopenable value is still perfectly saveable
+              // — turning this into an error would invent a rule the database
+              // does not have.
+              message={
+                value.trim().length > 0 && url === null
+                  ? 'Can’t open this one — use a handle (@name) or a full link.'
+                  : capHint(value, LIMITS.social)
+              }
+              messageTone="hint"
+            />
+          );
+        })}
 
         {!!error && (
           <Text
@@ -272,7 +378,10 @@ export default function EditWorkspaceProfile() {
         )}
 
         {/* Save is the host action, so it carries the gradient. Cancel is
-            secondary and simply discards — nothing is written until Save. */}
+            secondary and simply discards — nothing is written until Save.
+            The reason Save is shut now lives UNDER THE NAME FIELD, not here:
+            a note below the button explains a control the host has already
+            given up on, and on a form this long it is off-screen anyway. */}
         <View style={{ marginTop: 18, gap: 10 }}>
           <GradientButton onPress={onSave} disabled={!canSave} busy={saving}>
             Save profile
@@ -284,21 +393,6 @@ export default function EditWorkspaceProfile() {
             Cancel
           </SecondaryButton>
         </View>
-
-        {trimmedName.length === 0 && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 }}>
-            <Ionicons name="alert-circle-outline" size={14} color={theme.colors.textFaint} />
-            <Text
-              style={{
-                fontFamily: theme.fonts.bodyMedium,
-                fontSize: 12,
-                color: theme.colors.textFaint,
-              }}
-            >
-              A name is required — it&apos;s how you appear on every listing.
-            </Text>
-          </View>
-        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );

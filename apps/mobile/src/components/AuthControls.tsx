@@ -199,13 +199,49 @@ export function GoogleButton({ onPress, disabled, busy }: Omit<ButtonProps, 'chi
 
 interface FormFieldProps extends TextInputProps {
   label: string;
+  /** Inline text UNDER the field. Two tones, and the difference is load-bearing:
+   * `error` (danger) is the thing standing between the host and Save, `hint`
+   * (muted) is advisory and blocks nothing. A hint painted danger-red would send
+   * someone hunting for a problem that isn't stopping them. */
+  message?: string | null;
+  messageTone?: 'error' | 'hint';
+  /** Rendered to the right of the input, on the same row. */
+  accessory?: ReactNode;
 }
 
 /** Labeled input matching the prototype's field styling. Caller `style` is
  * MERGED on top of the base field style (never replaces it — replacing was
  * the invisible-Description bug). */
-export function FormField({ label, style, ...inputProps }: FormFieldProps) {
+export function FormField({
+  label,
+  style,
+  message,
+  messageTone = 'error',
+  accessory,
+  ...inputProps
+}: FormFieldProps) {
   const theme = useTheme();
+  const input = (
+    <TextInput
+      placeholderTextColor={theme.colors.textHint}
+      {...inputProps}
+      style={[
+        {
+          backgroundColor: theme.colors.cardBg,
+          borderWidth: 1,
+          borderColor: theme.colors.cardBorder,
+          borderRadius: theme.radii.lg - 2,
+          paddingVertical: 13,
+          paddingHorizontal: 15,
+          fontFamily: theme.fonts.bodyMedium,
+          fontSize: theme.fontSizes.bodySm,
+          color: theme.colors.text,
+        },
+        accessory ? { flex: 1 } : null,
+        style,
+      ]}
+    />
+  );
   return (
     <View style={{ marginBottom: 14 }}>
       <Text
@@ -218,24 +254,29 @@ export function FormField({ label, style, ...inputProps }: FormFieldProps) {
       >
         {label}
       </Text>
-      <TextInput
-        placeholderTextColor={theme.colors.textHint}
-        {...inputProps}
-        style={[
-          {
-            backgroundColor: theme.colors.cardBg,
-            borderWidth: 1,
-            borderColor: theme.colors.cardBorder,
-            borderRadius: theme.radii.lg - 2,
-            paddingVertical: 13,
-            paddingHorizontal: 15,
+      {accessory ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {input}
+          {accessory}
+        </View>
+      ) : (
+        input
+      )}
+      {/* The repo's field-level message treatment (the wizard's vendor row,
+          create/event.tsx) — 11.5pt bodyMedium, 8pt above. */}
+      {!!message && (
+        <Text
+          style={{
             fontFamily: theme.fonts.bodyMedium,
-            fontSize: theme.fontSizes.bodySm,
-            color: theme.colors.text,
-          },
-          style,
-        ]}
-      />
+            fontSize: 11.5,
+            lineHeight: 16,
+            color: messageTone === 'error' ? theme.colors.danger : theme.colors.textFaint,
+            marginTop: 8,
+          }}
+        >
+          {message}
+        </Text>
+      )}
     </View>
   );
 }

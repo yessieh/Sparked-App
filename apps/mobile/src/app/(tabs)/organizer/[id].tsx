@@ -36,6 +36,7 @@ import EventStub, { type FeedEvent } from '../../../components/EventStub';
 import { useAuth } from '../../../lib/auth';
 import { useEngagement } from '../../../lib/engagement';
 import { supabase } from '../../../lib/supabase';
+import { useMyWorkspace } from '../../../lib/workspace';
 import { brand, useTheme } from '../../../theme';
 
 type Theme = ReturnType<typeof useTheme>;
@@ -210,6 +211,20 @@ export default function OrganizerProfileScreen() {
   const { session } = useAuth();
   const { savedIds, goingIds, toggleSave, toggleRsvp, refresh, rsvpDelta } = useEngagement();
 
+  // WHO IS ALLOWED TO EDIT THIS PAGE. No new read path: `useMyWorkspace` is the
+  // existing own-rows `memberships` query the Workspace screen and the editor
+  // already run, and `role` here is the SAME `memberships.role` that
+  // `app.is_member(ws, ['owner','editor'])` gates `update_workspace_profile`
+  // with (0024) — so the control cannot appear for anyone the RPC would refuse.
+  //
+  // ANONYMOUS IS STRUCTURALLY SAFE, not merely filtered: the hook short-circuits
+  // on a null user id and never issues the query at all, so `workspaces` is null
+  // for a signed-out visitor and `canEdit` is false before any row is consulted.
+  // The `id` match matters as much as the role — a host viewing SOMEONE ELSE'S
+  // profile is a member of a workspace, just not this one.
+  const { workspaces: myWorkspaces } = useMyWorkspace();
+  const canEdit = !!myWorkspaces?.some((w) => w.id === id && w.role !== 'viewer');
+
   const [profile, setProfile] = useState<OrganizerProfile | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -317,6 +332,9 @@ export default function OrganizerProfileScreen() {
           paddingHorizontal: 20,
           paddingTop: 12,
           paddingBottom: 8,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
         }}
       >
         <Pressable
@@ -336,6 +354,50 @@ export default function OrganizerProfileScreen() {
         >
           <Ionicons name="arrow-back" size={18} color={theme.colors.text} />
         </Pressable>
+
+        {/* THE EDIT AFFORDANCE LIVES ON THE PROFILE, for owners and editors
+            only. One page with a control the people who can edit it can see,
+            rather than two sibling rows in Workspace — the second row was a
+            menu entry for a page that can carry its own verb.
+            Labelled, not a bare pencil: it is the only host action on an
+            otherwise entirely consumer-facing page, and it should not have to
+            be guessed at. Secondary treatment, never gradient — the gradient is
+            reserved for actions, and this is navigation to a form. Same 40pt
+            height and radius as the back chip, so the row reads as one pair. */}
+        {canEdit && (
+          <Pressable
+            onPress={() =>
+              router.push({ pathname: '/workspace/edit', params: { id } })
+            }
+            accessibilityRole="link"
+            accessibilityLabel="Edit public profile"
+            hitSlop={4}
+            style={({ pressed }) => ({
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 7,
+              height: 40,
+              paddingHorizontal: 14,
+              borderRadius: 12,
+              backgroundColor: theme.colors.iconChipBg,
+              borderWidth: 1,
+              borderColor: theme.colors.cardBorder,
+              opacity: pressed ? 0.6 : 1,
+            })}
+          >
+            <Ionicons name="create-outline" size={16} color={theme.colors.text} />
+            <Text
+              style={{
+                fontFamily: theme.fonts.bodySemiBold,
+                fontSize: theme.fontSizes.bodySm,
+                fontWeight: '700',
+                color: theme.colors.text,
+              }}
+            >
+              Edit profile
+            </Text>
+          </Pressable>
+        )}
       </View>
 
       <ScrollView
