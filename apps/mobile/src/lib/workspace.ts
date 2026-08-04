@@ -186,6 +186,51 @@ export async function deleteWorkspace(workspaceId: string): Promise<number> {
   return (data as number | null) ?? 0;
 }
 
+/** The four social platforms the public profile offers, in display order.
+ * FIXED SET, not free-form: the profile renders the KEY as a visible button
+ * label, so an arbitrary key would be arbitrary copy on a public page. The RPC
+ * rejects anything outside this list (0024). */
+export const SOCIAL_FIELDS = [
+  { key: 'instagram', label: 'Instagram' },
+  { key: 'facebook', label: 'Facebook' },
+  { key: 'tiktok', label: 'TikTok' },
+  { key: 'x', label: 'X' },
+] as const;
+
+/** Editable public-profile fields. `logo_path` is absent on purpose — there is
+ * no storage bucket behind it, so it is not editable yet. */
+export interface WorkspaceProfileInput {
+  name: string;
+  bio: string | null;
+  location_text: string | null;
+  website: string | null;
+  socials: Record<string, string>;
+}
+
+/**
+ * Updates the workspace's PUBLIC profile (0024). OWNER or EDITOR — a viewer is
+ * a member and is still rejected, with `not_an_editor`.
+ *
+ * This is the ONLY write path to `workspaces` that exists: 0024 revoked UPDATE
+ * from `authenticated`, so validation (name required, length caps, the fixed
+ * social key set) cannot be bypassed by PATCHing the table directly the way an
+ * owner could before.
+ */
+export async function updateWorkspaceProfile(
+  workspaceId: string,
+  input: WorkspaceProfileInput,
+): Promise<void> {
+  const { error } = await supabase.rpc('update_workspace_profile', {
+    workspace_id: workspaceId,
+    name: input.name,
+    bio: input.bio,
+    location_text: input.location_text,
+    website: input.website,
+    socials: input.socials,
+  });
+  if (error) throw new Error(error.message);
+}
+
 /**
  * Soft-deletes a single event (0019 — Architecture Decision 8). Irreversible
  * to the host. The event is hidden from all read paths and survives 90 days for

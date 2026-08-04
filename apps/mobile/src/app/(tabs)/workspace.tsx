@@ -839,6 +839,38 @@ function WorkspaceDetail({
           </Text>
         </Pressable>
 
+        {/* Its editor, beside it. Secondary too — the gradient belongs to
+            "+ New event" and to Save inside the form, not to navigation.
+            Owner and editor only, matching the RPC (0024): a viewer would be
+            offered a screen the server would refuse to save. */}
+        {workspace.role !== 'viewer' && (
+          <Pressable
+            onPress={() => router.push('/workspace/edit')}
+            accessibilityRole="link"
+            accessibilityLabel="Edit public profile"
+            style={({ pressed }) => ({
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+              alignSelf: 'flex-start',
+              paddingVertical: 8,
+              opacity: pressed ? 0.6 : 1,
+            })}
+          >
+            <Ionicons name="create-outline" size={15} color={theme.colors.textMuted} />
+            <Text
+              style={{
+                fontFamily: theme.fonts.bodySemiBold,
+                fontSize: theme.fontSizes.bodySm,
+                fontWeight: '700',
+                color: theme.colors.textMuted,
+              }}
+            >
+              Edit public profile
+            </Text>
+          </Pressable>
+        )}
+
         {/* Listings */}
         <View style={{ marginTop: 30 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 }}>
@@ -1177,7 +1209,20 @@ function WorkspaceDetail({
 // ---------------------------------------------------------------------------
 export default function WorkspaceScreen() {
   const theme = useTheme();
-  const { workspaces, loading } = useMyWorkspace();
+  const { workspaces, loading, refresh: refreshWorkspaces } = useMyWorkspace();
+
+  // Refetch the workspace row on focus, so returning from the profile editor
+  // shows the new name rather than the one this screen loaded on mount.
+  // Workspace is a tab screen and stays mounted, and useMyWorkspace only
+  // fetches on mount/userId change, so without this a rename would not appear
+  // until the app restarted — the same staleness class as the stats tiles.
+  // No loading flash: `refresh` leaves `workspaces` populated while in flight,
+  // so `selected` stays truthy and WorkspaceDetail keeps rendering.
+  useFocusEffect(
+    useCallback(() => {
+      refreshWorkspaces();
+    }, [refreshWorkspaces]),
+  );
   // Only ever set on the dormant multi-workspace path. At exactly 1 workspace
   // this stays null forever and the picker is never rendered — invisible to
   // solo hosts, which is every MVP host.

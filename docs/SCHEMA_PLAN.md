@@ -93,7 +93,7 @@ or ts script), never a migration.
 | `bio` | `text` | |
 | `location_text` | `text` | e.g. "Phoenix, AZ" (freeform place label, not geo) |
 | `website` | `text` | |
-| `socials` | `jsonb not null default '{}'` | `{instagram, twitter, facebook}` (flagged §10) |
+| `socials` | `jsonb not null default '{}'` | **Fixed key set: `instagram`, `facebook`, `tiktok`, `x`** — enforced by `app.update_workspace_profile` (0024), which REJECTS any other key. Was `{instagram, twitter, facebook}`; corrected 2026-08-03 — twitter → x, tiktok added. Not free-form: the public profile renders the KEY as a visible button label, so an arbitrary key is arbitrary copy on a public page. (flagged §10) |
 | `logo_path` | `text` | storage path |
 | `created_by` | `uuid not null` FK → `profiles(id)` | audit only — ownership lives in memberships. **NOT client-readable (0015):** it is a raw `auth.users` id, so the public Organizer-Profile grant leaked an organizer→user map to anon. Per-column SELECT now excludes it (mirrors 0011's `publish_fee_cents`); still INSERTABLE, since the silent-create path writes it and the insert policy checks it. |
 | `created_at` / `updated_at` | | |

@@ -58,6 +58,10 @@ function ThemedStack() {
           bar — nothing is entered yet, so leaving costs nothing. Declared there
           with href:null, not here. The three screens below hold unsaved input
           and stay in this chrome-less Stack. */}
+      {/* Public-profile editor — chrome-less BY THE RULE: it holds unsaved
+          input, so it stays in this Stack while Workspace itself sits in
+          (tabs). Same split as the create fork vs its forms. */}
+      <Stack.Screen name="workspace/edit" />
       <Stack.Screen name="create/curbside" />
       <Stack.Screen name="create/event" />
       <Stack.Screen name="create/checkout" />
