@@ -307,9 +307,11 @@ Nothing is gated at any width; the full desktop batch still runs once at the end
   your account — you keep full access to this listing."
   **Standing rule: no "verified" language anywhere in the product** until
   something is actually verified.
-- **Paid events keep the full ORGANIZER block** (name, avatar, tap-through
-  when the Organizer Profile stage lands) — the minimized attribution model
-  is Curbside-ONLY.
+- **Paid events keep the full ORGANIZER block** (name, avatar, tap-through —
+  **LANDED 2026-08-02**, the block links to `/organizer/[workspace_id]`) — the
+  minimized attribution model is Curbside-ONLY. The tap is gated on
+  `workspace_id` being non-null, which 0023 nulls for an anonymous poster, so
+  an anonymous Curbside post has no link and no profile to reach.
 - **Curbside address geocoding = Nominatim** (OpenStreetMap, no key, plain
   fetch) for dev/MVP. Swap to a paid geocoder at scale — tracked. Shared by
   both create flows via `lib/geocode.ts` — ONE geocode interface.
@@ -346,6 +348,35 @@ Nothing is gated at any width; the full desktop batch still runs once at the end
   capped at start + 2 days (`max` prop on the shared `DateField`), so the
   picker cannot offer a span the server rejects. Copy: "Up to 3 consecutive
   days — perfect for a weekend sale."
+- **Curbside "free items" flag — DECIDED 2026-08-03, build next.** A boolean on
+  Curbside posts for "does this post include free items": a toggle on the mini
+  form, a chip on the card. The use case is the lane's literal namesake —
+  someone leaving things at the curb for whoever wants them — and right now
+  there is no way to say so, which is the one thing a passer-by most needs to
+  know before deciding to drive over.
+  - ⚠️ **NAMING COLLISION RULE (LOCKED): two meanings of "free" must never share
+    a treatment.** The green "Free" pill on event cards already means FREE
+    ENTRY (`entry_fee_cents = 0`) and is semantic green, reserved for
+    free/going/confirmed. The items flag is a different claim about different
+    things, so it gets **distinct copy and distinct placement**: it reads
+    **"Free items"**, never bare "Free", and it does not reuse the entry-fee
+    pill's position or its green. Entry-fee "Free" is unchanged.
+    A curbside yard sale can perfectly well charge nothing to attend AND put
+    some things out for free — both chips can appear on one card, which is
+    exactly why they cannot look alike.
+- **"End early" on a Curbside post is CANCEL — NOT a fourth verb (LOCKED
+  2026-08-03).** "The items are gone" / "we packed up early" is the first real
+  implementation of the already-locked Cancel: greyed card, stamp, and a
+  notification to everyone who saved or RSVP'd. The COPY is Curbside-specific
+  ("Items are gone" reads better than "Cancelled" for a giveaway); the
+  MECHANISM is the shared one.
+  **The three-verb model stands — Cancel / Archive / Delete (Architecture
+  Decision 8). Do not add a fourth.** The pull toward one is real, because
+  "ended early" feels different from "cancelled" — but it is the same event:
+  it was going to be there, it isn't, and the people who planned around it need
+  telling. A fourth verb would mean a fourth set of read-path rules, and the
+  read paths are the part of this system that has already proved hardest to
+  keep straight.
 - **ACCEPTED at MVP: the span cap is a 72-HOUR DURATION, not a calendar-day
   count.** A trigger has no client timezone with which to bucket `timestamptz`
   into local dates — the same limitation that made `publish_paid_event` take
@@ -621,6 +652,11 @@ confirmation, published events in Workspace.
   Curbside mini form centered ~560px; Workspace = 4-across stats + listings table; Pricing =
   3-column matrix from canonical PRICING_TIERS; Organizer Profile centered ~720px w/ 2-across
   event grid; Event Detail centered ~640px. Below 1024px everything stays in the phone frame.
+  **As built 2026-08-02 the Organizer Profile is a single 560px column, not 720
+  with a 2-across grid** — it was built mobile-first per the rule above and its
+  desktop decision is deliberately deferred to the one responsive batch, not
+  taken early. Tracked there, along with the back chip that currently sits in a
+  640 column beside 560 content.
 
 ### 6. Notifications = channel/category/frequency, fit-gated (design locked, behavior = Code stage)
 - **Push fires only for USER-REQUESTED events** (bookmarks/RSVPs), never a discovery firehose.
@@ -906,6 +942,20 @@ Create Event's tier step (per-day model is DEAD everywhere):
   "Cancelled" stamp. Advance cancellations vanish from the feed by event day; SAME-DAY
   cancellations stay visible (greyed) so day-of attendees aren't confused.
 - Cancellation must notify bookmarked/RSVP'd users (push/email) — Code stage.
+  This is also the mechanism behind Curbside's "end early" — same verb,
+  Curbside-specific copy (see the Curbside lock above).
+- **Travel notifications: NOT BUILDING (DECIDED 2026-08-03).** Recorded here
+  because it will be proposed again — "tell someone their event was cancelled
+  while they're on the way" is an obviously good idea until you ask what it
+  requires. Knowing a person is EN ROUTE means knowing where they are, over
+  time, relative to an event: continuous location, stored and evaluated. That
+  contradicts the locked privacy stance — location is **"used live, never
+  stored"** — and it is not a stance worth trading for a nicety.
+  **The buildable version already exists in the line above:** cancelling
+  notifies everyone who saved or RSVP'd, whatever they are doing at the time.
+  Someone driving over gets the message; we simply never learn that they were
+  driving. That covers the actual need without acquiring a tracking dataset we
+  would then have to defend, disclose, and secure.
 
 ## SCHEMA LOCKS (from the Code-stage conflict report — production rules; prototype is frozen reference and its bugs are IGNORED)
 

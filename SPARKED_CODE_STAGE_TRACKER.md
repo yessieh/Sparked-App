@@ -56,6 +56,19 @@ and verified in Cursor/Claude Code.
       categories. Not built until decided.
 - [ ] **Fit-matching logic.** "Fit" = user interests ∩ event categories. Feeds
       nearby/push relevance. Needs the shared taxonomy above to function.
+- [ ] **Blocking a PERSON — PARKED, post-MVP.** Today's blocks are CATEGORY
+      blocks: a filter over a taxonomy this user controls. Blocking a person is
+      a different kind of thing — a social graph — and it is a whole surface,
+      not a toggle: a blocked-users list in Settings, enforcement across the
+      feed, event detail AND the organizer profile, and an unblock flow. Every
+      one of those is another read path that has to agree with the others, and
+      read-path consistency is the thing this project has repeatedly had to
+      repair.
+      Design it alongside the moderation backend, and **build it only if abuse
+      actually materializes.** At launch scale, in one town, with reporting
+      already in place, a person-block is speculative infrastructure — and the
+      wrong moment to add a fourth axis to event visibility is before there is
+      anyone to hide from.
 
 ---
 
@@ -99,7 +112,9 @@ and verified in Cursor/Claude Code.
       cover them.
       **Still open, deliberately out of that scope:** drafts /
       `pending_payment` never appear on this screen; event editing and
-      cancellation; the Organizer Profile + its editor; stats drill-downs.
+      cancellation; the Organizer Profile EDITOR; stats drill-downs. (The
+      public Organizer Profile itself shipped 2026-08-02, and Workspace now
+      carries a "View public profile" row to it.)
 - [x] **Workspace read path + stats RPC — DONE (0015, 2026-07-23).**
       Member-scoped `workspace_stats` (4 computed numbers,
       `app`-definer/`public`-invoker), `workspaces.created_by` column-privacy
@@ -149,6 +164,35 @@ and verified in Cursor/Claude Code.
       three wizard screens, so it was extracted to `components/SubHeader.tsx`.
       **A shared component living in a route file only works while every
       consumer sits in the same directory.**
+- [x] **CHROME RULE AMENDED — public DESTINATION screens keep the tab bar too
+      (2026-08-02).** `event/[id]` and `organizer/[id]` moved into `(tabs)` with
+      `href: null`. This resolves the cold-arrival dead end that was parked when
+      the fork ruling landed.
+      **The rule is about unsaved INPUT, not depth.** Both are public content
+      and backlink/share targets, so a first-time visitor can arrive with no
+      history behind them; without the bar their only control was a Back button
+      pointing nowhere. Nothing on either screen can be lost by leaving.
+      **Unchanged: the create flow stays chrome-less** — Curbside form, every
+      wizard step, checkout. Those hold input, and a stray tab tap losing a
+      half-filled event is worse than one extra back-tap.
+      Registration note that settles an earlier open question: **a nested
+      dynamic route needs no `_layout.tsx` and no workaround.** A directory
+      without a layout file is flattened into its parent navigator and addressed
+      by slashed name — `<Tabs.Screen name="event/[id]" />` — exactly as the
+      root Stack had always declared it, alongside nine other slashed routes.
+      The mechanism is navigator-agnostic. Both stale root Stack declarations
+      were removed; leaving them reproduced the same `No route named X` warning
+      the workspace move hit, for both routes.
+- [x] **Back-button alignment across the two public screens — DONE 2026-08-02.**
+      Organizer Profile's chip moved to Event Detail's geometry (40×40 r12, top
+      12, inset 20 inside an alignSelf-centred 640 container). Event Detail's
+      could not move — it floats over the photo hero, paired with the Save chip.
+      **Matching the inset alone was not enough**: measured on desktop the two
+      still sat 320px apart (left 20 vs left 340), because Event Detail's header
+      is centred in a 640 column and Organizer's was full-width. Aligned only on
+      phones is not aligned. Chip STYLE stays different on purpose — Event
+      Detail's is translucent dark for legibility over a photograph, which would
+      be a dark blob on a plain background.
 - [ ] **Wizard exit affordance** — persistent X/close on all wizard + checkout
       steps with a discard-draft confirmation. Pairs with the in-tabs success
       screen restructure (round-2 walk): the create flow is a focused,
@@ -238,6 +282,25 @@ and verified in Cursor/Claude Code.
 
 - [ ] **Report backend.** Report sheet exists in UI (App Store gate); wire a
       reports table + review path + auto-hide threshold decision.
+- [ ] **Report reasons — Curbside expansion.** The existing 4-reason sheet
+      (Spam / Wrong info / Inappropriate / Other, spec in SPARKED_STATE) gains
+      two Curbside-specific options: **"Not as advertised"** and **"No longer
+      available."** An ADDITION to the existing design, not a new feature — the
+      sheet, the link and the toast all stay as they are. It matters because the
+      generic four have nowhere to put the two things that actually go wrong
+      with a curbside post: the items were not what the photo showed, or they
+      were gone before you arrived. Backend still unbuilt either way, so this
+      lands with the report backend above rather than ahead of it.
+- [ ] **Notify the poster when their listing is reported — PARKED, needs abuse
+      thresholds first.** Superficially kind and genuinely useful: a poster
+      whose listing has a wrong address wants to know. But wiring reports
+      straight through to poster notifications is an abuse vector in both
+      directions — one spiteful stranger can nag a poster repeatedly by
+      re-reporting, and a live listing can be pressured off the feed by someone
+      who simply does not want it there. Needs **report thresholds, dedup per
+      reporter, and rate limits** before any notification fires, which means it
+      is a piece of the moderation backend, not a precursor to it. Design the
+      two together; do not ship the notification half early.
 - [ ] **Email service** (Resend/Postmark or similar): weekly digest, payment
       receipts (Stripe receipts OK if configured — deliberate), auth emails,
       cancellation notices. Pick early — digest is a core retention channel.
@@ -373,6 +436,53 @@ and verified in Cursor/Claude Code.
       dev/staging stays on Free and keeps this warning permanently, which is
       fine and expected. "0 / 2 accepted" is a PROD statement.
 
+## ORGANIZER PROFILE (public surface — built 2026-08-02/03)
+
+- [x] **Read path — DONE (migration 0023).** `organizer_profile(workspace_id)`,
+      definer body in `app` + thin invoker wrapper, executable by **anon**
+      because this is the anonymous-browse backlink target. Returns the
+      workspace's public fields as scalars plus `upcoming`/`past` as jsonb
+      arrays — a returns-table of events would yield zero rows for an organizer
+      with nothing published, leaving the client unable to tell "new organizer"
+      from "no such workspace". One row means found; zero means 404.
+      **Lifecycle filters are EXPLICIT, not inherited** — the second surface to
+      need this, after `events_within_radius` in 0020, and the migration states
+      it as a pattern. `events_select_public` is wrong for a public page twice
+      over: its member branch would show a host their own archived events on
+      their own public page, and its 0022 attendee-history branch would
+      resurface an archived event to a visitor who happened to have saved it.
+      Also added `workspace_id` to `event_detail` (drop + create — adding an OUT
+      column is a return-type change), **nulled for `curbside_anonymous` rows**:
+      a masked name beside a usable id is not a mask.
+      Suite: `scripts/qa-0023-organizer-profile.sql`.
+- [x] **Anonymous Curbside excluded from the profile — DONE (0023), not in the
+      brief.** The same bypass running the other way: listing an anonymous post
+      under the organizer's name and logo deanonymizes it as completely as
+      leaking the id would. 0009 says the row stays "fully attributed to the
+      workspace INTERNALLY" — internally being the operative word. Reversing
+      this means accepting that "post without my name" does not survive someone
+      opening the poster's profile.
+- [x] **Public profile screen + both entry points — DONE 2026-08-02.**
+      `app/(tabs)/organizer/[id].tsx`: gradient-initials header (logo is a
+      placeholder always — `logo_path` has no bucket behind it), bio, location,
+      website/socials as secondary outline buttons, upcoming as compact
+      EventStubs, past collapsed behind "Past · N". The screen sorts and filters
+      NOTHING — 0023 already did it, and re-deriving would be a second copy of a
+      rule that must not drift.
+      Entry points: the Event Detail organizer block taps through (gated on
+      `workspace_id === null`, never on a client-side re-derivation of
+      anonymity), and Workspace gained a secondary "View public profile" row.
+- [ ] **Organizer Profile EDITOR — not built.** The host-facing side: editing
+      name, bio, location, website and socials from inside Workspace. Logo
+      upload is a separate arc and needs Supabase Storage, which does not exist
+      (no bucket, no picker dependency, no upload path anywhere in the app).
+- [ ] **Verify the Workspace "View public profile" row against a signed-in
+      host.** It typechecks and routes correctly, but every verification pass so
+      far has run signed out, so the row itself is unexercised. Part of the
+      standing signed-in walk backlog.
+
+---
+
 ## GEO / MAPS (carried from prior state doc)
 
 - [ ] **Replace hardcoded `mi` distances with PostGIS-computed distance** from
@@ -420,8 +530,10 @@ and verified in Cursor/Claude Code.
       and **`app.event_publish_fee_cents` + `app.publish_paid_event`** (both
       missed by the doc list; the second would have published a deleted event).
       Policies: `event_categories_select_public`, `event_vendors_select_public`.
-      Organizer Profile has no route yet, so it is a future path, not a current
-      one; there is no separate search path (search is client-side over the feed).
+      Organizer Profile was a future path when this was written; it shipped
+      2026-08-02 as a THIRTEENTH read path and is covered — see its own item
+      below. There is no separate search path (search is client-side over the
+      feed).
       **The structural defence was taken**, as this item hoped: the rewritten
       `events_select_public` is the chokepoint, so a NEW direct read or invoker
       function is safe without remembering. Only the four DEFINER functions,
@@ -668,6 +780,24 @@ and verified in Cursor/Claude Code.
       verified** — claiming a check we don't perform is a
       consumer-representation risk that sits outside Section 230, which covers
       what USERS post, not claims WE make about them.
+
+---
+
+## RESPONSIVE BATCH (one pass, at the end — per SPARKED_STATE §5)
+
+> Screens are built mobile-first with their desktop decision TAGGED, not taken.
+> This is where the tags get cashed in. Nothing here is a bug on a phone.
+
+- [ ] **Organizer Profile — back chip sits in a 640 column beside 560 content.**
+      On desktop the chip lands ~40px left of where the content column starts.
+      Not an accident: aligning it to Event Detail's floating back chip was the
+      explicit instruction, and Event Detail's header is centred at 640 while
+      the profile's content is 560. Widening the profile's content column to 640
+      resolves it and would also close the gap with the recorded desktop target
+      (SPARKED_STATE §5 specifies ~720px with a 2-across event grid, which the
+      built screen does not yet do). Invisible below 1024px — the chip and the
+      content share an edge on a phone. Defer to this batch rather than
+      hand-tuning one screen.
 
 ---
 
