@@ -35,8 +35,9 @@ import { GradientFill, SecondaryButton } from '../../../components/AuthControls'
 import EventStub, { type FeedEvent } from '../../../components/EventStub';
 import { useAuth } from '../../../lib/auth';
 import { useEngagement } from '../../../lib/engagement';
+import { socialUrl, type SocialPlatform } from '../../../lib/socialLinks';
 import { supabase } from '../../../lib/supabase';
-import { useMyWorkspace } from '../../../lib/workspace';
+import { SOCIAL_FIELDS, useMyWorkspace } from '../../../lib/workspace';
 import { brand, useTheme } from '../../../theme';
 
 type Theme = ReturnType<typeof useTheme>;
@@ -78,16 +79,113 @@ function initialsOf(name: string): string {
     .toUpperCase();
 }
 
-/** Bare host for display — a full URL in a button reads as noise. */
+/**
+ * DOMAIN ONLY for display. The previous version stripped the protocol and kept
+ * everything else, so a real stored URL with a path and a query string
+ * (`www.walmart.com/gic?type=gepa&storeId=1411&…`) ran off the side of a phone.
+ * A visitor reads a link button to learn WHERE it goes, and the host answers
+ * that; the tracking parameters answer nothing and cost the whole layout.
+ *
+ * Deliberately string surgery rather than `new URL()`: the server stores any
+ * string up to 200 chars and does not require a scheme, so a value that URL()
+ * would throw on is perfectly storable. This is total by construction.
+ */
 function prettyUrl(url: string): string {
-  return url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  return url
+    .replace(/^https?:\/\//i, '')
+    .replace(/^www\./i, '')
+    .split(/[/?#]/)[0];
+}
+
+/**
+ * The website's href. The stored value may have no scheme — nothing on the
+ * server requires one — and `Linking.openURL('example.com')` has no protocol to
+ * open. Same defect class as the social links this change is fixing.
+ */
+function websiteHref(url: string): string {
+  return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+}
+
+/** The brand mark for each platform. Ionicons carries all four in its `logo-*`
+ * namespace — `logo-x` is the X Corp mark, a different glyph from both
+ * `logo-twitter` (the retired bird) and `close` (the ✕ shape) — so this needs
+ * no new dependency and no hand-drawn SVG.
+ *
+ * Rendered MONOCHROME in the theme's text color, and that is a trademark
+ * decision rather than an aesthetic one: Meta, TikTok and X all permit their
+ * mark as a single-color UI element but prohibit recoloring it. Our own system
+ * would happily allow brand orange on an icon — it is not ours to apply to
+ * someone else's mark. */
+const SOCIAL_GLYPH: Record<string, keyof typeof Ionicons.glyphMap> = {
+  instagram: 'logo-instagram',
+  facebook: 'logo-facebook',
+  tiktok: 'logo-tiktok',
+  x: 'logo-x',
+};
+
+/**
+ * One social brand chip. ICON-ONLY, which is what lets four of them sit in a
+ * row on a phone where four text pills wrapped onto three lines.
+ *
+ * Icon-only means the label has to be carried by `accessibilityLabel` — the
+ * glyph is a font character and a screen reader announces nothing useful from
+ * it, so without this the row is four unlabelled buttons.
+ *
+ * 44x44 is the floor, not the aesthetic target: it is the minimum comfortable
+ * touch target, and the glyph inside is sized well under it so the mark keeps
+ * its clear space.
+ */
+function SocialIconLink({
+  theme,
+  label,
+  glyph,
+  url,
+}: {
+  theme: Theme;
+  label: string;
+  glyph: keyof typeof Ionicons.glyphMap;
+  url: string | null;
+}) {
+  const active = url !== null;
+  return (
+    <Pressable
+      onPress={() => url && Linking.openURL(url)}
+      disabled={!active}
+      accessibilityRole="link"
+      accessibilityState={{ disabled: !active }}
+      // Icon-only: this string IS the button's name.
+      accessibilityLabel={active ? label : `${label} — link unavailable`}
+      style={({ pressed }) => ({
+        width: 44,
+        height: 44,
+        borderRadius: theme.radii.lg,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: theme.colors.borderStrong,
+        backgroundColor: pressed && active ? theme.colors.surfaceHover : theme.colors.cardBg,
+        opacity: active ? 1 : 0.4,
+      })}
+    >
+      <Ionicons name={glyph} size={20} color={theme.colors.text} />
+    </Pressable>
+  );
 }
 
 // ---------------------------------------------------------------------------
 // Header — logo chip + name + location + bio, then the secondary link row.
 // ---------------------------------------------------------------------------
 function ProfileHeader({ theme, profile }: { theme: Theme; profile: OrganizerProfile }) {
-  const socialEntries = Object.entries(profile.socials ?? {}).filter(([, v]) => !!v);
+  // Driven by SOCIAL_FIELDS rather than Object.entries, for two reasons: the
+  // order becomes the locked display order instead of whatever order the jsonb
+  // happened to serialize in, and an unrecognised key can no longer reach the
+  // glyph map. (0024 already restricts the key set server-side; this means the
+  // UI does not depend on that holding.)
+  const socialEntries = SOCIAL_FIELDS.map(({ key, label }) => ({
+    key,
+    label,
+    value: (profile.socials ?? {})[key] ?? '',
+  })).filter((s) => s.value.trim().length > 0);
 
   return (
     <View style={{ marginBottom: 30 }}>
@@ -176,28 +274,52 @@ function ProfileHeader({ theme, profile }: { theme: Theme; profile: OrganizerPro
       )}
 
       {/* Secondary outline, never gradient: the gradient is reserved for host
-          and monetization ACTIONS, and an outbound link is neither. */}
+          and monetization ACTIONS, and an outbound link is neither.
+          The website keeps its text button (a domain is the point of it) and
+          the socials became icon chips beside it — four marks in one row, where
+          four text pills wrapped and the labels were raw jsonb keys anyway. */}
       {(!!profile.website || socialEntries.length > 0) && (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 18 }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: 10,
+            marginTop: 18,
+          }}
+        >
           {!!profile.website && (
-            <View style={{ minWidth: 150 }}>
-              <SecondaryButton onPress={() => Linking.openURL(profile.website as string)}>
-                {prettyUrl(profile.website)}
-              </SecondaryButton>
+            // No minWidth and no flex: the button now sizes to a domain, and a
+            // fixed floor is what let the old full-URL label push the row wide.
+            <SecondaryButton onPress={() => Linking.openURL(websiteHref(profile.website as string))}>
+              {prettyUrl(profile.website)}
+            </SecondaryButton>
+          )}
+          {/* The icons are their OWN non-wrapping row nested in the wrapping
+              one, so the group is atomic: at a width where everything fits they
+              sit beside the website button, and where it doesn't the four drop
+              together rather than three staying put and the fourth stranded on
+              the next line by itself. Measured at 375pt: the four chips are
+              206pt against 327pt of content width, so they always share a line
+              with each other — it is the website pill they cannot also fit
+              beside. */}
+          {socialEntries.length > 0 && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              {socialEntries.map(({ key, label, value }) => (
+                <SocialIconLink
+                  key={key}
+                  theme={theme}
+                  label={label}
+                  glyph={SOCIAL_GLYPH[key]}
+                  // ONE definition of "where does this handle point", shared
+                  // with the editor's test button. Two implementations would
+                  // mean the host could verify a link that the public page then
+                  // builds differently, which makes the test button theater.
+                  url={socialUrl(key as SocialPlatform, value)}
+                />
+              ))}
             </View>
           )}
-          {socialEntries.map(([platform, handle]) => (
-            <View key={platform} style={{ minWidth: 130 }}>
-              <SecondaryButton
-                onPress={() => {
-                  const target = /^https?:\/\//.test(handle) ? handle : `https://${handle}`;
-                  Linking.openURL(target);
-                }}
-              >
-                {platform}
-              </SecondaryButton>
-            </View>
-          ))}
         </View>
       )}
     </View>
