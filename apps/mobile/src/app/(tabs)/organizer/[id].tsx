@@ -31,7 +31,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 
-import { GradientFill, SecondaryButton } from '../../../components/AuthControls';
+import { GradientFill } from '../../../components/AuthControls';
 import EventStub, { type FeedEvent } from '../../../components/EventStub';
 import { useAuth } from '../../../lib/auth';
 import { useEngagement } from '../../../lib/engagement';
@@ -80,24 +80,6 @@ function initialsOf(name: string): string {
 }
 
 /**
- * DOMAIN ONLY for display. The previous version stripped the protocol and kept
- * everything else, so a real stored URL with a path and a query string
- * (`www.walmart.com/gic?type=gepa&storeId=1411&…`) ran off the side of a phone.
- * A visitor reads a link button to learn WHERE it goes, and the host answers
- * that; the tracking parameters answer nothing and cost the whole layout.
- *
- * Deliberately string surgery rather than `new URL()`: the server stores any
- * string up to 200 chars and does not require a scheme, so a value that URL()
- * would throw on is perfectly storable. This is total by construction.
- */
-function prettyUrl(url: string): string {
-  return url
-    .replace(/^https?:\/\//i, '')
-    .replace(/^www\./i, '')
-    .split(/[/?#]/)[0];
-}
-
-/**
  * The website's href. The stored value may have no scheme — nothing on the
  * server requires one — and `Linking.openURL('example.com')` has no protocol to
  * open. Same defect class as the social links this change is fixing.
@@ -123,28 +105,65 @@ const SOCIAL_GLYPH: Record<string, keyof typeof Ionicons.glyphMap> = {
   x: 'logo-x',
 };
 
+/** Every chip renders its glyph at this size. */
+const GLYPH_SIZE = 20;
+
 /**
- * One social brand chip. ICON-ONLY, which is what lets four of them sit in a
- * row on a phone where four text pills wrapped onto three lines.
+ * OPTICAL SIZE CORRECTION, for Facebook alone.
+ *
+ * `logo-facebook` is a SOLID DISC with the f knocked out of it, while every
+ * other mark in the row is a bare outline or letterform with no container. At a
+ * matched point size it therefore carries far more ink than its neighbours and
+ * reads as the loud one — a chip inside a chip.
+ *
+ * Ionicons offers no remedy: `logo-facebook` is its only Facebook glyph, and
+ * NOT ONE of its `logo-*` brand marks has an `-outline` or `-sharp` variant, so
+ * there is no lighter form to swap to. Sizing it down is the correction
+ * available without loading a second icon font for one glyph.
+ *
+ * IT NARROWS THE GAP AND DOES NOT CLOSE IT — measured on the render, not
+ * assumed: a disc among bare marks is still a disc, and Facebook still reads as
+ * the loudest chip in the row.
+ *
+ * The alternative that DOES close it is FontAwesome 6's `facebook-f`, the
+ * containerless letterform, already vendored inside @expo/vector-icons and
+ * verified rendering correctly here at size 20. It was not taken because
+ * Ionicons is currently the ONLY icon family in this app, so it would pull a
+ * second 209KB font in for a single glyph — on the anonymous-browse backlink
+ * target, no less. That is a product call about weight vs. bytes, parked for a
+ * ruling rather than made here.
+ *
+ * Uniform scaling only. Meta's mark may be resized; it may not be distorted or
+ * recoloured, which is why this is a size and not a tint.
+ */
+const GLYPH_SIZE_OVERRIDE: Record<string, number> = { facebook: 18 };
+
+/**
+ * One outbound-link chip — the website's globe and each social brand mark. ONE
+ * component for both, because they are one row of peers: the website used to be
+ * a text pill, which made it a different KIND of object sitting beside the
+ * icons and was what forced the row to wrap.
  *
  * Icon-only means the label has to be carried by `accessibilityLabel` — the
  * glyph is a font character and a screen reader announces nothing useful from
- * it, so without this the row is four unlabelled buttons.
+ * it, so without this the row is five unlabelled buttons.
  *
  * 44x44 is the floor, not the aesthetic target: it is the minimum comfortable
  * touch target, and the glyph inside is sized well under it so the mark keeps
  * its clear space.
  */
-function SocialIconLink({
+function IconLink({
   theme,
   label,
   glyph,
   url,
+  size = GLYPH_SIZE,
 }: {
   theme: Theme;
   label: string;
   glyph: keyof typeof Ionicons.glyphMap;
   url: string | null;
+  size?: number;
 }) {
   const active = url !== null;
   return (
@@ -167,7 +186,10 @@ function SocialIconLink({
         opacity: active ? 1 : 0.4,
       })}
     >
-      <Ionicons name={glyph} size={20} color={theme.colors.text} />
+      {/* The CHIP is the constant, never the glyph: the tap target and the
+          bordered box stay identical across all five, so an optical size
+          correction on one mark cannot make its button smaller. */}
+      <Ionicons name={glyph} size={size} color={theme.colors.text} />
     </Pressable>
   );
 }
@@ -275,9 +297,15 @@ function ProfileHeader({ theme, profile }: { theme: Theme; profile: OrganizerPro
 
       {/* Secondary outline, never gradient: the gradient is reserved for host
           and monetization ACTIONS, and an outbound link is neither.
-          The website keeps its text button (a domain is the point of it) and
-          the socials became icon chips beside it — four marks in one row, where
-          four text pills wrapped and the labels were raw jsonb keys anyway. */}
+          ONE FLAT ROW OF UNIFORM CHIPS. The previous version needed a nested
+          non-wrapping group to stop the fourth icon being stranded on its own
+          line — that was a workaround for the website's variable-width TEXT
+          pill sharing the row. With the website an identical 44pt chip the
+          arithmetic is fixed and known: 5x44 + 4x10 = 260pt, against 327pt of
+          content width at 375pt (and 272pt at a 320pt device). It fits, so
+          there is nothing left to work around and the nesting is gone.
+          `flexWrap` stays purely as a floor — uniform chips wrap gracefully,
+          which is exactly what the old text pill did not do. */}
       {(!!profile.website || socialEntries.length > 0) && (
         <View
           style={{
@@ -288,38 +316,30 @@ function ProfileHeader({ theme, profile }: { theme: Theme; profile: OrganizerPro
             marginTop: 18,
           }}
         >
+          {/* Website leads: it is the organizer's own front door, and the
+              platforms are where you find them elsewhere. */}
           {!!profile.website && (
-            // No minWidth and no flex: the button now sizes to a domain, and a
-            // fixed floor is what let the old full-URL label push the row wide.
-            <SecondaryButton onPress={() => Linking.openURL(websiteHref(profile.website as string))}>
-              {prettyUrl(profile.website)}
-            </SecondaryButton>
+            <IconLink
+              theme={theme}
+              label="Website"
+              glyph="globe-outline"
+              url={websiteHref(profile.website)}
+            />
           )}
-          {/* The icons are their OWN non-wrapping row nested in the wrapping
-              one, so the group is atomic: at a width where everything fits they
-              sit beside the website button, and where it doesn't the four drop
-              together rather than three staying put and the fourth stranded on
-              the next line by itself. Measured at 375pt: the four chips are
-              206pt against 327pt of content width, so they always share a line
-              with each other — it is the website pill they cannot also fit
-              beside. */}
-          {socialEntries.length > 0 && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              {socialEntries.map(({ key, label, value }) => (
-                <SocialIconLink
-                  key={key}
-                  theme={theme}
-                  label={label}
-                  glyph={SOCIAL_GLYPH[key]}
-                  // ONE definition of "where does this handle point", shared
-                  // with the editor's test button. Two implementations would
-                  // mean the host could verify a link that the public page then
-                  // builds differently, which makes the test button theater.
-                  url={socialUrl(key as SocialPlatform, value)}
-                />
-              ))}
-            </View>
-          )}
+          {socialEntries.map(({ key, label, value }) => (
+            <IconLink
+              key={key}
+              theme={theme}
+              label={label}
+              glyph={SOCIAL_GLYPH[key]}
+              size={GLYPH_SIZE_OVERRIDE[key] ?? GLYPH_SIZE}
+              // ONE definition of "where does this handle point", shared with
+              // the editor's test button. Two implementations would mean the
+              // host could verify a link that the public page then builds
+              // differently, which makes the test button theater.
+              url={socialUrl(key as SocialPlatform, value)}
+            />
+          ))}
         </View>
       )}
     </View>
