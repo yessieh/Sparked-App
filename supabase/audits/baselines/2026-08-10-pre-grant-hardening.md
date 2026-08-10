@@ -1,107 +1,253 @@
+# Pre-arc privilege baseline — 2026-08-10, before the grant-hardening arc
+
+Output of `supabase/audits/privilege_audit.sql` sections 1-8, run in the
+Supabase Dashboard SQL Editor against the Sparked-App project. Section 9 is
+behavioral and not runnable there, so its absence is expected. This is a
+BASELINE: recorded, not reviewed. Nothing here was changed in response to it.
+
+## HOW SECTIONS 1 AND 5 WERE EXPORTED — READ BEFORE THE POST-ARC RE-RUN
+
+The SQL Editor caps a result at 100 rows and gives no indication that it has
+done so. Sections 1 and 5 both exceed that, and the first export of this file
+silently lost the overflow: section 1 arrived with 200 ragged rows (two of them
+duplicates) instead of 215, and section 5 with 100 instead of 276. The missing
+17 section-1 rows were all `workspaces` grants.
+
+Both were re-exported in pages of 100 using `limit ... offset ...` and
+concatenated here into one continuous block each. Paging is only safe because
+each query's ORDER BY was extended to cover EVERY selected column
+(`order by 1,2,3,4,5,6` for section 1, `order by 1,2,3,4,5` for section 5) —
+the audit file's own ORDER BY leaves `privilege_type` untied, and rows that
+tie can be returned in a different order on each page, so a row can appear
+twice or vanish. Verified after concatenation: 215 rows / 215 distinct for
+section 1, 276 rows / 276 distinct for section 5, with contiguous page
+boundaries and a final page under 100 rows in both cases.
+
+**THE POST-ARC RE-RUN MUST PAGE THE SAME WAY AND CONCATENATE.** A single
+uncorrected run returns 100 rows for either section, and the diff against this
+file would read the 115 and 176 absent rows as grants REMOVED by the arc —
+while any grant actually added inside the truncated region would be invisible.
+Neither error announces itself.
+
 ## Section 1 — Grants
 
 | schema | object_name           | object_type | column_name        | grantee       | privilege_type |
 | ------ | --------------------- | ----------- | ------------------ | ------------- | -------------- |
-| public | categories            | table       | (table-level)      | anon          | TRIGGER        |
-| public | categories            | table       | (table-level)      | anon          | SELECT         |
 | public | categories            | table       | (table-level)      | anon          | MAINTAIN       |
 | public | categories            | table       | (table-level)      | anon          | REFERENCES     |
+| public | categories            | table       | (table-level)      | anon          | SELECT         |
+| public | categories            | table       | (table-level)      | anon          | TRIGGER        |
 | public | categories            | table       | (table-level)      | anon          | TRUNCATE       |
-| public | categories            | table       | (table-level)      | authenticated | TRUNCATE       |
+| public | categories            | table       | (table-level)      | authenticated | MAINTAIN       |
+| public | categories            | table       | (table-level)      | authenticated | REFERENCES     |
 | public | categories            | table       | (table-level)      | authenticated | SELECT         |
 | public | categories            | table       | (table-level)      | authenticated | TRIGGER        |
-| public | categories            | table       | (table-level)      | authenticated | REFERENCES     |
-| public | categories            | table       | (table-level)      | authenticated | MAINTAIN       |
-| public | curbside_quota_ledger | table       | (table-level)      | anon          | TRIGGER        |
+| public | categories            | table       | (table-level)      | authenticated | TRUNCATE       |
 | public | curbside_quota_ledger | table       | (table-level)      | anon          | MAINTAIN       |
-| public | curbside_quota_ledger | table       | (table-level)      | anon          | TRUNCATE       |
 | public | curbside_quota_ledger | table       | (table-level)      | anon          | REFERENCES     |
-| public | curbside_quota_ledger | table       | (table-level)      | authenticated | SELECT         |
-| public | curbside_quota_ledger | table       | (table-level)      | authenticated | TRUNCATE       |
-| public | curbside_quota_ledger | table       | (table-level)      | authenticated | TRIGGER        |
-| public | curbside_quota_ledger | table       | (table-level)      | authenticated | REFERENCES     |
+| public | curbside_quota_ledger | table       | (table-level)      | anon          | TRIGGER        |
+| public | curbside_quota_ledger | table       | (table-level)      | anon          | TRUNCATE       |
 | public | curbside_quota_ledger | table       | (table-level)      | authenticated | MAINTAIN       |
+| public | curbside_quota_ledger | table       | (table-level)      | authenticated | REFERENCES     |
+| public | curbside_quota_ledger | table       | (table-level)      | authenticated | SELECT         |
+| public | curbside_quota_ledger | table       | (table-level)      | authenticated | TRIGGER        |
+| public | curbside_quota_ledger | table       | (table-level)      | authenticated | TRUNCATE       |
+| public | event_categories      | table       | (table-level)      | anon          | MAINTAIN       |
 | public | event_categories      | table       | (table-level)      | anon          | REFERENCES     |
+| public | event_categories      | table       | (table-level)      | anon          | SELECT         |
 | public | event_categories      | table       | (table-level)      | anon          | TRIGGER        |
 | public | event_categories      | table       | (table-level)      | anon          | TRUNCATE       |
-| public | event_categories      | table       | (table-level)      | anon          | SELECT         |
-| public | event_categories      | table       | (table-level)      | anon          | MAINTAIN       |
 | public | event_categories      | table       | (table-level)      | authenticated | DELETE         |
-| public | event_categories      | table       | (table-level)      | authenticated | SELECT         |
 | public | event_categories      | table       | (table-level)      | authenticated | INSERT         |
 | public | event_categories      | table       | (table-level)      | authenticated | MAINTAIN       |
-| public | event_categories      | table       | (table-level)      | authenticated | TRIGGER        |
 | public | event_categories      | table       | (table-level)      | authenticated | REFERENCES     |
+| public | event_categories      | table       | (table-level)      | authenticated | SELECT         |
+| public | event_categories      | table       | (table-level)      | authenticated | TRIGGER        |
 | public | event_categories      | table       | (table-level)      | authenticated | TRUNCATE       |
 | public | event_categories      | table       | (table-level)      | authenticated | UPDATE         |
-| public | event_vendors         | table       | (table-level)      | anon          | TRUNCATE       |
-| public | event_vendors         | table       | (table-level)      | anon          | SELECT         |
 | public | event_vendors         | table       | (table-level)      | anon          | MAINTAIN       |
-| public | event_vendors         | table       | (table-level)      | anon          | TRIGGER        |
 | public | event_vendors         | table       | (table-level)      | anon          | REFERENCES     |
+| public | event_vendors         | table       | (table-level)      | anon          | SELECT         |
+| public | event_vendors         | table       | (table-level)      | anon          | TRIGGER        |
+| public | event_vendors         | table       | (table-level)      | anon          | TRUNCATE       |
+| public | event_vendors         | table       | (table-level)      | authenticated | DELETE         |
+| public | event_vendors         | table       | (table-level)      | authenticated | INSERT         |
+| public | event_vendors         | table       | (table-level)      | authenticated | MAINTAIN       |
 | public | event_vendors         | table       | (table-level)      | authenticated | REFERENCES     |
+| public | event_vendors         | table       | (table-level)      | authenticated | SELECT         |
+| public | event_vendors         | table       | (table-level)      | authenticated | TRIGGER        |
 | public | event_vendors         | table       | (table-level)      | authenticated | TRUNCATE       |
 | public | event_vendors         | table       | (table-level)      | authenticated | UPDATE         |
-| public | event_vendors         | table       | (table-level)      | authenticated | SELECT         |
-| public | event_vendors         | table       | (table-level)      | authenticated | INSERT         |
-| public | event_vendors         | table       | (table-level)      | authenticated | DELETE         |
-| public | event_vendors         | table       | (table-level)      | authenticated | MAINTAIN       |
-| public | event_vendors         | table       | (table-level)      | authenticated | TRIGGER        |
 | public | events                | column      | address            | anon          | SELECT         |
+| public | events                | column      | address            | authenticated | INSERT         |
 | public | events                | column      | address            | authenticated | SELECT         |
 | public | events                | column      | address            | authenticated | UPDATE         |
-| public | events                | column      | address            | authenticated | INSERT         |
 | public | events                | column      | archived_at        | anon          | SELECT         |
 | public | events                | column      | archived_at        | authenticated | SELECT         |
 | public | events                | column      | cancelled_at       | anon          | SELECT         |
 | public | events                | column      | cancelled_at       | authenticated | INSERT         |
-| public | events                | column      | cancelled_at       | authenticated | UPDATE         |
 | public | events                | column      | cancelled_at       | authenticated | SELECT         |
+| public | events                | column      | cancelled_at       | authenticated | UPDATE         |
 | public | events                | column      | created_at         | anon          | SELECT         |
 | public | events                | column      | created_at         | authenticated | INSERT         |
 | public | events                | column      | created_at         | authenticated | SELECT         |
 | public | events                | column      | curbside_anonymous | anon          | SELECT         |
+| public | events                | column      | curbside_anonymous | authenticated | INSERT         |
 | public | events                | column      | curbside_anonymous | authenticated | SELECT         |
 | public | events                | column      | curbside_anonymous | authenticated | UPDATE         |
-| public | events                | column      | curbside_anonymous | authenticated | INSERT         |
 | public | events                | column      | deleted_at         | anon          | SELECT         |
 | public | events                | column      | deleted_at         | authenticated | SELECT         |
 | public | events                | column      | description        | anon          | SELECT         |
-| public | events                | column      | description        | authenticated | UPDATE         |
 | public | events                | column      | description        | authenticated | INSERT         |
 | public | events                | column      | description        | authenticated | SELECT         |
+| public | events                | column      | description        | authenticated | UPDATE         |
 | public | events                | column      | ends_at            | anon          | SELECT         |
-| public | events                | column      | ends_at            | authenticated | UPDATE         |
 | public | events                | column      | ends_at            | authenticated | INSERT         |
 | public | events                | column      | ends_at            | authenticated | SELECT         |
+| public | events                | column      | ends_at            | authenticated | UPDATE         |
 | public | events                | column      | entry_fee_cents    | anon          | SELECT         |
+| public | events                | column      | entry_fee_cents    | authenticated | INSERT         |
 | public | events                | column      | entry_fee_cents    | authenticated | SELECT         |
 | public | events                | column      | entry_fee_cents    | authenticated | UPDATE         |
-| public | events                | column      | entry_fee_cents    | authenticated | INSERT         |
 | public | events                | column      | id                 | anon          | SELECT         |
-| public | events                | column      | id                 | authenticated | SELECT         |
 | public | events                | column      | id                 | authenticated | INSERT         |
+| public | events                | column      | id                 | authenticated | SELECT         |
 | public | events                | column      | location           | anon          | SELECT         |
+| public | events                | column      | location           | authenticated | INSERT         |
 | public | events                | column      | location           | authenticated | SELECT         |
 | public | events                | column      | location           | authenticated | UPDATE         |
-| public | events                | column      | location           | authenticated | INSERT         |
 | public | events                | column      | rsvp_count         | anon          | SELECT         |
-| public | events                | column      | rsvp_count         | authenticated | SELECT         |
 | public | events                | column      | rsvp_count         | authenticated | INSERT         |
+| public | events                | column      | rsvp_count         | authenticated | SELECT         |
 | public | events                | column      | socials            | anon          | SELECT         |
-| public | events                | column      | socials            | authenticated | UPDATE         |
 | public | events                | column      | socials            | authenticated | INSERT         |
 | public | events                | column      | socials            | authenticated | SELECT         |
+| public | events                | column      | socials            | authenticated | UPDATE         |
 | public | events                | column      | starts_at          | anon          | SELECT         |
+| public | events                | column      | starts_at          | authenticated | INSERT         |
 | public | events                | column      | starts_at          | authenticated | SELECT         |
 | public | events                | column      | starts_at          | authenticated | UPDATE         |
-| public | events                | column      | starts_at          | authenticated | INSERT         |
 | public | events                | column      | status             | anon          | SELECT         |
 | public | events                | column      | status             | authenticated | INSERT         |
-| public | events                | column      | status             | authenticated | UPDATE         |
 | public | events                | column      | status             | authenticated | SELECT         |
+| public | events                | column      | status             | authenticated | UPDATE         |
 | public | events                | column      | tier_id            | anon          | SELECT         |
-| public | events                | column      | tier_id            | authenticated | UPDATE         |
+| public | events                | column      | tier_id            | authenticated | INSERT         |
+| public | events      | column      | tier_id       | authenticated | SELECT         |
+| public | events      | column      | tier_id       | authenticated | UPDATE         |
+| public | events      | column      | title         | anon          | SELECT         |
+| public | events      | column      | title         | authenticated | INSERT         |
+| public | events      | column      | title         | authenticated | SELECT         |
+| public | events      | column      | title         | authenticated | UPDATE         |
+| public | events      | column      | updated_at    | anon          | SELECT         |
+| public | events      | column      | updated_at    | authenticated | INSERT         |
+| public | events      | column      | updated_at    | authenticated | SELECT         |
+| public | events      | column      | updated_at    | authenticated | UPDATE         |
+| public | events      | column      | venue_name    | anon          | SELECT         |
+| public | events      | column      | venue_name    | authenticated | INSERT         |
+| public | events      | column      | venue_name    | authenticated | SELECT         |
+| public | events      | column      | venue_name    | authenticated | UPDATE         |
+| public | events      | column      | workspace_id  | anon          | SELECT         |
+| public | events      | column      | workspace_id  | authenticated | INSERT         |
+| public | events      | column      | workspace_id  | authenticated | SELECT         |
+| public | events      | table       | (table-level) | anon          | MAINTAIN       |
+| public | events      | table       | (table-level) | anon          | REFERENCES     |
+| public | events      | table       | (table-level) | anon          | TRIGGER        |
+| public | events      | table       | (table-level) | anon          | TRUNCATE       |
+| public | events      | table       | (table-level) | authenticated | DELETE         |
+| public | events      | table       | (table-level) | authenticated | MAINTAIN       |
+| public | events      | table       | (table-level) | authenticated | REFERENCES     |
+| public | events      | table       | (table-level) | authenticated | TRIGGER        |
+| public | events      | table       | (table-level) | authenticated | TRUNCATE       |
+| public | memberships | table       | (table-level) | anon          | MAINTAIN       |
+| public | memberships | table       | (table-level) | anon          | REFERENCES     |
+| public | memberships | table       | (table-level) | anon          | TRIGGER        |
+| public | memberships | table       | (table-level) | anon          | TRUNCATE       |
+| public | memberships | table       | (table-level) | authenticated | MAINTAIN       |
+| public | memberships | table       | (table-level) | authenticated | REFERENCES     |
+| public | memberships | table       | (table-level) | authenticated | SELECT         |
+| public | memberships | table       | (table-level) | authenticated | TRIGGER        |
+| public | memberships | table       | (table-level) | authenticated | TRUNCATE       |
+| public | profiles    | table       | (table-level) | anon          | MAINTAIN       |
+| public | profiles    | table       | (table-level) | anon          | REFERENCES     |
+| public | profiles    | table       | (table-level) | anon          | TRIGGER        |
+| public | profiles    | table       | (table-level) | anon          | TRUNCATE       |
+| public | profiles    | table       | (table-level) | authenticated | MAINTAIN       |
+| public | profiles    | table       | (table-level) | authenticated | REFERENCES     |
+| public | profiles    | table       | (table-level) | authenticated | SELECT         |
+| public | profiles    | table       | (table-level) | authenticated | TRIGGER        |
+| public | profiles    | table       | (table-level) | authenticated | TRUNCATE       |
+| public | profiles    | table       | (table-level) | authenticated | UPDATE         |
+| public | rsvps       | table       | (table-level) | anon          | MAINTAIN       |
+| public | rsvps       | table       | (table-level) | anon          | REFERENCES     |
+| public | rsvps       | table       | (table-level) | anon          | TRIGGER        |
+| public | rsvps       | table       | (table-level) | anon          | TRUNCATE       |
+| public | rsvps       | table       | (table-level) | authenticated | DELETE         |
+| public | rsvps       | table       | (table-level) | authenticated | INSERT         |
+| public | rsvps       | table       | (table-level) | authenticated | MAINTAIN       |
+| public | rsvps       | table       | (table-level) | authenticated | REFERENCES     |
+| public | rsvps       | table       | (table-level) | authenticated | SELECT         |
+| public | rsvps       | table       | (table-level) | authenticated | TRIGGER        |
+| public | rsvps       | table       | (table-level) | authenticated | TRUNCATE       |
+| public | saves       | table       | (table-level) | anon          | MAINTAIN       |
+| public | saves       | table       | (table-level) | anon          | REFERENCES     |
+| public | saves       | table       | (table-level) | anon          | TRIGGER        |
+| public | saves       | table       | (table-level) | anon          | TRUNCATE       |
+| public | saves       | table       | (table-level) | authenticated | DELETE         |
+| public | saves       | table       | (table-level) | authenticated | INSERT         |
+| public | saves       | table       | (table-level) | authenticated | MAINTAIN       |
+| public | saves       | table       | (table-level) | authenticated | REFERENCES     |
+| public | saves       | table       | (table-level) | authenticated | SELECT         |
+| public | saves       | table       | (table-level) | authenticated | TRIGGER        |
+| public | saves       | table       | (table-level) | authenticated | TRUNCATE       |
+| public | tier_prices | table       | (table-level) | anon          | MAINTAIN       |
+| public | tier_prices | table       | (table-level) | anon          | REFERENCES     |
+| public | tier_prices | table       | (table-level) | anon          | SELECT         |
+| public | tier_prices | table       | (table-level) | anon          | TRIGGER        |
+| public | tier_prices | table       | (table-level) | anon          | TRUNCATE       |
+| public | tier_prices | table       | (table-level) | authenticated | MAINTAIN       |
+| public | tier_prices | table       | (table-level) | authenticated | REFERENCES     |
+| public | tier_prices | table       | (table-level) | authenticated | SELECT         |
+| public | tier_prices | table       | (table-level) | authenticated | TRIGGER        |
+| public | tier_prices | table       | (table-level) | authenticated | TRUNCATE       |
+| public | tiers       | table       | (table-level) | anon          | MAINTAIN       |
+| public | tiers       | table       | (table-level) | anon          | REFERENCES     |
+| public | tiers       | table       | (table-level) | anon          | SELECT         |
+| public | tiers       | table       | (table-level) | anon          | TRIGGER        |
+| public | tiers       | table       | (table-level) | anon          | TRUNCATE       |
+| public | tiers       | table       | (table-level) | authenticated | MAINTAIN       |
+| public | tiers       | table       | (table-level) | authenticated | REFERENCES     |
+| public | tiers       | table       | (table-level) | authenticated | SELECT         |
+| public | tiers       | table       | (table-level) | authenticated | TRIGGER        |
+| public | tiers       | table       | (table-level) | authenticated | TRUNCATE       |
+| public | workspaces  | column      | bio           | anon          | SELECT         |
+| public | workspaces  | column      | bio           | authenticated | SELECT         |
+| public | workspaces  | column      | created_at    | anon          | SELECT         |
+| public | workspaces  | column      | created_at    | authenticated | SELECT         |
+| public | workspaces  | column      | id            | anon          | SELECT         |
+| public | workspaces  | column      | id            | authenticated | SELECT         |
+| public | workspaces  | column      | location_text | anon          | SELECT         |
+| public | workspaces  | column      | location_text | authenticated | SELECT         |
+| public | workspaces  | column      | logo_path     | anon          | SELECT         |
+| public | workspaces  | column      | logo_path     | authenticated | SELECT         |
+| public | workspaces  | column      | name          | anon          | SELECT         |
+| public | workspaces  | column      | name          | authenticated | SELECT         |
+| public | workspaces  | column      | socials       | anon          | SELECT         |
+| public | workspaces  | column      | socials       | authenticated | SELECT         |
+| public | workspaces  | column      | updated_at    | anon          | SELECT         |
+| public | workspaces  | column      | updated_at    | authenticated | SELECT         |
+| public | workspaces  | column      | website       | anon          | SELECT         |
+| public | workspaces  | column      | website       | authenticated | SELECT         |
+| public | workspaces  | table       | (table-level) | anon          | MAINTAIN       |
+| public | workspaces  | table       | (table-level) | anon          | REFERENCES     |
+| public | workspaces  | table       | (table-level) | anon          | TRIGGER        |
+| public | workspaces  | table       | (table-level) | anon          | TRUNCATE       |
+| public | workspaces  | table       | (table-level) | authenticated | DELETE         |
+| public | workspaces  | table       | (table-level) | authenticated | INSERT         |
+| public | workspaces  | table       | (table-level) | authenticated | MAINTAIN       |
+| public | workspaces  | table       | (table-level) | authenticated | REFERENCES     |
+| public | workspaces  | table       | (table-level) | authenticated | TRIGGER        |
+| public | workspaces  | table       | (table-level) | authenticated | TRUNCATE       |
 
 ## Section 2 — RLS
 
@@ -172,105 +318,281 @@ No rows returned
 | granting_role  | schema     | object_type | grantee       | privilege_type |
 | -------------- | ---------- | ----------- | ------------- | -------------- |
 | postgres       | public     | functions   | postgres      | EXECUTE        |
+| postgres       | public     | sequences   | postgres      | SELECT         |
 | postgres       | public     | sequences   | postgres      | UPDATE         |
 | postgres       | public     | sequences   | postgres      | USAGE          |
-| postgres       | public     | sequences   | postgres      | SELECT         |
-| postgres       | public     | tables      | anon          | TRUNCATE       |
-| postgres       | public     | tables      | anon          | TRIGGER        |
-| postgres       | public     | tables      | anon          | REFERENCES     |
 | postgres       | public     | tables      | anon          | MAINTAIN       |
+| postgres       | public     | tables      | anon          | REFERENCES     |
+| postgres       | public     | tables      | anon          | TRIGGER        |
+| postgres       | public     | tables      | anon          | TRUNCATE       |
+| postgres       | public     | tables      | authenticated | MAINTAIN       |
 | postgres       | public     | tables      | authenticated | REFERENCES     |
 | postgres       | public     | tables      | authenticated | TRIGGER        |
-| postgres       | public     | tables      | authenticated | MAINTAIN       |
 | postgres       | public     | tables      | authenticated | TRUNCATE       |
+| postgres       | public     | tables      | postgres      | DELETE         |
 | postgres       | public     | tables      | postgres      | INSERT         |
 | postgres       | public     | tables      | postgres      | MAINTAIN       |
-| postgres       | public     | tables      | postgres      | UPDATE         |
 | postgres       | public     | tables      | postgres      | REFERENCES     |
-| postgres       | public     | tables      | postgres      | TRIGGER        |
-| postgres       | public     | tables      | postgres      | DELETE         |
 | postgres       | public     | tables      | postgres      | SELECT         |
+| postgres       | public     | tables      | postgres      | TRIGGER        |
 | postgres       | public     | tables      | postgres      | TRUNCATE       |
-| postgres       | public     | tables      | service_role  | TRIGGER        |
+| postgres       | public     | tables      | postgres      | UPDATE         |
 | postgres       | public     | tables      | service_role  | MAINTAIN       |
-| postgres       | public     | tables      | service_role  | TRUNCATE       |
 | postgres       | public     | tables      | service_role  | REFERENCES     |
+| postgres       | public     | tables      | service_role  | TRIGGER        |
+| postgres       | public     | tables      | service_role  | TRUNCATE       |
 | postgres       | storage    | functions   | anon          | EXECUTE        |
 | postgres       | storage    | functions   | authenticated | EXECUTE        |
 | postgres       | storage    | functions   | postgres      | EXECUTE        |
 | postgres       | storage    | functions   | service_role  | EXECUTE        |
-| postgres       | storage    | sequences   | anon          | USAGE          |
-| postgres       | storage    | sequences   | anon          | UPDATE         |
 | postgres       | storage    | sequences   | anon          | SELECT         |
-| postgres       | storage    | sequences   | authenticated | USAGE          |
-| postgres       | storage    | sequences   | authenticated | UPDATE         |
+| postgres       | storage    | sequences   | anon          | UPDATE         |
+| postgres       | storage    | sequences   | anon          | USAGE          |
 | postgres       | storage    | sequences   | authenticated | SELECT         |
+| postgres       | storage    | sequences   | authenticated | UPDATE         |
+| postgres       | storage    | sequences   | authenticated | USAGE          |
+| postgres       | storage    | sequences   | postgres      | SELECT         |
 | postgres       | storage    | sequences   | postgres      | UPDATE         |
 | postgres       | storage    | sequences   | postgres      | USAGE          |
-| postgres       | storage    | sequences   | postgres      | SELECT         |
 | postgres       | storage    | sequences   | service_role  | SELECT         |
-| postgres       | storage    | sequences   | service_role  | USAGE          |
 | postgres       | storage    | sequences   | service_role  | UPDATE         |
-| postgres       | storage    | tables      | anon          | REFERENCES     |
-| postgres       | storage    | tables      | anon          | TRUNCATE       |
+| postgres       | storage    | sequences   | service_role  | USAGE          |
 | postgres       | storage    | tables      | anon          | DELETE         |
-| postgres       | storage    | tables      | anon          | SELECT         |
 | postgres       | storage    | tables      | anon          | INSERT         |
-| postgres       | storage    | tables      | anon          | UPDATE         |
-| postgres       | storage    | tables      | anon          | TRIGGER        |
 | postgres       | storage    | tables      | anon          | MAINTAIN       |
-| postgres       | storage    | tables      | authenticated | TRIGGER        |
+| postgres       | storage    | tables      | anon          | REFERENCES     |
+| postgres       | storage    | tables      | anon          | SELECT         |
+| postgres       | storage    | tables      | anon          | TRIGGER        |
+| postgres       | storage    | tables      | anon          | TRUNCATE       |
+| postgres       | storage    | tables      | anon          | UPDATE         |
+| postgres       | storage    | tables      | authenticated | DELETE         |
+| postgres       | storage    | tables      | authenticated | INSERT         |
 | postgres       | storage    | tables      | authenticated | MAINTAIN       |
 | postgres       | storage    | tables      | authenticated | REFERENCES     |
-| postgres       | storage    | tables      | authenticated | TRUNCATE       |
-| postgres       | storage    | tables      | authenticated | DELETE         |
-| postgres       | storage    | tables      | authenticated | UPDATE         |
 | postgres       | storage    | tables      | authenticated | SELECT         |
-| postgres       | storage    | tables      | authenticated | INSERT         |
-| postgres       | storage    | tables      | postgres      | MAINTAIN       |
-| postgres       | storage    | tables      | postgres      | TRIGGER        |
-| postgres       | storage    | tables      | postgres      | REFERENCES     |
-| postgres       | storage    | tables      | postgres      | TRUNCATE       |
+| postgres       | storage    | tables      | authenticated | TRIGGER        |
+| postgres       | storage    | tables      | authenticated | TRUNCATE       |
+| postgres       | storage    | tables      | authenticated | UPDATE         |
 | postgres       | storage    | tables      | postgres      | DELETE         |
-| postgres       | storage    | tables      | postgres      | UPDATE         |
 | postgres       | storage    | tables      | postgres      | INSERT         |
+| postgres       | storage    | tables      | postgres      | MAINTAIN       |
+| postgres       | storage    | tables      | postgres      | REFERENCES     |
 | postgres       | storage    | tables      | postgres      | SELECT         |
+| postgres       | storage    | tables      | postgres      | TRIGGER        |
+| postgres       | storage    | tables      | postgres      | TRUNCATE       |
+| postgres       | storage    | tables      | postgres      | UPDATE         |
+| postgres       | storage    | tables      | service_role  | DELETE         |
+| postgres       | storage    | tables      | service_role  | INSERT         |
 | postgres       | storage    | tables      | service_role  | MAINTAIN       |
 | postgres       | storage    | tables      | service_role  | REFERENCES     |
-| postgres       | storage    | tables      | service_role  | TRUNCATE       |
-| postgres       | storage    | tables      | service_role  | DELETE         |
-| postgres       | storage    | tables      | service_role  | UPDATE         |
 | postgres       | storage    | tables      | service_role  | SELECT         |
-| postgres       | storage    | tables      | service_role  | INSERT         |
 | postgres       | storage    | tables      | service_role  | TRIGGER        |
+| postgres       | storage    | tables      | service_role  | TRUNCATE       |
+| postgres       | storage    | tables      | service_role  | UPDATE         |
 | supabase_admin | extensions | functions   | postgres      | EXECUTE        |
-| supabase_admin | extensions | sequences   | postgres      | UPDATE         |
 | supabase_admin | extensions | sequences   | postgres      | SELECT         |
+| supabase_admin | extensions | sequences   | postgres      | UPDATE         |
 | supabase_admin | extensions | sequences   | postgres      | USAGE          |
-| supabase_admin | extensions | tables      | postgres      | MAINTAIN       |
-| supabase_admin | extensions | tables      | postgres      | INSERT         |
-| supabase_admin | extensions | tables      | postgres      | SELECT         |
-| supabase_admin | extensions | tables      | postgres      | REFERENCES     |
 | supabase_admin | extensions | tables      | postgres      | DELETE         |
-| supabase_admin | extensions | tables      | postgres      | TRUNCATE       |
+| supabase_admin | extensions | tables      | postgres      | INSERT         |
+| supabase_admin | extensions | tables      | postgres      | MAINTAIN       |
+| supabase_admin | extensions | tables      | postgres      | REFERENCES     |
+| supabase_admin | extensions | tables      | postgres      | SELECT         |
 | supabase_admin | extensions | tables      | postgres      | TRIGGER        |
+| supabase_admin | extensions | tables      | postgres      | TRUNCATE       |
 | supabase_admin | extensions | tables      | postgres      | UPDATE         |
 | supabase_admin | graphql    | functions   | anon          | EXECUTE        |
 | supabase_admin | graphql    | functions   | authenticated | EXECUTE        |
 | supabase_admin | graphql    | functions   | postgres      | EXECUTE        |
 | supabase_admin | graphql    | functions   | service_role  | EXECUTE        |
-| supabase_admin | graphql    | sequences   | anon          | UPDATE         |
 | supabase_admin | graphql    | sequences   | anon          | SELECT         |
+| supabase_admin | graphql    | sequences   | anon          | UPDATE         |
 | supabase_admin | graphql    | sequences   | anon          | USAGE          |
+| supabase_admin | graphql    | sequences   | authenticated | SELECT         |
 | supabase_admin | graphql    | sequences   | authenticated | UPDATE         |
 | supabase_admin | graphql    | sequences   | authenticated | USAGE          |
-| supabase_admin | graphql    | sequences   | authenticated | SELECT         |
-| supabase_admin | graphql    | sequences   | postgres      | UPDATE         |
 | supabase_admin | graphql    | sequences   | postgres      | SELECT         |
+| supabase_admin | graphql    | sequences   | postgres      | UPDATE         |
 | supabase_admin | graphql    | sequences   | postgres      | USAGE          |
 | supabase_admin | graphql    | sequences   | service_role  | SELECT         |
 | supabase_admin | graphql    | sequences   | service_role  | UPDATE         |
 | supabase_admin | graphql    | sequences   | service_role  | USAGE          |
+| supabase_admin | graphql        | tables      | anon          | DELETE         |
+| supabase_admin | graphql        | tables      | anon          | INSERT         |
+| supabase_admin | graphql        | tables      | anon          | MAINTAIN       |
+| supabase_admin | graphql        | tables      | anon          | REFERENCES     |
+| supabase_admin | graphql        | tables      | anon          | SELECT         |
+| supabase_admin | graphql        | tables      | anon          | TRIGGER        |
+| supabase_admin | graphql        | tables      | anon          | TRUNCATE       |
+| supabase_admin | graphql        | tables      | anon          | UPDATE         |
+| supabase_admin | graphql        | tables      | authenticated | DELETE         |
+| supabase_admin | graphql        | tables      | authenticated | INSERT         |
+| supabase_admin | graphql        | tables      | authenticated | MAINTAIN       |
+| supabase_admin | graphql        | tables      | authenticated | REFERENCES     |
+| supabase_admin | graphql        | tables      | authenticated | SELECT         |
+| supabase_admin | graphql        | tables      | authenticated | TRIGGER        |
+| supabase_admin | graphql        | tables      | authenticated | TRUNCATE       |
+| supabase_admin | graphql        | tables      | authenticated | UPDATE         |
+| supabase_admin | graphql        | tables      | postgres      | DELETE         |
+| supabase_admin | graphql        | tables      | postgres      | INSERT         |
+| supabase_admin | graphql        | tables      | postgres      | MAINTAIN       |
+| supabase_admin | graphql        | tables      | postgres      | REFERENCES     |
+| supabase_admin | graphql        | tables      | postgres      | SELECT         |
+| supabase_admin | graphql        | tables      | postgres      | TRIGGER        |
+| supabase_admin | graphql        | tables      | postgres      | TRUNCATE       |
+| supabase_admin | graphql        | tables      | postgres      | UPDATE         |
+| supabase_admin | graphql        | tables      | service_role  | DELETE         |
+| supabase_admin | graphql        | tables      | service_role  | INSERT         |
+| supabase_admin | graphql        | tables      | service_role  | MAINTAIN       |
+| supabase_admin | graphql        | tables      | service_role  | REFERENCES     |
+| supabase_admin | graphql        | tables      | service_role  | SELECT         |
+| supabase_admin | graphql        | tables      | service_role  | TRIGGER        |
+| supabase_admin | graphql        | tables      | service_role  | TRUNCATE       |
+| supabase_admin | graphql        | tables      | service_role  | UPDATE         |
+| supabase_admin | graphql_public | functions   | anon          | EXECUTE        |
+| supabase_admin | graphql_public | functions   | authenticated | EXECUTE        |
+| supabase_admin | graphql_public | functions   | postgres      | EXECUTE        |
+| supabase_admin | graphql_public | functions   | service_role  | EXECUTE        |
+| supabase_admin | graphql_public | sequences   | anon          | SELECT         |
+| supabase_admin | graphql_public | sequences   | anon          | UPDATE         |
+| supabase_admin | graphql_public | sequences   | anon          | USAGE          |
+| supabase_admin | graphql_public | sequences   | authenticated | SELECT         |
+| supabase_admin | graphql_public | sequences   | authenticated | UPDATE         |
+| supabase_admin | graphql_public | sequences   | authenticated | USAGE          |
+| supabase_admin | graphql_public | sequences   | postgres      | SELECT         |
+| supabase_admin | graphql_public | sequences   | postgres      | UPDATE         |
+| supabase_admin | graphql_public | sequences   | postgres      | USAGE          |
+| supabase_admin | graphql_public | sequences   | service_role  | SELECT         |
+| supabase_admin | graphql_public | sequences   | service_role  | UPDATE         |
+| supabase_admin | graphql_public | sequences   | service_role  | USAGE          |
+| supabase_admin | graphql_public | tables      | anon          | DELETE         |
+| supabase_admin | graphql_public | tables      | anon          | INSERT         |
+| supabase_admin | graphql_public | tables      | anon          | MAINTAIN       |
+| supabase_admin | graphql_public | tables      | anon          | REFERENCES     |
+| supabase_admin | graphql_public | tables      | anon          | SELECT         |
+| supabase_admin | graphql_public | tables      | anon          | TRIGGER        |
+| supabase_admin | graphql_public | tables      | anon          | TRUNCATE       |
+| supabase_admin | graphql_public | tables      | anon          | UPDATE         |
+| supabase_admin | graphql_public | tables      | authenticated | DELETE         |
+| supabase_admin | graphql_public | tables      | authenticated | INSERT         |
+| supabase_admin | graphql_public | tables      | authenticated | MAINTAIN       |
+| supabase_admin | graphql_public | tables      | authenticated | REFERENCES     |
+| supabase_admin | graphql_public | tables      | authenticated | SELECT         |
+| supabase_admin | graphql_public | tables      | authenticated | TRIGGER        |
+| supabase_admin | graphql_public | tables      | authenticated | TRUNCATE       |
+| supabase_admin | graphql_public | tables      | authenticated | UPDATE         |
+| supabase_admin | graphql_public | tables      | postgres      | DELETE         |
+| supabase_admin | graphql_public | tables      | postgres      | INSERT         |
+| supabase_admin | graphql_public | tables      | postgres      | MAINTAIN       |
+| supabase_admin | graphql_public | tables      | postgres      | REFERENCES     |
+| supabase_admin | graphql_public | tables      | postgres      | SELECT         |
+| supabase_admin | graphql_public | tables      | postgres      | TRIGGER        |
+| supabase_admin | graphql_public | tables      | postgres      | TRUNCATE       |
+| supabase_admin | graphql_public | tables      | postgres      | UPDATE         |
+| supabase_admin | graphql_public | tables      | service_role  | DELETE         |
+| supabase_admin | graphql_public | tables      | service_role  | INSERT         |
+| supabase_admin | graphql_public | tables      | service_role  | MAINTAIN       |
+| supabase_admin | graphql_public | tables      | service_role  | REFERENCES     |
+| supabase_admin | graphql_public | tables      | service_role  | SELECT         |
+| supabase_admin | graphql_public | tables      | service_role  | TRIGGER        |
+| supabase_admin | graphql_public | tables      | service_role  | TRUNCATE       |
+| supabase_admin | graphql_public | tables      | service_role  | UPDATE         |
+| supabase_admin | public         | functions   | anon          | EXECUTE        |
+| supabase_admin | public         | functions   | authenticated | EXECUTE        |
+| supabase_admin | public         | functions   | postgres      | EXECUTE        |
+| supabase_admin | public         | functions   | service_role  | EXECUTE        |
+| supabase_admin | public         | sequences   | anon          | SELECT         |
+| supabase_admin | public         | sequences   | anon          | UPDATE         |
+| supabase_admin | public         | sequences   | anon          | USAGE          |
+| supabase_admin | public         | sequences   | authenticated | SELECT         |
+| supabase_admin | public         | sequences   | authenticated | UPDATE         |
+| supabase_admin | public         | sequences   | authenticated | USAGE          |
+| supabase_admin | public         | sequences   | postgres      | SELECT         |
+| supabase_admin | public         | sequences   | postgres      | UPDATE         |
+| supabase_admin | public         | sequences   | postgres      | USAGE          |
+| supabase_admin | public         | sequences   | service_role  | SELECT         |
+| supabase_admin | public         | sequences   | service_role  | UPDATE         |
+| supabase_admin | public         | sequences   | service_role  | USAGE          |
+| supabase_admin | public         | tables      | anon          | DELETE         |
+| supabase_admin | public         | tables      | anon          | INSERT         |
+| supabase_admin | public         | tables      | anon          | MAINTAIN       |
+| supabase_admin | public         | tables      | anon          | REFERENCES     |
+| supabase_admin      | public   | tables      | anon           | SELECT         |
+| supabase_admin      | public   | tables      | anon           | TRIGGER        |
+| supabase_admin      | public   | tables      | anon           | TRUNCATE       |
+| supabase_admin      | public   | tables      | anon           | UPDATE         |
+| supabase_admin      | public   | tables      | authenticated  | DELETE         |
+| supabase_admin      | public   | tables      | authenticated  | INSERT         |
+| supabase_admin      | public   | tables      | authenticated  | MAINTAIN       |
+| supabase_admin      | public   | tables      | authenticated  | REFERENCES     |
+| supabase_admin      | public   | tables      | authenticated  | SELECT         |
+| supabase_admin      | public   | tables      | authenticated  | TRIGGER        |
+| supabase_admin      | public   | tables      | authenticated  | TRUNCATE       |
+| supabase_admin      | public   | tables      | authenticated  | UPDATE         |
+| supabase_admin      | public   | tables      | postgres       | DELETE         |
+| supabase_admin      | public   | tables      | postgres       | INSERT         |
+| supabase_admin      | public   | tables      | postgres       | MAINTAIN       |
+| supabase_admin      | public   | tables      | postgres       | REFERENCES     |
+| supabase_admin      | public   | tables      | postgres       | SELECT         |
+| supabase_admin      | public   | tables      | postgres       | TRIGGER        |
+| supabase_admin      | public   | tables      | postgres       | TRUNCATE       |
+| supabase_admin      | public   | tables      | postgres       | UPDATE         |
+| supabase_admin      | public   | tables      | service_role   | DELETE         |
+| supabase_admin      | public   | tables      | service_role   | INSERT         |
+| supabase_admin      | public   | tables      | service_role   | MAINTAIN       |
+| supabase_admin      | public   | tables      | service_role   | REFERENCES     |
+| supabase_admin      | public   | tables      | service_role   | SELECT         |
+| supabase_admin      | public   | tables      | service_role   | TRIGGER        |
+| supabase_admin      | public   | tables      | service_role   | TRUNCATE       |
+| supabase_admin      | public   | tables      | service_role   | UPDATE         |
+| supabase_admin      | realtime | functions   | dashboard_user | EXECUTE        |
+| supabase_admin      | realtime | functions   | postgres       | EXECUTE        |
+| supabase_admin      | realtime | sequences   | dashboard_user | SELECT         |
+| supabase_admin      | realtime | sequences   | dashboard_user | UPDATE         |
+| supabase_admin      | realtime | sequences   | dashboard_user | USAGE          |
+| supabase_admin      | realtime | sequences   | postgres       | SELECT         |
+| supabase_admin      | realtime | sequences   | postgres       | UPDATE         |
+| supabase_admin      | realtime | sequences   | postgres       | USAGE          |
+| supabase_admin      | realtime | tables      | dashboard_user | DELETE         |
+| supabase_admin      | realtime | tables      | dashboard_user | INSERT         |
+| supabase_admin      | realtime | tables      | dashboard_user | MAINTAIN       |
+| supabase_admin      | realtime | tables      | dashboard_user | REFERENCES     |
+| supabase_admin      | realtime | tables      | dashboard_user | SELECT         |
+| supabase_admin      | realtime | tables      | dashboard_user | TRIGGER        |
+| supabase_admin      | realtime | tables      | dashboard_user | TRUNCATE       |
+| supabase_admin      | realtime | tables      | dashboard_user | UPDATE         |
+| supabase_admin      | realtime | tables      | postgres       | DELETE         |
+| supabase_admin      | realtime | tables      | postgres       | INSERT         |
+| supabase_admin      | realtime | tables      | postgres       | MAINTAIN       |
+| supabase_admin      | realtime | tables      | postgres       | REFERENCES     |
+| supabase_admin      | realtime | tables      | postgres       | SELECT         |
+| supabase_admin      | realtime | tables      | postgres       | TRIGGER        |
+| supabase_admin      | realtime | tables      | postgres       | TRUNCATE       |
+| supabase_admin      | realtime | tables      | postgres       | UPDATE         |
+| supabase_auth_admin | auth     | functions   | dashboard_user | EXECUTE        |
+| supabase_auth_admin | auth     | functions   | postgres       | EXECUTE        |
+| supabase_auth_admin | auth     | sequences   | dashboard_user | SELECT         |
+| supabase_auth_admin | auth     | sequences   | dashboard_user | UPDATE         |
+| supabase_auth_admin | auth     | sequences   | dashboard_user | USAGE          |
+| supabase_auth_admin | auth     | sequences   | postgres       | SELECT         |
+| supabase_auth_admin | auth     | sequences   | postgres       | UPDATE         |
+| supabase_auth_admin | auth     | sequences   | postgres       | USAGE          |
+| supabase_auth_admin | auth     | tables      | dashboard_user | DELETE         |
+| supabase_auth_admin | auth     | tables      | dashboard_user | INSERT         |
+| supabase_auth_admin | auth     | tables      | dashboard_user | MAINTAIN       |
+| supabase_auth_admin | auth     | tables      | dashboard_user | REFERENCES     |
+| supabase_auth_admin | auth     | tables      | dashboard_user | SELECT         |
+| supabase_auth_admin | auth     | tables      | dashboard_user | TRIGGER        |
+| supabase_auth_admin | auth     | tables      | dashboard_user | TRUNCATE       |
+| supabase_auth_admin | auth     | tables      | dashboard_user | UPDATE         |
+| supabase_auth_admin | auth     | tables      | postgres       | DELETE         |
+| supabase_auth_admin | auth     | tables      | postgres       | INSERT         |
+| supabase_auth_admin | auth     | tables      | postgres       | MAINTAIN       |
+| supabase_auth_admin | auth     | tables      | postgres       | REFERENCES     |
+| supabase_auth_admin | auth     | tables      | postgres       | SELECT         |
+| supabase_auth_admin | auth     | tables      | postgres       | TRIGGER        |
+| supabase_auth_admin | auth     | tables      | postgres       | TRUNCATE       |
+| supabase_auth_admin | auth     | tables      | postgres       | UPDATE         |
 
 ## Section 6 — Inheritance
 
@@ -358,7 +680,3 @@ No rows returned
 | public | workspaces            | workspaces_insert_auth           | INSERT  | authenticated | null                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | (created_by = auth.uid())                                                                                                                                  |
 | public | workspaces            | workspaces_select_public         | SELECT  | PUBLIC        | true                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | null                                                                                                                                                       |
 | public | workspaces            | workspaces_update_owner          | UPDATE  | authenticated | app.is_member(id, ARRAY['owner'::text])                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | app.is_member(id, ARRAY['owner'::text])                                                                                                                    |
-
-
-
-
