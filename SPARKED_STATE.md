@@ -290,8 +290,11 @@ Nothing is gated at any width; the full desktop batch still runs once at the end
   attributed to the workspace/account internally; quota, moderation, and
   reports NEVER change. Implemented via `events.curbside_anonymous` (0009)
   with server-side name-masking in the feed + detail RPCs (an anonymized name
-  never leaves the DB). Accepted limit: the workspace_id→workspaces join is
-  still API-visible; true column-level privacy is later hardening.
+  never leaves the DB). NO LONGER AN ACCEPTED LIMIT — SCHEDULED: the
+  workspace_id→workspaces join is still API-visible, which does not meet this
+  toggle's stated intent. Tracked as its own arc in
+  SPARKED_CODE_STAGE_TRACKER.md, "ARC: Curbside anonymity — column-level
+  privacy", which carries the toggle copy in the same arc.
 - **Anonymous Curbside identity = "Local host" — DECIDED 2026-07-29,
   supersedes "verified neighbor" entirely.** An anonymous post renders the
   STANDARD Organizer section (eyebrow + avatar chip + name) reading

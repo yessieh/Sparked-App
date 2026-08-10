@@ -16,8 +16,32 @@ The second-order damage is worse than the missing fix: the repo now describes a 
 
 Applies equally to a "harmless" comment or formatting change — if the version is in `schema_migrations`, the file is history, not source.
 
+# Name the verification baseline
+
+When reporting any verification, name what it was checked against and what that does not establish. "Verified byte-identical" without naming the source implies the repo is correct; it only proves the copy equals whatever the source held at that moment. Report as "checked X against Y (as of <mtime/commit/timestamp>)".
+
+Where staleness is possible, add an independent positive check that the expected content is present — grep for a known-new marker, or compare against a count supplied by the reviewer — rather than relying on the comparison alone.
+
+Same failure mode as **Migrations are immutable once applied** above: `supabase migration list` compares version numbers and reports all-green while file contents and the live schema disagree.
+
 # Decision protocol
 
 **Decide autonomously and report afterward:** reversible-in-one-commit choices with no user-visible or business effect (file locations, folder structure, equivalent-dependency picks, internal naming, config defaults). One line per call made, in the session summary.
 
 **Stop and ask before deciding:** anything users see or feel; anything touching pricing, quotas, fees, or refunds; any schema or architecture-lock change; anything expensive to reverse. Tiebreaker: high reversal cost = ask, even if it seems minor. Quota, fee, and visibility logic is business logic, not plumbing — always ask.
+
+# Standing grant check
+
+Any prompt that creates or alters a table, column, function, view or policy must state in its report whether it changes the grant surface — which roles gain or lose access to which objects or columns — and name each grant it adds alongside the surface that consumes it. A schema change reported without a grant statement is an incomplete report. Implicit grants count: Postgres grants EXECUTE to PUBLIC by default on every function, so a CREATE FUNCTION with no explicit grant has granted PUBLIC access and must be named as such.
+
+# Per-arc privilege audit gate
+
+The query set lives at `supabase/audits/privilege_audit.sql`. It is layer 2 of a three-layer scheme: (1) the **Standing grant check** above, (2) this per-arc audit, (3) the pre-launch full security audit.
+
+Every arc runs: **pre-arc audit → build → QA suite → post-arc audit → commit.**
+
+- **PRE-ARC.** Run `supabase/audits/privilege_audit.sql` in the Supabase Dashboard → SQL Editor. Save the output to `supabase/audits/baselines/` as `YYYY-MM-DD-pre-<arc-name>.md`. This is a baseline, not a review — record it and change nothing.
+- **QA SUITE.** Every arc ships a behavioral SQL suite in `scripts/`, following the `scripts/qa-0018-quota-ledger.sql` pattern, plus a human verification list with exact URLs and named test data.
+- **POST-ARC.** Re-run the same audit, save as `YYYY-MM-DD-post-<arc-name>.md`, and DIFF it against the pre-arc baseline. Every added or changed grant, function, policy or default privilege must be named in the arc summary with the reason it exists. **An unexplained delta blocks the commit.**
+
+**The rule this enforces:** a grant is written once and reviewed once, at creation. Features change around it and nobody re-reads it. Four privilege incidents in this build traced to exactly that, and all four were found incidentally. The diff is what makes finding them non-incidental.

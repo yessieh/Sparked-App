@@ -278,6 +278,33 @@ and verified in Cursor/Claude Code.
 
 ---
 
+## ARC: Curbside anonymity — column-level privacy (own arc, after migrations 1-3 verify green)
+
+> **The intent this serves:** a Curbside poster who selects "Post without my name"
+> must be anonymous to the public **including over the REST API**, remain identified
+> in our records for moderation and lawful request, and stay anonymous against
+> someone querying PostgREST with the anon key.
+
+- [ ] **The gap.** `events.workspace_id` carries an anon SELECT grant, so
+      `/rest/v1/events?select=workspace_id,curbside_anonymous` resolves an anonymous
+      poster to their workspace, and `workspaces_select_public` (USING true) plus
+      anon's SELECT on `workspaces.name` completes the deanonymization. The RPCs mask
+      the name and 0023 nulls `workspace_id` in RPC output; **the direct table read is
+      the uncovered path.**
+- [ ] **Required order — NON-NEGOTIABLE.** Convert `public.events_within_radius` and
+      `public.event_detail` to the `app`-definer / `public`-invoker convention FIRST,
+      verify the signed-out storefront, THEN revoke anon SELECT on
+      `events.workspace_id`. Reversed, this reproduces the 0020 → 0021 outage: an RLS
+      policy expression needs no caller column privilege, but a SECURITY INVOKER
+      function body privilege-checks every column it touches, including ones that
+      appear only in a WHERE clause.
+- [ ] **Mini-form toggle copy ships in THIS arc, not after.** Today "Your post will
+      show 'Local host' instead of your name" is display-true and API-false. The
+      schema change and the copy must land together or we are making a claim we do not
+      back — the same reasoning that removed "verified neighbor."
+
+---
+
 ## LAUNCH INFRASTRUCTURE (new — from the pre-launch gate list)
 
 - [ ] **Report backend.** Report sheet exists in UI (App Store gate); wire a
