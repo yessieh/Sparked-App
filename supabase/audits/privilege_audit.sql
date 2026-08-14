@@ -21,6 +21,57 @@
 -- context only.
 --
 -- -----------------------------------------------------------------------------
+-- THIS FILE'S OWN DEFECT HISTORY — READ BEFORE SIMPLIFYING ANY QUERY BELOW
+-- -----------------------------------------------------------------------------
+-- Three defects in this audit have been caught by RUNNING it, never by reading
+-- it. Every one of them produced a result that looked clean and complete:
+--
+--   1. SCOPING (2026-08-05, first run). The function query was scoped to
+--      nspname = 'public' and reported that the database had NO SECURITY
+--      DEFINER functions — missing every definer body in the `app` schema,
+--      which is where this project's entire privilege boundary lives. It would
+--      have inverted the remediation plan. Detail, and the RULE it produced,
+--      are in the block immediately below.
+--
+--   2. SILENT TRUNCATION (2026-08-05, and three more times on 2026-08-10).
+--      The SQL Editor caps a result at 100 rows in EVERY export format. The
+--      2026-08-05 run lost `workspaces` from section 1 entirely. The
+--      2026-08-10 pre-grant-hardening run truncated section 1 three separate
+--      times before anyone noticed, and section 5 once. A capped export is a
+--      well-formed table with no error, no warning and no marker.
+--
+--   3. NON-TOTAL ORDERING (2026-08-10). Sections 1 and 5 each ordered by fewer
+--      columns than they selected, so tied rows came back in arbitrary order.
+--      Paging over an arbitrary order silently skips and duplicates rows: the
+--      first paged re-export of section 1 returned 200 rows containing two
+--      duplicates, against a true 215.
+--
+-- WHAT THIS HISTORY IS FOR. Each defect made the audit report LESS than the
+-- truth while looking like a complete, passing run — the exact failure mode
+-- this audit exists to catch elsewhere. The verbosity below IS the fix. A
+-- future reader who finds these queries over-specified — the long exclusion
+-- lists, the ORDER BY that names every selected column, the paging
+-- instructions, the count(*) companions — is looking at three recorded
+-- incidents, not at ceremony. Simplify none of them without first reproducing
+-- the run that proves the simpler form returns the same rows.
+-- -----------------------------------------------------------------------------
+--
+-- -----------------------------------------------------------------------------
+-- EVERY RUN OF SECTIONS 1 AND 5 IS A PAGED RUN — PRE-ARC AND POST-ARC ALIKE
+-- -----------------------------------------------------------------------------
+-- Sections 1 and 5 exceed the 100-row cap and MUST be paged and concatenated
+-- per the instructions in each section. This is not optional on a post-arc run,
+-- and a post-arc run is where skipping it does the real damage: that export is
+-- DIFFED against the pre-arc baseline, and a diff cannot tell a truncated page
+-- from a removed grant. One uncorrected post-arc run of section 1 returns 100
+-- rows against a 215-row baseline, and the diff reads the 115 absent rows as
+-- 115 privileges the arc revoked — a false green that also buries any real
+-- delta inside the noise. The baseline file in supabase/audits/baselines/
+-- records, in its own header, the page count and row total each of these two
+-- sections required. Match them.
+-- -----------------------------------------------------------------------------
+--
+-- -----------------------------------------------------------------------------
 -- SCOPING BUG, 2026-08-05 — READ BEFORE EDITING ANY QUERY BELOW
 -- -----------------------------------------------------------------------------
 -- The first version of this audit scoped the function query to
@@ -91,6 +142,44 @@
 --   * grantee='PUBLIC' -> cascades to anon AND authenticated
 --   * any anon grant on a column carrying identity or internal attribution
 -- =============================================================================
+
+-- 1A. ROW COUNT — RUN THIS FIRST AND WRITE THE NUMBER DOWN.
+-- The target the pages must sum to. Returns one row, so it can never truncate.
+--
+-- This wraps 1B's FROM/WHERE and nothing else. A row count depends only on
+-- FROM/WHERE, and UNION ALL does not de-duplicate, so `select 1` counts exactly
+-- the rows 1B projects. EDIT BOTH TOGETHER: a WHERE clause changed in 1B and
+-- not here turns the completeness check into a lie that reads as a failure.
+select count(*) as expected_rows from (
+  select 1
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  cross join lateral aclexplode(c.relacl) as acl
+  where n.nspname not in ('pg_catalog','information_schema','extensions','graphql',
+                          'graphql_public','storage','auth','realtime','vault',
+                          'supabase_functions','pgbouncer','cron','net')
+    and n.nspname !~ '^pg_'
+    and c.relkind in ('r','p','v','m','S','f')
+    and (case when acl.grantee = 0 then 'PUBLIC' else pg_get_userbyid(acl.grantee) end)
+        not in ('postgres','service_role','supabase_admin','supabase_auth_admin',
+                'supabase_storage_admin','dashboard_user','authenticator')
+  union all
+  select 1
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  join pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
+  cross join lateral aclexplode(a.attacl) as acl
+  where n.nspname not in ('pg_catalog','information_schema','extensions','graphql',
+                          'graphql_public','storage','auth','realtime','vault',
+                          'supabase_functions','pgbouncer','cron','net')
+    and n.nspname !~ '^pg_'
+    and (case when acl.grantee = 0 then 'PUBLIC' else pg_get_userbyid(acl.grantee) end)
+        not in ('postgres','service_role','supabase_admin','supabase_auth_admin',
+                'supabase_storage_admin','dashboard_user','authenticator')
+) t;
+
+
+-- 1B. THE GRANT LISTING ITSELF — PAGED. See the run instructions below it.
 select
   n.nspname as schema,
   c.relname as object_name,
@@ -132,10 +221,42 @@ where n.nspname not in ('pg_catalog','information_schema','extensions','graphql'
       not in ('postgres','service_role','supabase_admin','supabase_auth_admin',
               'supabase_storage_admin','dashboard_user','authenticator')
 
-order by 1, 2, 3, 4, 5;
--- NOTE: this returns 200+ rows and the SQL Editor truncates around 100 on copy.
--- Export as markdown/CSV rather than copying the rendered grid, or the tail is
--- silently lost. The 2026-08-05 run lost `workspaces` entirely to this.
+order by 1, 2, 3, 4, 5, 6
+limit 100 offset 0;
+-- -----------------------------------------------------------------------------
+-- SECTION 1 IS PAGED — RUN IT MORE THAN ONCE.   (215 rows on 2026-08-10)
+-- -----------------------------------------------------------------------------
+-- THE CAP: the SQL Editor returns at most 100 rows in EVERY export format —
+-- Markdown, CSV and JSON alike. It is NOT a display limit you can escape by
+-- exporting instead of copying the grid, which is what the note that used to
+-- sit here claimed. Exporting truncates too.
+--
+-- HOW TO RUN THIS SECTION:
+--   1. Run 1A. Write the number down. That is the target.
+--   2. Run 1B as written (`offset 0`) and save the result.
+--   3. Re-run it with `offset 100`, then `offset 200`, then `offset 300`,
+--      raising the offset by exactly 100 each time. Save every page.
+--   4. TERMINATING CONDITION: stop after the first page that returns FEWER
+--      THAN 100 rows. That page is the last one. A page returning EXACTLY 100
+--      rows is NEVER the last page — run the next offset even when you are
+--      certain the table is exhausted, and accept an empty final page as the
+--      answer. 215 rows is three pages: 100, 100, 15.
+--   5. Concatenate the pages IN OFFSET ORDER into ONE block under ONE header:
+--      no per-page headers, no separators, no repeated column row.
+--   6. COMPLETENESS IS ARITHMETIC, NOT JUDGMENT. The concatenated row count
+--      must EQUAL 1A's number. If it does not, the run is void. Do not
+--      reconcile by eye and do not patch the gap — re-page the whole section.
+--
+-- WHY THE ORDER BY NAMES ALL SIX SELECTED COLUMNS, AND WHY THAT IS THE SAFETY
+-- PROPERTY: LIMIT/OFFSET has no memory between pages. Each page re-runs the
+-- query and slices the result. Where the sort leaves rows tied, the engine may
+-- order that tied group differently on each run, and a row can cross a page
+-- boundary in either direction — appearing in both pages, or in neither. That
+-- is exactly what `order by 1,2,3,4,5` did on 2026-08-10, and the result still
+-- exported as a clean table. Six columns leave no DISTINGUISHABLE ties: rows
+-- equal in all six are identical in the output, so whichever side of a boundary
+-- they fall on cannot change the concatenated block.
+-- -----------------------------------------------------------------------------
 
 
 -- =============================================================================
@@ -231,7 +352,26 @@ where n.nspname not in ('pg_catalog','information_schema','extensions','graphql'
                         'graphql_public','storage','auth','realtime','vault',
                         'supabase_functions','pgbouncer','cron','net')
   and n.nspname !~ '^pg_'
-order by n.nspname, p.prosecdef desc, p.proname;
+order by n.nspname, p.prosecdef desc, p.proname,
+         pg_get_function_identity_arguments(p.oid);
+-- -----------------------------------------------------------------------------
+-- THE FOURTH SORT KEY IS A TIEBREAKER FOR A PAGING RUN THIS SECTION DOES NOT
+-- DO YET. Section 4 returned 37 rows on 2026-08-10, comfortably under the
+-- 100-row cap, so it exports in one piece and its ties are harmless today.
+--
+-- It is here anyway. Overloads share proname, so `p.proname` alone leaves them
+-- tied, and schema + name + identity arguments is what actually identifies a
+-- function. Every new RPC adds roughly two rows — the public invoker wrapper
+-- and its `app` definer body — so this section crosses 100 within an arc or
+-- two. The run that first needs paging is the run where a missing tiebreaker
+-- costs rows, and it costs them silently. Adding the key now is free; adding it
+-- later requires noticing first, which is precisely what defects 2 and 3 in the
+-- header prove nobody does.
+--
+-- WHEN THIS SECTION DOES CROSS 100: page it exactly as sections 1 and 5 are
+-- paged, and give it a count(*) companion in the same edit. Do not page it
+-- without the count.
+-- -----------------------------------------------------------------------------
 
 
 -- =============================================================================
@@ -247,6 +387,18 @@ order by n.nspname, p.prosecdef desc, p.proname;
 -- becomes reachable wipes the table regardless of policy — including
 -- curbside_quota_ledger, which is the immutable fraud-prevention record.
 -- =============================================================================
+
+-- 5A. ROW COUNT — RUN THIS FIRST AND WRITE THE NUMBER DOWN.
+-- Same contract as 1A: wraps 5B's FROM and nothing else, returns one row.
+-- Section 5 has no WHERE clause; that is not an omission, it is the point —
+-- every default-privilege entry in the database is in scope. EDIT WITH 5B.
+select count(*) as expected_rows
+from pg_default_acl d
+left join pg_namespace n on n.oid = d.defaclnamespace
+cross join lateral aclexplode(d.defaclacl) as acl;
+
+
+-- 5B. THE DEFAULT-PRIVILEGE LISTING ITSELF — PAGED.
 select
   pg_get_userbyid(d.defaclrole) as granting_role,
   coalesce(n.nspname, '(all schemas)') as schema,
@@ -259,7 +411,27 @@ select
 from pg_default_acl d
 left join pg_namespace n on n.oid = d.defaclnamespace
 cross join lateral aclexplode(d.defaclacl) as acl
-order by 1, 2, 3, 4;
+order by 1, 2, 3, 4, 5
+limit 100 offset 0;
+-- -----------------------------------------------------------------------------
+-- SECTION 5 IS PAGED — RUN IT MORE THAN ONCE.   (276 rows on 2026-08-10)
+-- -----------------------------------------------------------------------------
+-- Identical procedure to section 1: run 5A for the target, then 5B at
+-- `offset 0`, `offset 100`, `offset 200`, ... raising by exactly 100.
+--
+-- TERMINATING CONDITION: stop after the first page returning FEWER THAN 100
+-- rows; a page of exactly 100 is never the last. 276 rows is three pages:
+-- 100, 100, 76. Concatenate in offset order under one header, and the total
+-- must EQUAL 5A. A short section 5 is the easiest miss in this file, because
+-- default privileges are residue nobody has a mental model of — there is no
+-- "wait, where did `workspaces` go?" instinct to catch it the way there was in
+-- section 1. The count is the only thing that catches it.
+--
+-- The fifth ORDER BY column is privilege_type, and it is not decoration: this
+-- section is mostly ties. One granting_role/schema/object_type/grantee group
+-- routinely carries seven or more privilege rows, so almost every row here sat
+-- inside a tied group under the old four-column sort.
+-- -----------------------------------------------------------------------------
 
 
 -- =============================================================================
