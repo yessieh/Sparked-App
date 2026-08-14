@@ -278,6 +278,55 @@ and verified in Cursor/Claude Code.
 
 ---
 
+## ARC: Privilege hardening (migrations 1-3 — the arc the Curbside anonymity arc waits on)
+
+> **Why this arc exists:** four privilege incidents in this build traced to one
+> root cause — a grant written once at object creation and never re-read as the
+> features changed around it. All four were found incidentally. The per-arc
+> audit gate (CLAUDE.md) is the process fix; these three migrations are the
+> backlog that gate surfaced.
+
+- [x] **1 — `0025_grant_hardening_revokes`** (file
+      `supabase/migrations/20260810000025_grant_hardening_revokes.sql`, APPLIED
+      2026-08-10, audited and committed 2026-08-13). Nine revokes, zero grants.
+      Post-arc diff clean — nine deltas, all nine named, zero additions:
+      `supabase/audits/baselines/2026-08-13-post-grant-hardening.md`.
+- [ ] **2 — `0026_default_privilege_revokes`.** The default-privilege residue
+      that section 5 of `supabase/audits/privilege_audit.sql` lists — TRUNCATE,
+      TRIGGER, REFERENCES and MAINTAIN carried to client roles by Supabase's
+      "Automatically expose new tables and functions" toggle. 276 rows on the
+      2026-08-13 run, untouched by 0025. This is the MECHANISM, not the
+      symptom: it re-grants on EVERY new object until it is fixed here, so
+      fixing it per-table is treating symptoms. **RLS does not apply to
+      TRUNCATE** — a reachable TRUNCATE wipes the table regardless of policy,
+      `curbside_quota_ledger` included, and that ledger is the immutable
+      fraud-prevention record. Turning the dashboard toggle OFF is a founder-
+      owned step (audit header, founder-owned checks) and does not retract
+      privileges already granted; this migration is what retracts them.
+- [ ] **3 — `0027_wrapper_search_path_pins`.** Pin `search_path` on
+      `public.delete_event`, `public.archive_event` and
+      `public.unarchive_event` — the three 0019 wrappers, and the only three
+      functions in the database whose `config` reads `(NONE - INHERITS
+      CALLER)`. Closes the three `function_search_path_mutable` advisor
+      warnings that the old 0/3 baseline never counted (corrected to 0 errors /
+      6 warnings on 2026-08-13 — see SPARKED_STATE.md). Lower severity than an
+      unpinned SECURITY DEFINER, since these are invoker wrappers and PostgREST
+      controls the caller's `search_path` — but it is a convention break, and
+      the convention is what makes a real exception visible.
+- [ ] **Backfill the 0023 and 0024 migration-log entries in SPARKED_STATE.md.**
+      Both are APPLIED — 0023 organizer profile read path (2026-08-02), 0024
+      update_workspace_profile (2026-08-03) — and neither has a log entry; the
+      log jumps 0022 → 0025. Noticed 2026-08-13 while adding the 0025 entry. A
+      marker line sits in SPARKED_STATE.md so the gap stays visible in place;
+      this is the tracked job to close it. Wants whoever built those two arcs
+      rather than a reconstruction from the diffs — the log records INTENT and
+      the reasoning behind each ruling, which the SQL does not carry.
+
+**Numbering:** 0026 and 0027 are the expected next file numbers. If another
+migration lands between, the NAME is the anchor, not the number.
+
+---
+
 ## ARC: Curbside anonymity — column-level privacy (own arc, after migrations 1-3 verify green)
 
 > **The intent this serves:** a Curbside poster who selects "Post without my name"

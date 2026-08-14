@@ -1125,7 +1125,9 @@ immediately after apply. Behavioral suite (27 assertions) in
 `scripts/qa-0019-delete-archive.sql`.
 0023 organizer profile read path (**APPLIED 2026-08-02**) and 0024
 update_workspace_profile (**APPLIED 2026-08-03**) are applied but have NO entry
-in this log — gap noticed 2026-08-13 while adding 0025, not yet filled.
+in this log — gap noticed 2026-08-13 while adding 0025, not yet filled. Tracked
+as an open item in SPARKED_CODE_STAGE_TRACKER.md; this marker stays until the
+entries land, so the hole is visible where a reader looks for it.
 0025 grant hardening — REVOKES ONLY (**APPLIED 2026-08-10**; audited and
 committed 2026-08-13). Nine privilege revokes, zero grants: PUBLIC/anon EXECUTE
 off the three 0019 wrappers (`delete_event`, `archive_event`,
@@ -1167,6 +1169,21 @@ old note wrongly claimed. Both fixed in `supabase/audits/privilege_audit.sql`
 `count(*)` companion queries for sections 1 and 5, and a tiebreaker on
 section 4 before it crosses 100), plus a defect-history header so the next
 reader does not simplify them back out.
+**THE PRIVILEGE HARDENING ARC IS THREE MIGRATIONS** and 0025 is the first —
+named here the way `0004_payments` is, so the other two can be looked up before
+they exist. Full detail and checkboxes in SPARKED_CODE_STAGE_TRACKER.md, "ARC:
+Privilege hardening (migrations 1-3)"; the Curbside anonymity arc waits on all
+three verifying green.
+`0025_grant_hardening_revokes` — APPLIED 2026-08-10, above.
+`0026_default_privilege_revokes` — the TRUNCATE / TRIGGER / REFERENCES /
+MAINTAIN residue that section 5 of the audit lists (276 rows, untouched by
+0025). It is the MECHANISM behind Supabase's "Automatically expose new tables
+and functions" toggle and re-grants on every new object until fixed there, so
+per-table fixes are symptom treatment. RLS does not apply to TRUNCATE.
+`0027_wrapper_search_path_pins` — pin `search_path` on `public.delete_event`,
+`public.archive_event` and `public.unarchive_event`; closes the three advisor
+warnings corrected below. 0026 and 0027 are the expected next file numbers; if
+something lands between, the NAME is the anchor, not the number.
 **Migrations apply from files via `npx supabase db push --linked`, never
 pasted** — remote history verified matching the repo 2026-08-02, all 22 rows
 `local == remote` (0013 had drifted from a dashboard paste and was repaired
@@ -1182,7 +1199,10 @@ rls_auto_enable platform warnings + leaked-password protection, Pro-gated on
 the Free plan; DECIDED 2026-07-09: enable with the launch-prep Pro upgrade).
 The other three are `function_search_path_mutable` on the three 0019 wrappers
 (`public.delete_event`, `public.archive_event`, `public.unarchive_event`),
-unfixed since 0019 shipped and **scheduled for migration 3**. Corroborated
+unfixed since 0019 shipped and **scheduled for
+`0027_wrapper_search_path_pins`**, migration 3 of the privilege hardening arc
+(named in the 0025 entry above, tracked in SPARKED_CODE_STAGE_TRACKER.md).
+Corroborated
 independently by section 4 of the post-0025 audit baseline: those three are the
 ONLY functions in the database whose `config` reads `(NONE - INHERITS CALLER)`
 — every other function pins `search_path`. Note the audit file already flags
