@@ -1,0 +1,234 @@
+-- ============================================================================
+-- 0025 — Grant hardening: REVOKES ONLY.
+--
+-- Nine privilege revokes and nothing else. No function bodies, no policies, no
+-- columns, no tables, no defaults. Every statement in this file REMOVES access;
+-- not one grants any. Nothing that consumes these privileges changes, because
+-- nothing consumes them — see each statement's note.
+--
+-- ---------------------------------------------------------------------------
+-- THE BASELINE THIS WAS WRITTEN AGAINST, AND WHAT VERIFIES IT
+-- ---------------------------------------------------------------------------
+-- Every revoke below corresponds to a privilege OBSERVED IN THE LIVE CATALOG,
+-- recorded in `supabase/audits/baselines/2026-08-10-pre-grant-hardening.md` —
+-- the pre-arc run of `supabase/audits/privilege_audit.sql` against the
+-- Sparked-App project on 2026-08-10. Section 4 of that file is the evidence for
+-- statements 1-5 (function EXECUTE surfaces); section 1 is the evidence for
+-- statements 6-9 (column and table grants).
+--
+-- The migration files were NOT the baseline, deliberately. 0020 is the standing
+-- proof that the files and the live schema can disagree silently, and a revoke
+-- written against a grant that is not actually there is a no-op that reads like
+-- a fix.
+--
+-- WHAT VERIFIES THIS MIGRATION: the POST-ARC re-run of
+-- `supabase/audits/privilege_audit.sql`, diffed against that same baseline file.
+-- Every delta must be one of the nine revokes below, and nothing else; an
+-- unexplained delta blocks the arc commit (CLAUDE.md, per-arc privilege audit
+-- gate). Sections 1 and 5 MUST be paged and concatenated exactly as the
+-- baseline's own header note describes — a single uncorrected run returns 100
+-- rows for either section and the diff would read the absent rows as grants this
+-- migration removed. `supabase migration list` verifies nothing here: it
+-- compares version numbers, never contents.
+--
+-- ---------------------------------------------------------------------------
+-- THE ROOT CAUSE WORTH NAMING (statements 6-8)
+-- ---------------------------------------------------------------------------
+-- 0011 wrote ONE 18-column list and used it for BOTH the SELECT grant and the
+-- INSERT grant on `public.events`. As a READ list it was correct — those are the
+-- columns a client may see, and it was authored with care to exclude
+-- `publish_fee_cents`. As a WRITE list it was simply the read list reused, and
+-- it should have been narrower: `rsvp_count` and `updated_at` are maintained by
+-- triggers and have never been written by any client. The UPDATE grant two
+-- statements later WAS narrowed by hand (it drops `id`, `workspace_id`,
+-- `rsvp_count`, `created_at`) — so the thinking was done, and then the INSERT
+-- list did not receive it. Statements 6-8 finish that job.
+--
+-- The general lesson, since this is the second time a copied grant list has cost
+-- something: a read list and a write list answer different questions and must be
+-- authored separately, even when they look identical at the moment of writing.
+--
+-- ---------------------------------------------------------------------------
+-- WHAT THIS MIGRATION DELIBERATELY DOES NOT DO — F1, RE-CONFIRMED
+-- ---------------------------------------------------------------------------
+-- `events.status` and `events.cancelled_at` REMAIN client-writable by
+-- `authenticated` (baseline section 1 confirms both carry INSERT and UPDATE).
+-- That is a DELIBERATE, RE-CONFIRMED HOLD tracked to the payments batch — not an
+-- oversight this migration missed, and not a candidate for a tenth revoke.
+--
+-- Revoking either now would break the app: the Create-Event wizard writes
+-- `status` on every draft save and on the hand-off to checkout, and the publish
+-- path needs it. The guard that belongs here is "clients may not set
+-- status -> published on paid tiers", which is a TRIGGER, not a revoke, and it
+-- lands with real Stripe. Referenced as F1 in the arc notes; the durable
+-- references are 20260716000010_publish_pricing.sql:10-13 (SCOPE NOTE: "this
+-- migration does NOT add the ... guard. That guard is 0004's job and lands with
+-- real Stripe") and docs/SCHEMA_PLAN.md:43 + :415 (the 0004_payments batch).
+-- ============================================================================
+
+
+-- ---------------------------------------------------------------------------
+-- 1-3. The three 0019 public wrappers — restore the project's own pattern.
+--
+-- Postgres grants EXECUTE to PUBLIC on every new function, so a function created
+-- without an explicit revoke has already granted PUBLIC access. Every other
+-- public wrapper in this project revokes it in the same breath as the grant
+-- (0010:166, 0011:105, 0012:56, 0014:104, 0015:113, 0017:75/144, 0018:222,
+-- 0024:173). These three did not — 0019's PART F comment claims "Same pattern as
+-- 0008/0012/0015/0017", and the revoke is the part of the pattern that went
+-- missing. Baseline section 4 confirms all three still carry PUBLIC:EXECUTE.
+--
+-- NOT EXPLOITABLE TODAY, AND STILL WRONG: each wrapper delegates to an `app`
+-- definer body that re-checks membership by hand, and `auth.uid()` is null for
+-- anon, so an anonymous call raises `not_an_editor` (42501) rather than deleting
+-- anything. The revoke closes the reachability, not an active hole.
+--
+-- THE authenticated GRANTS FROM 0019:194/204/214 STAND. `revoke ... from
+-- public, anon` removes only those two grantees' entries; a direct grant to
+-- `authenticated` is a separate ACL entry and is untouched. Nothing is
+-- re-granted below, on purpose — re-granting would make this migration look like
+-- it changes the authenticated surface when it does not.
+--
+-- `anon` holds no direct grant on any of the three (baseline section 4 lists
+-- only PUBLIC, postgres, authenticated), so revoking from `anon` is a no-op that
+-- is named anyway to match the established phrasing.
+-- ---------------------------------------------------------------------------
+revoke all on function public.delete_event(uuid) from public, anon;
+revoke all on function public.archive_event(uuid) from public, anon;
+revoke all on function public.unarchive_event(uuid) from public, anon;
+
+-- ---------------------------------------------------------------------------
+-- 4. app.event_publish_fee_cents — the same omission, one layer down.
+--
+-- 0012:41 granted EXECUTE to `authenticated` without the matching revoke, unlike
+-- its own public wrapper fifteen lines later (0012:56) and unlike every later
+-- app-schema definer. Baseline section 4 confirms PUBLIC:EXECUTE is present.
+--
+-- This one reads `events.publish_fee_cents` — the column 0011 exists to hide.
+-- It gates on `app.is_member`, which is false for anon, so it returns null
+-- rather than a fee. Reachable, not leaking; revoked because "reachable and
+-- currently harmless" is how the previous four privilege incidents started.
+--
+-- The `authenticated` grant from 0012:41 stands.
+-- ---------------------------------------------------------------------------
+revoke all on function app.event_publish_fee_cents(uuid) from public, anon;
+
+-- ---------------------------------------------------------------------------
+-- 5. app.duration_band — the only NON-TRIGGER function in the project created
+--    with no grant and no revoke, so PUBLIC EXECUTE stands by default. Baseline
+--    section 4 records it exactly that way: "PUBLIC (default - no explicit
+--    grants)".
+--
+-- `from public` ONLY — deliberately NOT `from public, anon`, and deliberately
+-- not a blanket revoke. The owner's implicit EXECUTE must survive, and this is
+-- the statement that depends on it.
+--
+-- NO REPLACEMENT GRANT TO authenticated, AND THAT IS THE POINT. The sole caller
+-- is `app.publish_paid_event`, which baseline section 4 confirms is SECURITY
+-- DEFINER and owned by `postgres` — the same owner as this function. A definer
+-- body resolves EXECUTE as the function OWNER, not as the caller, so the publish
+-- path is unaffected by what `authenticated` holds here. No client calls this
+-- function: the app computes its band client-side in lib/pricing.ts from
+-- `tier_prices` rows, and `duration_band` appears in app code only as a COLUMN
+-- name of that table.
+--
+-- Granting it to `authenticated` anyway would be the easy defensive move and
+-- would quietly re-open exactly what this statement closes.
+-- ---------------------------------------------------------------------------
+revoke all on function app.duration_band(
+  timestamp with time zone, timestamp with time zone, text
+) from public;
+
+-- ---------------------------------------------------------------------------
+-- 6. events.rsvp_count — INSERT was never usable and is not used.
+--
+-- The counter is maintained by `app.bump_rsvp_count` (0006:36), a SECURITY
+-- DEFINER trigger on `public.rsvps`, definer precisely BECAUSE the person
+-- RSVPing is not a member of the owning workspace. It updates `events` as the
+-- function owner, so nothing about the client's column privileges affects it.
+--
+-- No client payload contains this column: the three write sites are
+-- create/curbside.tsx:288, create/event.tsx:1123 and :1129, and none names it.
+-- (create/event.tsx:1052 sets `rsvp_count: 0` inside `previewDetail`, a local
+-- object for the in-wizard preview that is never sent to the database.)
+--
+-- UPDATE was already excluded by 0011's narrowed update list. Only INSERT is
+-- left, and only INSERT is revoked. SELECT stays — every consumer card renders
+-- this number.
+-- ---------------------------------------------------------------------------
+revoke insert (rsvp_count) on public.events from authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 7-8. events.updated_at — INSERT and UPDATE, same reasoning.
+--
+-- Maintained by the `events_set_updated_at` BEFORE UPDATE trigger (0001:288-290)
+-- calling `app.set_updated_at` (0001:19, search_path pinned to '' by 0004:7).
+-- A BEFORE trigger assigns NEW.updated_at directly; column privileges are
+-- checked against the columns named in the CLIENT'S statement, not against what
+-- a trigger writes, so revoking both does not disturb the stamp.
+--
+-- No client payload contains this column either. Note the trigger is BEFORE
+-- UPDATE only — nothing populates `updated_at` on insert and the column has no
+-- default, so a freshly inserted event carries NULL there. Revoking INSERT
+-- removes a privilege that could only ever have written a value the schema does
+-- not want set.
+--
+-- SELECT stays.
+-- ---------------------------------------------------------------------------
+revoke insert (updated_at), update (updated_at) on public.events from authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 9. public.profiles — drop the table-level UPDATE grant from 0002:35.
+--
+-- THE APP WRITES NOTHING TO profiles. There is no .insert(, .update( or
+-- .upsert( against it anywhere in apps/mobile/src; all three call sites are
+-- selects (create/event.tsx:924, create/curbside.tsx:277, (tabs)/me.tsx:644).
+-- Rows are created exclusively by `app.handle_new_user` (0001:45-63), a SECURITY
+-- DEFINER trigger on auth.users, and `updated_at` is maintained by
+-- `profiles_set_updated_at` (0001:40-42). `avatar_path` is written by nothing —
+-- it is reserved for the real-uploads stage.
+--
+-- Because the grant was TABLE-level it covered every column, including
+-- `created_at`, which a user could rewrite on their own row. (`id` was already
+-- protected: `profiles_update_own`'s `with check (id = auth.uid())` blocks
+-- reassigning it.) This is the same shape 0024:183 closed on `workspaces`, and
+-- the same reasoning 0011 and 0015 applied to `events` and `workspaces`: a
+-- table-level grant on a table with a permissive own-rows policy is the wrong
+-- instrument.
+--
+-- NO REPLACEMENT COLUMN GRANT, deliberately. The honest column set the client
+-- needs today is EMPTY. Personal Edit Profile ships as an `app`-definer RPC with
+-- validation — the shape `app.update_workspace_profile` (0024) established —
+-- and anticipating it with a `display_name` grant now would be a write path with
+-- no validation behind it, which is precisely what 0024 removed.
+-- ---------------------------------------------------------------------------
+revoke update on public.profiles from authenticated;
+
+-- `profiles_update_own` (0001:73-74) is deliberately LEFT IN PLACE and is now
+-- dead: a policy only filters rows for a role that already holds the privilege,
+-- and `authenticated` no longer holds UPDATE, so it can never be reached from
+-- the API. Kept rather than dropped for the two reasons 0024:185-194 gives for
+-- `workspaces_update_owner` — it documents the original intent where a reader
+-- looks for it, and if UPDATE is ever re-granted the own-rows restriction is
+-- already there rather than having to be remembered. Dropping it would make a
+-- future re-grant silently permit every authenticated user to edit every
+-- profile.
+comment on policy profiles_update_own on public.profiles is
+  'DEAD as of 0025: UPDATE is revoked from authenticated, so this policy is unreachable from the API. Kept deliberately — it is the safety net if UPDATE is ever re-granted. Personal profile writes will go through an app-schema definer RPC when Edit Profile ships.';
+
+-- ---------------------------------------------------------------------------
+-- RELOAD THE POSTGREST SCHEMA CACHE.
+--
+-- PostgREST caches the schema it serves, and that cache includes function
+-- EXECUTE privileges and table column privileges — precisely what every
+-- statement above changes. Until it reloads, the API keeps answering from the
+-- pre-revoke picture: a revoked wrapper can still be routed for an anonymous
+-- caller, and an INSERT naming a revoked column can still be accepted.
+--
+-- THE FAILURE THIS PREVENTS IS A FALSE GREEN. Verification run inside that
+-- window would exercise the OLD privilege picture and pass — reporting the
+-- revokes as verified when nothing about them had been tested. A stale cache
+-- does not announce itself, and the passing result looks identical to a real
+-- one. Reload immediately rather than waiting for the periodic refresh.
+-- ---------------------------------------------------------------------------
+notify pgrst, 'reload schema';
