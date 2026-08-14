@@ -1123,6 +1123,50 @@ history ticket does not arrive with its category chips stripped;
 record of having gone. Verified anon feed/detail/direct-read all still healthy
 immediately after apply. Behavioral suite (27 assertions) in
 `scripts/qa-0019-delete-archive.sql`.
+0023 organizer profile read path (**APPLIED 2026-08-02**) and 0024
+update_workspace_profile (**APPLIED 2026-08-03**) are applied but have NO entry
+in this log — gap noticed 2026-08-13 while adding 0025, not yet filled.
+0025 grant hardening — REVOKES ONLY (**APPLIED 2026-08-10**; audited and
+committed 2026-08-13). Nine privilege revokes, zero grants: PUBLIC/anon EXECUTE
+off the three 0019 wrappers (`delete_event`, `archive_event`,
+`unarchive_event`) and off `app.event_publish_fee_cents`; PUBLIC EXECUTE off
+`app.duration_band`; `insert (rsvp_count)`, `insert (updated_at)` and
+`update (updated_at)` off `public.events`; and the TABLE-level UPDATE off
+`public.profiles`. Root cause of the three column revokes: 0011 wrote ONE
+18-column list and used it for BOTH the SELECT and the INSERT grant on
+`events` — correct as a read list, too wide as a write list. The UPDATE grant
+two statements later WAS narrowed by hand, so the thinking was done and the
+INSERT list simply never received it. **A read list and a write list answer
+different questions and must be authored separately even when they look
+identical at the moment of writing.** `profiles_update_own` is deliberately
+left in place and is now dead — kept as the safety net if UPDATE is ever
+re-granted, same reasoning as 0024's `workspaces_update_owner`. F1
+RE-CONFIRMED: `events.status` and `events.cancelled_at` stay client-writable;
+the guard that belongs there is a TRIGGER, not a revoke, and it lands with real
+Stripe (0004_payments batch).
+**First full run of the per-arc privilege audit gate, and it passed.** Pre-arc
+baseline `supabase/audits/baselines/2026-08-10-pre-grant-hardening.md`,
+post-arc `2026-08-13-post-grant-hardening.md`, diffed: nine deltas, every one
+traced to a named revoke statement, zero additions, sections 2/3/5/6/7/8
+identical. Behavioral verification (audit section 9) run by hand BEFORE the
+commit — incognito feed + event detail + organizer profile, then host-side paid
+publish end to end, archive, unarchive, delete, RSVP count increments, and
+`updated_at` still stamping on update. All passed; the last two matter most,
+since statements 6-8 revoke client privileges on trigger-maintained columns.
+**No `qa-0025` script, deliberately** — the migration only removes privileges
+and adds no behavior to assert, so the post-arc diff plus the section 9 run ARE
+its verification. An arc that adds or changes behavior does not get that
+exemption.
+The gate also caught two defects in the audit TOOL on its first real use:
+sections 1 and 5 ordered by fewer columns than they selected, so LIMIT/OFFSET
+paging over tied rows silently skipped and duplicated them; and the SQL
+Editor's 100-row cap truncated section 1 three separate times before anyone
+noticed — in EVERY export format, not only on copy, which is what that file's
+old note wrongly claimed. Both fixed in `supabase/audits/privilege_audit.sql`
+(total ORDER BYs, paging procedure with an explicit terminating condition,
+`count(*)` companion queries for sections 1 and 5, and a tiebreaker on
+section 4 before it crosses 100), plus a defect-history header so the next
+reader does not simplify them back out.
 **Migrations apply from files via `npx supabase db push --linked`, never
 pasted** — remote history verified matching the repo 2026-08-02, all 22 rows
 `local == remote` (0013 had drifted from a dashboard paste and was repaired
@@ -1130,10 +1174,22 @@ with `migration repair --status applied`). **`migration list` compares VERSION
 NUMBERS, never file contents** — it reported a clean all-green throughout the
 0020 drift described above, so an all-green list proves the same migrations ran,
 never that the repo describes the live schema. Editing an applied migration is
-now a named rule in CLAUDE.md. Advisor baseline steady at
-0 errors / 3 accepted warnings (SCHEMA_PLAN §10.7 — two rls_auto_enable
-platform warnings + leaked-password protection, Pro-gated on the Free plan;
-DECIDED 2026-07-09: enable with the launch-prep Pro upgrade).
+now a named rule in CLAUDE.md. **Advisor baseline CORRECTED 2026-08-13: 0
+errors / 6 warnings.** This line recorded 0/3 from 2026-07-09 until the
+correction, and the 0/3 was carried forward unchallenged in every entry that
+cited it. Three warnings are the long-accepted ones (SCHEMA_PLAN §10.7 — two
+rls_auto_enable platform warnings + leaked-password protection, Pro-gated on
+the Free plan; DECIDED 2026-07-09: enable with the launch-prep Pro upgrade).
+The other three are `function_search_path_mutable` on the three 0019 wrappers
+(`public.delete_event`, `public.archive_event`, `public.unarchive_event`),
+unfixed since 0019 shipped and **scheduled for migration 3**. Corroborated
+independently by section 4 of the post-0025 audit baseline: those three are the
+ONLY functions in the database whose `config` reads `(NONE - INHERITS CALLER)`
+— every other function pins `search_path`. Note the audit file already flags
+this shape as a finding ("security_definer=false AND config='(NONE)' ->
+convention break"), so the fact was visible in the pre-arc baseline too; a
+stale summary line is what kept it from being counted. Historical entries below
+that cite "0/3" describe what was believed at the time and are left as written.
 
 **Auth backend configured (2026-07-09, dashboard only — no app code):**
 email confirmations ON; Google OAuth provider ENABLED (GCP web client,

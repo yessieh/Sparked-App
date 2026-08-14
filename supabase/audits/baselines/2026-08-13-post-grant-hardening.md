@@ -1,3 +1,98 @@
+# Post-arc privilege baseline — 2026-08-13, after the grant-hardening arc (0025)
+
+Output of `supabase/audits/privilege_audit.sql` sections 1-8, run in the
+Supabase Dashboard SQL Editor against the Sparked-App project after
+`20260810000025_grant_hardening_revokes.sql` was applied. Section 9 is
+behavioral and not runnable there; it was run separately by hand — see the
+verification section below. This is the POST-ARC half of the per-arc audit gate
+(CLAUDE.md): its whole purpose is to be DIFFED against
+`supabase/audits/baselines/2026-08-10-pre-grant-hardening.md`.
+
+## HOW SECTIONS 1 AND 5 WERE EXPORTED — READ BEFORE THE NEXT ARC'S PRE-RUN
+
+The SQL Editor caps a result at 100 rows, in every export format, and gives no
+indication that it has done so. Sections 1 and 5 both exceed that. Both were
+exported in pages of 100 using `limit ... offset ...` and concatenated here
+into one continuous block each, exactly as the pre-arc file's own header
+requires:
+
+| Section          | Pages | Rows                     |
+| ---------------- | ----- | ------------------------ |
+| 1 — Grants       | 3     | 100 + 100 + 11 = **211** |
+| 5 — Privileges   | 3     | 100 + 100 + 76 = **276** |
+
+The final page is under 100 in both cases, which is the terminating condition.
+Paging is only safe because each query's ORDER BY names EVERY selected column
+(`order by 1,2,3,4,5,6` for section 1, `order by 1,2,3,4,5` for section 5) —
+rows that tie can come back in a different order on each page, so a row can
+appear twice or vanish. On this run those ORDER BY extensions were still
+applied BY HAND, as they were for the pre-arc file. They are now committed into
+`supabase/audits/privilege_audit.sql` itself, together with `count(*)`
+companion queries (1A and 5A) that make completeness arithmetic rather than
+judgment, so the next run does not depend on anyone remembering.
+
+**THE NEXT ARC'S PRE-RUN MUST PAGE THE SAME WAY AND CONCATENATE.** A single
+uncorrected run returns 100 rows for either section, and a diff against this
+file would read the 111 and 176 absent rows as grants REMOVED — while any grant
+actually added inside the truncated region would be invisible. Neither error
+announces itself.
+
+## ARC RESULT — NINE PRIVILEGES REMOVED, ZERO ADDED
+
+Diffed against the pre-arc baseline. Nine deltas, every one of them accounted
+for by one of 0025's nine revoke statements, and nothing else moved: sections
+2, 3, 5, 6, 7 and 8 are identical between the two files.
+
+Section 1 lost four rows (215 → 211):
+
+| Row removed                                       | 0025 statement |
+| ------------------------------------------------- | -------------- |
+| `events.rsvp_count` column INSERT / authenticated  | 6              |
+| `events.updated_at` column INSERT / authenticated  | 7              |
+| `events.updated_at` column UPDATE / authenticated  | 8              |
+| `profiles` TABLE-level UPDATE / authenticated      | 9              |
+
+Section 4 kept all 37 rows and narrowed five `execute_grants` values:
+
+| Function                            | Before → After                                                 | 0025 statement |
+| ----------------------------------- | -------------------------------------------------------------- | -------------- |
+| `public.delete_event(uuid)`         | `PUBLIC, postgres, authenticated` → `postgres, authenticated`   | 1              |
+| `public.archive_event(uuid)`        | `PUBLIC, postgres, authenticated` → `postgres, authenticated`   | 2              |
+| `public.unarchive_event(uuid)`      | `PUBLIC, postgres, authenticated` → `postgres, authenticated`   | 3              |
+| `app.event_publish_fee_cents(uuid)` | `PUBLIC, postgres, authenticated` → `postgres, authenticated`   | 4              |
+| `app.duration_band(…)`              | `PUBLIC (default - no explicit grants)` → `postgres:EXECUTE`    | 5              |
+
+Every changed cell is strictly narrower; nothing anywhere gained a privilege.
+Three things the migration's comments ASSERTED and this diff CONFIRMS rather
+than assumes: the `authenticated` grants from 0019 and 0012 survived all four
+wrapper revokes; `app.duration_band` kept the owner's implicit EXECUTE and
+received no replacement `authenticated` grant, which was the deliberate hard
+case; and section 5 is unchanged, so nothing perturbed the default-privilege
+surface that would re-grant on the next object created.
+
+## BEHAVIORAL VERIFICATION (SECTION 9) — RUN, AND PASSED
+
+Run by hand against localhost:8081 before the arc was committed. Signed-out
+first, per section 9's instruction that it fails first and loudest: incognito
+Explore feed, event detail, and an organizer profile reached from a paid event.
+Then signed in as a host: paid publish end to end, archive, unarchive, delete,
+RSVP count increments, and `updated_at` still stamping on update. All passed.
+
+The `updated_at` and RSVP checks are the load-bearing ones. Statements 6-8
+revoke client privileges on trigger-maintained columns, and the claim that a
+BEFORE trigger's write is unaffected by the caller's column privileges stays a
+claim until the stamp is observed still happening.
+
+## NO qa-0025 SCRIPT — A CONSCIOUS SKIP, NOT AN OMISSION
+
+Every arc ships a behavioral SQL suite in `scripts/` (CLAUDE.md, per-arc gate).
+0025 does not, deliberately. It only REMOVES privileges — no function, policy,
+column, table or default is added or changed — so there is no new behavior for
+a suite to assert. What needed verifying was that nothing BROKE, and the
+section 9 run above and this diff cover that between them: the diff proves the
+catalog is exactly what was intended, the run proves the app still works
+against it. An arc that adds or changes behavior does not get this exemption.
+
 ## Section 1 — Grants
 
 | schema | object_name           | object_type | column_name        | grantee       | privilege_type |
