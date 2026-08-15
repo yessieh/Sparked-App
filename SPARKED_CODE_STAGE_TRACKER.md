@@ -291,18 +291,24 @@ and verified in Cursor/Claude Code.
       2026-08-10, audited and committed 2026-08-13). Nine revokes, zero grants.
       Post-arc diff clean — nine deltas, all nine named, zero additions:
       `supabase/audits/baselines/2026-08-13-post-grant-hardening.md`.
-- [ ] **2 — `0026_default_privilege_revokes`.** The default-privilege residue
-      that section 5 of `supabase/audits/privilege_audit.sql` lists — TRUNCATE,
-      TRIGGER, REFERENCES and MAINTAIN carried to client roles by Supabase's
-      "Automatically expose new tables and functions" toggle. 276 rows on the
-      2026-08-13 run, untouched by 0025. This is the MECHANISM, not the
-      symptom: it re-grants on EVERY new object until it is fixed here, so
-      fixing it per-table is treating symptoms. **RLS does not apply to
-      TRUNCATE** — a reachable TRUNCATE wipes the table regardless of policy,
-      `curbside_quota_ledger` included, and that ledger is the immutable
-      fraud-prevention record. Turning the dashboard toggle OFF is a founder-
-      owned step (audit header, founder-owned checks) and does not retract
-      privileges already granted; this migration is what retracts them.
+- [x] **2 — `0026_default_privilege_revokes`** (file
+      `supabase/migrations/20260813000026_default_privilege_revokes.sql`,
+      APPLIED 2026-08-13, behaviorally verified and committed 2026-08-15).
+      Revokes only, in two parts: PART A stops NEW tables inheriting the
+      residue (`alter default privileges for role postgres`), PART B clears
+      what the twelve existing tables carry. Post-arc diff clean — section 1
+      211 → 115 (−96), section 5 276 → 268 (−8), zero additions, sections
+      2/3/4/6/7/8 byte-identical:
+      `supabase/audits/baselines/2026-08-13-post-default-privileges.md`.
+      Section 9 signed-out + host-side sweep passed 2026-08-15, no behavior
+      change. **The source is NOT closed.** "Automatically expose new tables
+      and functions" is still ON, a migration cannot turn it off, and while it
+      is on this residue can return — PART A is a repair, not a seal, and
+      section 5 of the per-arc audit is what catches a reappearance. Turning
+      it off stays a FOUNDER-OWNED step. Also still open by design: the
+      `supabase_admin` default-privilege entry, which needs membership in that
+      role to alter and would fail 42501 from a migration (reasoning in the
+      0026 header and the SPARKED_STATE.md entry).
 - [ ] **3 — `0027_wrapper_search_path_pins`.** Pin `search_path` on
       `public.delete_event`, `public.archive_event` and
       `public.unarchive_event` — the three 0019 wrappers, and the only three

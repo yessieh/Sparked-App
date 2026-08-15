@@ -1175,15 +1175,102 @@ they exist. Full detail and checkboxes in SPARKED_CODE_STAGE_TRACKER.md, "ARC:
 Privilege hardening (migrations 1-3)"; the Curbside anonymity arc waits on all
 three verifying green.
 `0025_grant_hardening_revokes` — APPLIED 2026-08-10, above.
-`0026_default_privilege_revokes` — the TRUNCATE / TRIGGER / REFERENCES /
-MAINTAIN residue that section 5 of the audit lists (276 rows, untouched by
-0025). It is the MECHANISM behind Supabase's "Automatically expose new tables
-and functions" toggle and re-grants on every new object until fixed there, so
-per-table fixes are symptom treatment. RLS does not apply to TRUNCATE.
+`0026_default_privilege_revokes` — APPLIED 2026-08-13, entry below.
 `0027_wrapper_search_path_pins` — pin `search_path` on `public.delete_event`,
 `public.archive_event` and `public.unarchive_event`; closes the three advisor
 warnings corrected below. 0026 and 0027 are the expected next file numbers; if
 something lands between, the NAME is the anchor, not the number.
+0026 default-privilege revokes — REVOKES ONLY (**APPLIED 2026-08-13**;
+behaviorally verified and committed 2026-08-15). Migration 2 of the privilege
+hardening arc. Removes TRUNCATE, TRIGGER, REFERENCES and MAINTAIN from `anon`
+and `authenticated` on `public`, in two parts that are both required and
+neither sufficient. **PART A** — `alter default privileges for role postgres in
+schema public revoke ... on tables` for each role, killing the entries that
+MINT this residue on every newly created table; PART B alone would be undone by
+the next `create table`. **PART B** — `revoke ... on all tables in schema
+public` for each role, clearing what the twelve existing tables already carry;
+PART A alone leaves all twelve dirty. Then `notify pgrst, 'reload schema'`, so
+the catalog the audit reads and the API verification reads cannot describe
+different pictures at the same moment.
+**These four privileges were never granted by this repo.** No migration here
+names them; they arrive from Supabase's project-level ALTER DEFAULT PRIVILEGES,
+the mechanism behind the dashboard's "Automatically expose new tables and
+functions" toggle, which grants the full table privilege set to the client
+roles on every table created in `public`. That is why fixing this per-table is
+symptom treatment and why PART A comes first in the file.
+**TRUNCATE is the one that matters, because RLS does not apply to it.** RLS
+filters rows for SELECT/INSERT/UPDATE/DELETE; TRUNCATE is table-level and a
+role holding it empties the table in full no matter how restrictive the
+policies are. **Every "the policy protects it" argument in this codebase is
+false for this one privilege.** The table where that bites is
+`public.curbside_quota_ledger` — the immutable consumption record behind
+Architecture Decision 8, written only by `app.consume_curbside_credit()` on an
+AFTER trigger, select-own policy, no write policy and no write grant, FKs
+`ON DELETE SET NULL` precisely so deleting an event cannot erase the evidence a
+credit was spent. That whole design exists to stop delete-and-recreate quota
+farming, and a reachable TRUNCATE discards it in one statement.
+**Latent, not live — revoked anyway.** PostgREST exposes no TRUNCATE route, so
+no anon or authenticated caller could reach any of the four through the API as
+configured. Nothing here was an open hole. It is revoked because the privilege
+is the wrong thing to be holding, and because "reachable but currently
+harmless" is how the previous privilege incidents in this build began; the gap
+between latent and live is one configuration change wide, made by someone with
+no reason to read that migration.
+**THE SOURCE IS STILL OPEN — the toggle is ON.** A migration cannot turn off
+"Automatically expose new tables and functions" (Dashboard → Settings → API);
+it is a project setting and a FOUNDER-OWNED action, alongside the service-role
+key and key rotation. **While it is on, this residue can come back.** Treat
+PART A as a repair, not a seal, and expect section 5 of the per-arc audit to be
+what catches a reappearance.
+**Documented non-target:** the `supabase_admin` default-privilege entry for
+`public` tables still carries all eight privileges for both client roles. Not
+an unexplained delta. Altering it needs `ALTER DEFAULT PRIVILEGES FOR ROLE
+supabase_admin`, which requires membership in that role; migrations apply as
+`postgres`, neither superuser nor a member, so the statement would fail 42501
+and abort the migration — converting a known gap into a broken deploy. Default
+privileges are selected by the role that CREATES the object, and every table
+here is created by a migration running as `postgres`, so the entry 0026 did
+remove is the one that fires for this repo's tables. Closing the remainder
+needs the toggle off. Also unchanged and also correct: `postgres` and
+`service_role` keep theirs — 0026 revoked from `anon` and `authenticated` only.
+**Post-arc diff clean: 104 removals, zero additions.** Pre-arc source is
+`supabase/audits/baselines/2026-08-13-post-grant-hardening.md`, the post-arc
+baseline of 0025 — correct rather than a substitute, because no migration ran
+between the two exports. Post-arc
+`supabase/audits/baselines/2026-08-13-post-default-privileges.md`. Section 1
+211 → 115 (**−96**, exactly 12 tables × 4 privileges × 2 roles, split 48/48);
+section 5 276 → 268 (**−8**, both `postgres` entries vanishing entirely, which
+is what happens when an entry's whole privilege set is revoked). Sections
+2/3/4/6/7/8 byte-identical. **No SELECT, INSERT, UPDATE or DELETE row was
+removed** — the column grants the signed-out storefront reads through are
+intact. **No `qa-0026` script, deliberately**, same exemption as 0025: the
+migration only removes privileges and adds no behavior to assert.
+**No separate `2026-08-13-pre-default-privileges.md` was written, and none
+should be.** 0026 was applied before a dedicated pre-arc export was taken, so a
+file under that name would have captured the POST-0026 state — and diffing this
+arc against it would have produced an empty delta and **reported a clean arc
+while checking nothing.** A mistimed export reading as a passing run is the
+exact failure the gate exists to prevent; the dated 0025 post-baseline is the
+real pre-0026 record.
+**Two export traps, recorded for whoever diffs the next one.** (1) Sections 1
+and 5 both still exceed the SQL Editor's silent 100-row cap and were paged and
+concatenated; both totals match the counts predicted from the migration BEFORE
+it was applied (211 − 96 = 115, 276 − 8 = 268), which is the arithmetic
+completeness check sections 1A and 5A exist to provide — a truncated section 1
+would have landed on 100, a truncated section 5 on 100 or 200. (2) **Do not
+trust a naive `diff` against the pre-arc file.** Section 1 there was
+concatenated from pages whose markdown column WIDTHS differ, so a line-by-line
+diff reports dozens of paired changes that are pure whitespace, including
+apparent removals of SELECT/INSERT/UPDATE/DELETE rows that were never touched.
+Normalise each row (split on `|`, trim every field) and sort first. The first
+pass of this very diff produced exactly that false alarm.
+**Behavioral verification (audit section 9) run by hand 2026-08-15, before the
+commit — passed, no behavior change.** Signed-out in incognito: Explore feed,
+event detail, organizer profile reached from a paid event. Signed in: publish,
+archive, unarchive, delete. The prediction was that nothing would move, since
+none of the four privileges appears in a PostgREST route and no SELECT or
+EXECUTE was touched — but that argument is not what verifies the arc, the run
+is. Section 9 exists because the 0020 → 0021 outage was catalog-clean too.
 **Migrations apply from files via `npx supabase db push --linked`, never
 pasted** — remote history verified matching the repo 2026-08-02, all 22 rows
 `local == remote` (0013 had drifted from a dashboard paste and was repaired

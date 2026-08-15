@@ -1,0 +1,206 @@
+-- ============================================================================
+-- 0026 — Default-privilege revokes: TRUNCATE, TRIGGER, REFERENCES, MAINTAIN.
+--
+-- Migration 2 of the privilege hardening arc (0025 → 0026 → 0027).
+-- REVOKES ONLY. Every statement below removes access; not one grants any.
+--
+-- SCOPE, STATED AS A FENCE: four privilege types — TRUNCATE, TRIGGER,
+-- REFERENCES, MAINTAIN — from two roles — anon, authenticated — in one schema,
+-- public. No statement here touches SELECT, INSERT, UPDATE, DELETE, USAGE or
+-- EXECUTE; none touches postgres or service_role; none touches the storage,
+-- graphql, graphql_public, extensions, auth or realtime schemas. Anonymous
+-- browse is Architecture Decision 2 and runs on SELECT grants plus EXECUTE on
+-- the read RPCs — nothing here is capable of disturbing it.
+--
+-- ---------------------------------------------------------------------------
+-- THE BASELINE THIS WAS WRITTEN AGAINST
+-- ---------------------------------------------------------------------------
+-- `supabase/audits/baselines/2026-08-13-post-grant-hardening.md`, the post-arc
+-- run of `supabase/audits/privilege_audit.sql` for 0025. No migration has been
+-- applied since, so it is also the live picture 0026 was authored against.
+--
+--   * SECTION 5 is the evidence for PART A. It records the ALTER DEFAULT
+--     PRIVILEGES entries that MINT this residue on every newly created table.
+--   * SECTION 1 is the evidence for PART B. It records the 96 grants those
+--     entries have already minted on the twelve existing tables.
+--
+-- Both parts are required and neither is sufficient. PART A alone leaves all
+-- twelve current tables carrying what they already carry. PART B alone is
+-- undone by the next `create table` in the next migration.
+--
+-- ---------------------------------------------------------------------------
+-- WHERE THESE FOUR PRIVILEGES CAME FROM — NOT FROM THIS REPO
+-- ---------------------------------------------------------------------------
+-- No migration in this repository grants TRUNCATE, TRIGGER, REFERENCES or
+-- MAINTAIN to anon or authenticated. Grep the folder: the string does not
+-- appear in a grant. They arrive from Supabase's project-level ALTER DEFAULT
+-- PRIVILEGES, the mechanism behind the dashboard's "Automatically expose new
+-- tables and functions" toggle, which grants the FULL table privilege set to
+-- the client roles on every table created in `public`.
+--
+-- This is why fixing it per-table is treating symptoms, and why PART A comes
+-- first in the file even though PART B is what cleans up today's damage.
+--
+-- ---------------------------------------------------------------------------
+-- WHY TRUNCATE IS THE ONE THAT MATTERS — RLS DOES NOT APPLY TO IT
+-- ---------------------------------------------------------------------------
+-- Row-level security filters rows for SELECT, INSERT, UPDATE and DELETE. It
+-- does NOT apply to TRUNCATE: TRUNCATE is a table-level operation, and a role
+-- holding it empties the table in full regardless of how restrictive the
+-- policies are. Every "the policy protects it" argument in this codebase is
+-- false for this one privilege.
+--
+-- `public.curbside_quota_ledger` is the table where that matters. It is the
+-- immutable consumption record behind Architecture Decision 8 (migration 0018):
+-- rows are written only by `app.consume_curbside_credit()` on an AFTER trigger,
+-- it carries a select-own policy and NO write policy and NO write grant, and
+-- `app.curbside_credits_used(user)` counts its rows to back both the quota gate
+-- and the UI so the two cannot disagree. Its FKs are ON DELETE SET NULL
+-- precisely so deleting an event cannot erase the evidence that a credit was
+-- spent. That whole design exists to stop delete-and-recreate quota farming,
+-- and a reachable TRUNCATE discards it in one statement — no policy consulted,
+-- no rows filtered, nothing left to count.
+--
+-- ---------------------------------------------------------------------------
+-- LATENT, NOT LIVE — AND REVOKED ANYWAY
+-- ---------------------------------------------------------------------------
+-- PostgREST exposes no TRUNCATE route. There is no verb, no RPC and no query
+-- parameter that reaches it, so no anon or authenticated caller can invoke any
+-- of these four privileges through the API as it is configured today. Nothing
+-- here is an open hole being closed.
+--
+-- It is revoked because the privilege is the wrong thing to be holding, and
+-- because "reachable but currently harmless" is how the previous privilege
+-- incidents in this build began. The gap between latent and live is one
+-- configuration change wide, and that change would be made by someone who has
+-- no reason to think about this file.
+--
+-- ---------------------------------------------------------------------------
+-- THIS MIGRATION DOES NOT CLOSE THE SOURCE. THE TOGGLE IS STILL ON.
+-- ---------------------------------------------------------------------------
+-- "Automatically expose new tables and functions" is ON in the dashboard
+-- (Supabase Dashboard → Settings → API). A migration cannot turn it off; it is
+-- a project setting, and it is a FOUNDER-OWNED action — the same list the audit
+-- file records under founder-owned checks, alongside the service-role key and
+-- key rotation.
+--
+-- CONSEQUENCE, STATED PLAINLY: while that toggle is ON, this residue COMES
+-- BACK. PART A stops the entry that fires for tables created by `postgres`,
+-- which is every table this repo creates — but the toggle is the thing that
+-- installed these defaults in the first place and can reinstall them. Until it
+-- is off, treat PART A as a repair, not a seal, and expect section 5 of the
+-- per-arc audit to be the thing that catches a reappearance.
+--
+-- ---------------------------------------------------------------------------
+-- WHAT THIS MIGRATION DELIBERATELY DOES NOT DO — THE supabase_admin ENTRY
+-- ---------------------------------------------------------------------------
+-- Section 5 records TWO granting roles for tables in `public`, not one:
+--
+--   postgres        → anon, authenticated : MAINTAIN, REFERENCES, TRIGGER,
+--                                           TRUNCATE                (4 privs)
+--   supabase_admin  → anon, authenticated : the full 8, i.e. the four above
+--                                           PLUS SELECT, INSERT, UPDATE,
+--                                           DELETE                  (8 privs)
+--
+-- PART A revokes from the `postgres` entry ONLY. The `supabase_admin` entry is
+-- deliberately untouched, because `ALTER DEFAULT PRIVILEGES FOR ROLE
+-- supabase_admin` requires membership in that role. Migrations apply as
+-- `postgres` (`npx supabase db push --linked`), which on Supabase is neither a
+-- superuser nor a member of `supabase_admin`, so the statement would fail with
+-- `must be member of role "supabase_admin"` (42501) and abort this migration.
+-- A statement that cannot run is worse than an absent one: it converts a known
+-- gap into a broken deploy.
+--
+-- WHY THE OMISSION IS SMALL. Default privileges are selected by the role that
+-- CREATES the object. Every table in this database is created by a migration
+-- running as `postgres`, so the `postgres` entry is the one that fires for our
+-- objects and PART A is a real fix for "new tables stop inheriting this". The
+-- `supabase_admin` entry governs tables created BY `supabase_admin` — platform
+-- objects, not this repo's.
+--
+-- WHAT IT WOULD TAKE TO CLOSE IT: a session as `supabase_admin` (the SQL Editor
+-- does not run as that role either) or turning the dashboard toggle off, which
+-- is the founder-owned action named above and the better fix regardless.
+-- Tracked, not forgotten — and it is why PART B exists as a separate part
+-- rather than being folded into PART A.
+-- ============================================================================
+
+
+-- ---------------------------------------------------------------------------
+-- PART A — THE SOURCE. Stop newly created tables from inheriting the residue.
+--
+-- Evidence: baseline section 5, rows
+--   `postgres | public | tables | anon        | {MAINTAIN,REFERENCES,TRIGGER,TRUNCATE}`
+--   `postgres | public | tables | authenticated | {same four}`
+--
+-- Those two entries hold EXACTLY these four privileges and nothing else, so
+-- revoking all four removes both entries from `pg_default_acl` completely:
+-- section 5 should lose 8 rows (4 privileges x 2 roles), 276 -> 268.
+--
+-- `for role postgres` is named explicitly rather than relying on the session
+-- role, so this statement says which section-5 row it targets and does not
+-- silently retarget if it is ever run by a different role.
+--
+-- NOT `on functions`: the section-5 function defaults grant EXECUTE, which is
+-- out of scope and load-bearing for anonymous browse. NOT `on sequences`:
+-- those grant SELECT/UPDATE/USAGE, also out of scope. Tables only.
+-- ---------------------------------------------------------------------------
+alter default privileges for role postgres in schema public
+  revoke truncate, trigger, references, maintain on tables from anon;
+
+alter default privileges for role postgres in schema public
+  revoke truncate, trigger, references, maintain on tables from authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- PART B — TODAY'S TABLES. Remove what the twelve already carry.
+--
+-- Evidence: baseline section 1 holds 96 matching rows — 12 tables x 4
+-- privileges x 2 roles, split 48 anon / 48 authenticated. Every one is
+-- object_type='table' with column_name='(table-level)'; there is not a single
+-- column-level REFERENCES row, so a column-scoped revoke is not needed.
+--
+-- The twelve, as section 1 lists them:
+--   categories, curbside_quota_ledger, event_categories, event_vendors,
+--   events, memberships, profiles, rsvps, saves, tier_prices, tiers,
+--   workspaces
+--
+-- `on all tables in schema public` is used rather than twelve named statements
+-- BECAUSE the list above is a snapshot and the schema is not frozen. A named
+-- list silently misses any table that exists now but was absent from the
+-- export, and this file would then read as complete while leaving one dirty.
+-- The set is verified closed from the other side: section 2 of the same
+-- baseline enumerates the RLS inventory and returns the SAME twelve tables in
+-- `public`, so there is no thirteenth table for the wildcard to surprise us
+-- with. `public` holds no views or matviews (section 3: zero rows), so the
+-- wildcard's inclusion of views is vacuous here.
+--
+-- Section 1 should lose exactly 96 rows: 211 -> 115.
+--
+-- SELECT, INSERT, UPDATE and DELETE ARE NOT NAMED HERE AND ARE NOT AFFECTED.
+-- A REVOKE removes only the privileges it names. The column-level read and
+-- write grants that 0011 authored, and that the signed-out storefront depends
+-- on, are untouched by every statement in this file.
+-- ---------------------------------------------------------------------------
+revoke truncate, trigger, references, maintain
+  on all tables in schema public from anon;
+
+revoke truncate, trigger, references, maintain
+  on all tables in schema public from authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- RELOAD THE POSTGREST SCHEMA CACHE.
+--
+-- PostgREST caches table privileges, and PART B changes them. The honest note
+-- is that none of these four privileges appears in any route PostgREST serves,
+-- so unlike 0025 there is no specific false-green this prevents — a stale
+-- cache here cannot make a revoked privilege look revoked when it is not,
+-- because nothing was ever routing on it.
+--
+-- Reloaded anyway, for one reason: the post-arc audit reads the CATALOG while
+-- verification reads the API, and the two should not be allowed to describe
+-- different privilege pictures at the same moment. Keeping them in step costs
+-- one statement.
+-- ---------------------------------------------------------------------------
+notify pgrst, 'reload schema';
