@@ -1176,10 +1176,12 @@ Privilege hardening (migrations 1-3)"; the Curbside anonymity arc waits on all
 three verifying green.
 `0025_grant_hardening_revokes` — APPLIED 2026-08-10, above.
 `0026_default_privilege_revokes` — APPLIED 2026-08-13, entry below.
-`0027_wrapper_search_path_pins` — pin `search_path` on `public.delete_event`,
-`public.archive_event` and `public.unarchive_event`; closes the three advisor
-warnings corrected below. 0026 and 0027 are the expected next file numbers; if
-something lands between, the NAME is the anchor, not the number.
+`0027_wrapper_search_path_pins` — APPLIED 2026-08-15, entry below. 0026 and
+0027 are the expected next file numbers; if something lands between, the NAME is
+the anchor, not the number.
+**THE PRIVILEGE HARDENING ARC IS COMPLETE** — all three applied, audited and
+green: 0025 (2026-08-10), 0026 (2026-08-13), 0027 (2026-08-15). The Curbside
+anonymity arc, which waited on all three verifying, is unblocked.
 0026 default-privilege revokes — REVOKES ONLY (**APPLIED 2026-08-13**;
 behaviorally verified and committed 2026-08-15). Migration 2 of the privilege
 hardening arc. Removes TRUNCATE, TRIGGER, REFERENCES and MAINTAIN from `anon`
@@ -1297,6 +1299,59 @@ this shape as a finding ("security_definer=false AND config='(NONE)' ->
 convention break"), so the fact was visible in the pre-arc baseline too; a
 stale summary line is what kept it from being counted. Historical entries below
 that cite "0/3" describe what was believed at the time and are left as written.
+0027 wrapper search_path pins (**APPLIED 2026-08-15**; verified and committed
+the same day). Migration 3 of the privilege hardening arc, and the one that
+CLOSES it. Three `create or replace function` statements pinning
+`set search_path = public, app` on the 0019 public wrappers
+`public.delete_event`, `public.archive_event` and `public.unarchive_event` —
+the last three functions in the database whose `config` read
+`(NONE - INHERITS CALLER)`, unpinned since 0019 shipped on 2026-07-30. Bodies,
+signatures, `event_id` argument names (load-bearing for PostgREST), return
+types, `language sql`, `security invoker` and the absent volatility keyword are
+reproduced from 0019 verbatim; the added line is the only difference, so a body
+drift could not hide inside a search_path fix. Then
+`notify pgrst, 'reload schema'`.
+**Grant surface: UNCHANGED — no grant added, none removed.** The implicit-grant
+trap does not apply here: Postgres mints the default PUBLIC EXECUTE on CREATE of
+a NEW function, and all three already existed, so `create or replace` mints
+nothing.
+**The ACL question, asked in the migration header and answered by the diff:
+PRESERVED.** `create or replace function` keeps the existing ACL, so 0025's
+revoke of PUBLIC EXECUTE on these same three wrappers survived all three
+replacements — section 4 still reads `postgres:EXECUTE, authenticated:EXECUTE`,
+and the catalog `proacl` is `{postgres=X/postgres,authenticated=X/postgres}`
+with no bare `=X/postgres` entry. **No defensive revokes were written into
+0027, deliberately**: re-adding 0025's statements would have made the outcome
+unobservable, since the diff would come back clean whether the ACL was preserved
+or silently reset. Had it reset, that was a finding worth having.
+**Post-arc diff clean: three cells changed, zero rows added, zero removed.**
+Pre-arc source is `supabase/audits/baselines/2026-08-13-post-default-privileges.md`,
+the post-arc baseline of 0026 — correct rather than a substitute, because no
+migration ran between the two exports. Post-arc
+`supabase/audits/baselines/2026-08-15-post-wrapper-search-path.md`. The entire
+delta is the `config` column on three section-4 rows, `(NONE - INHERITS CALLER)`
+→ `search_path=public, app`; `execute_grants` unchanged on all three; sections
+1/2/3/5/6/7/8 byte-identical (115 / 13 / 0 / 37 / 268 / 4 / 19 / 29 rows, every
+count matching 0026's post numbers). `(NONE - INHERITS CALLER)` now appears
+NOWHERE in section 4. Unusually, the two exports were byte-identical outside
+those three rows, so the whitespace hazard 0026 documented did not bite —
+a property of these two exports' column widths, not of the process; normalise
+before diffing anyway.
+**This arc got a REAL behavioral check, and 0025/0026 did not.** Both of those
+were revokes only, exempt from a `qa-NNNN` script because they add no behavior
+to assert. **0027 REPLACES function definitions, so it is not exempt** — a
+replacement fails in ways a revoke cannot (drifted body, changed signature, an
+argument name PostgREST routes on). Run by hand signed in as the workspace
+owner: archive → left the storefront → unarchive → returned → delete → gone.
+All three wrappers work, no behavior change.
+**Advisor now reads 0 errors / 3 warnings, down from 6 — SUPERSEDES the 0/6
+recorded in the 0026 entry above**, which was correct until this migration. The
+three `function_search_path_mutable` warnings are gone; the three that remain
+are the long-accepted ones (two `rls_auto_enable` platform entries + leaked-
+password protection, Pro-gated, deferred to the launch-prep upgrade). **This is
+the number that makes the corrected baseline true rather than merely accurate**
+— it read 0/3 in this document from 2026-07-09 while the database said 0/6, and
+it now says 0/3 because the database does.
 
 **Auth backend configured (2026-07-09, dashboard only — no app code):**
 email confirmations ON; Google OAuth provider ENABLED (GCP web client,

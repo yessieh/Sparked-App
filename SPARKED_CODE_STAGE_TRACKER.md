@@ -285,6 +285,10 @@ and verified in Cursor/Claude Code.
 > features changed around it. All four were found incidentally. The per-arc
 > audit gate (CLAUDE.md) is the process fix; these three migrations are the
 > backlog that gate surfaced.
+>
+> **STATUS 2026-08-15: all three migrations are applied, audited and green.**
+> The Curbside anonymity arc below, which waited on that, is unblocked. The
+> 0023/0024 log backfill remains open under this heading and does not gate it.
 
 - [x] **1 — `0025_grant_hardening_revokes`** (file
       `supabase/migrations/20260810000025_grant_hardening_revokes.sql`, APPLIED
@@ -309,16 +313,24 @@ and verified in Cursor/Claude Code.
       `supabase_admin` default-privilege entry, which needs membership in that
       role to alter and would fail 42501 from a migration (reasoning in the
       0026 header and the SPARKED_STATE.md entry).
-- [ ] **3 — `0027_wrapper_search_path_pins`.** Pin `search_path` on
-      `public.delete_event`, `public.archive_event` and
-      `public.unarchive_event` — the three 0019 wrappers, and the only three
-      functions in the database whose `config` reads `(NONE - INHERITS
-      CALLER)`. Closes the three `function_search_path_mutable` advisor
-      warnings that the old 0/3 baseline never counted (corrected to 0 errors /
-      6 warnings on 2026-08-13 — see SPARKED_STATE.md). Lower severity than an
-      unpinned SECURITY DEFINER, since these are invoker wrappers and PostgREST
-      controls the caller's `search_path` — but it is a convention break, and
-      the convention is what makes a real exception visible.
+- [x] **3 — `0027_wrapper_search_path_pins`** (file
+      `supabase/migrations/20260815000027_wrapper_search_path_pins.sql`,
+      APPLIED 2026-08-15, verified and committed the same day). Pinned
+      `search_path = public, app` on `public.delete_event`,
+      `public.archive_event` and `public.unarchive_event` — the three 0019
+      wrappers, and the last three functions in the database whose `config`
+      read `(NONE - INHERITS CALLER)`. Bodies reproduced from 0019 verbatim; the
+      pin is the only difference. Post-arc diff clean — three `config` cells
+      changed, zero rows added or removed, sections 1/2/3/5/6/7/8
+      byte-identical: `supabase/audits/baselines/2026-08-15-post-wrapper-search-path.md`.
+      **Advisor 6 → 3**, the direct behavioral verification, leaving only the
+      two `rls_auto_enable` platform entries and the Pro-gated leaked-password
+      protection. **The ACL question came back PRESERVED** — `create or replace`
+      kept 0025's PUBLIC revoke on all three, verified in section 4 and in
+      `proacl`; no defensive revokes were written into 0027 precisely so the
+      diff could answer it. Unlike 0025 and 0026 this one replaced definitions
+      rather than only removing privileges, so it got a real host-side pass:
+      archive → unarchive → delete, all three working, no behavior change.
 - [ ] **Backfill the 0023 and 0024 migration-log entries in SPARKED_STATE.md.**
       Both are APPLIED — 0023 organizer profile read path (2026-08-02), 0024
       update_workspace_profile (2026-08-03) — and neither has a log entry; the
