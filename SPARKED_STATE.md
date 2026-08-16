@@ -1352,6 +1352,123 @@ password protection, Pro-gated, deferred to the launch-prep upgrade). **This is
 the number that makes the corrected baseline true rather than merely accurate**
 — it read 0/3 in this document from 2026-07-09 while the database said 0/6, and
 it now says 0/3 because the database does.
+0028 read paths to app-definer (**APPLIED 2026-08-15**; behaviorally verified
+and committed the same day, **not pushed**). **Migration 1 of 2 in the Curbside
+anonymity arc** — the arc that waited on the privilege hardening arc and was
+unblocked by 0027. `public.events_within_radius` and `public.event_detail` move
+onto the `app`-definer / `public`-invoker convention: `app.<name>` SECURITY
+DEFINER holds the body, `public.<name>` SECURITY INVOKER is a thin wrapper,
+matching `public.workspace_stats` (0015) and `public.organizer_profile` (0023).
+Bodies reproduced from 0020 PART E and 0023 PART C, which is what the catalog
+held — read back through `pg_get_functiondef` before writing, no drift.
+`language sql stable` on all four, return types reproduced column-for-column
+(11 and 16), `create or replace` on both wrappers and never drop + create, so
+their ACLs survive. `search_path` on both definers is **`public, app,
+extensions`** — `extensions` is load-bearing, PostGIS moved there in 0003 and
+dropping it breaks `st_dwithin` / `st_distance` / `st_setsrid` / `st_makepoint`
+and empties the feed with no obvious cause; matches `app.publish_paid_event`.
+**IT CHANGES NO BEHAVIOR AND IT IS NOT A FEATURE. It is preparation.** 0029
+revokes anon SELECT on `events.workspace_id`; both functions touch that column
+(`event_detail` returns it masked, `events_within_radius` uses it in a JOIN
+predicate). A SECURITY INVOKER body is the CALLER's own query and Postgres
+privilege-checks every column it touches, **including ones that appear only in a
+join or a WHERE clause** — an RLS policy expression is evaluated internally and
+needs no such privilege, which is why the policy has referenced these columns
+for anon since 0019 without incident. That asymmetry IS the 0020 → 0021 outage.
+Running the bodies as owner stops the column-grant check, and 0029's revoke
+becomes survivable.
+**THE REASONING THAT WOULD NOT HAVE SURVIVED A WEEK, and the one place this
+migration is not verbatim: SECURITY DEFINER BYPASSES RLS.** The brief said
+reproduce the bodies verbatim, and for `event_detail` that would have been a
+leak. Its only filters are `deleted_at is null` and the id match; **everything
+else that hides a row comes from `events_select_public`**. Moved verbatim onto a
+definer it leaves the policy behind, and drafts, `pending_payment` rows and
+archived events become fetchable by anyone holding the id — **an archived
+event's id being exactly the id that was in every share link while it was
+live**, so archive would stop meaning "off my storefront" the moment this
+shipped. PART C therefore transcribes the policy's three branches (0022 PART B)
+into the body: the host and their team, the storefront, the attendee's own
+history. That is not an addition to the rule, it is the rule following the body
+— **a definer's filters ARE the visibility rule and have to be complete on
+their own**, stated in 0023 and true again here. Returned set unchanged for
+every caller.
+**`events_within_radius` needed NO such transcription, and the reason is worth
+keeping** so nobody "fixes" it later for symmetry: its own filters
+(`deleted_at is null and archived_at is null and status = 'published'`) are
+**strictly narrower than every policy branch that could admit its rows** —
+every row it keeps already satisfies the storefront branch, so RLS was never
+removing anything the body had not already removed. Definer and invoker return
+the identical set. The `workspaces` join is `using(true)` and the
+`event_categories` subquery's policy carries the same branches keyed on a parent
+event that has already passed. One of the two needed the policy transcribed and
+the other did not; the difference is whether the body's own filters imply a
+policy branch, not which convention the function is on.
+**THE ENDED TEST NOW LIVES IN FOUR PLACES AND MUST NOT DRIFT.**
+`coalesce(ends_at, starts_at + interval '3 hours') < now()` appears in
+`events_select_public` (0022, the source of truth), `app.organizer_profile`
+(0023), `app.event_detail` (0028 branch 3) and `eventCountdown`
+(`lib/eventTime.ts`, the client). The 3-hour fallback IS the grace window for an
+event with no `ends_at`. A change to the window or the fallback column has to
+land in all four at once — drift lets a row read ENDED in one and not another,
+which is how a withdrawn listing surfaces in a Tonight bucket, precisely the
+state Architecture Decision 8's table forbids. Named together in the PART C
+comment so the next reader meets the hazard where they meet the expression.
+**Masking unchanged**: `organizer_name` nulled on `curbside_anonymous` in both
+functions, `workspace_id` nulled on `curbside_anonymous` in `event_detail`. The
+direct-table-read gap is still open — **that is 0029's job and the reason this
+arc has two migrations.** `event_detail` still filters `deleted_at` only, and
+deliberately NOT `archived_at` or `status`, so cancelled and archived events stay
+reachable by direct link for the callers entitled to them (0020 PART F); the
+unconditional `deleted_at is null` beside a policy branch 3 that does not test it
+is the intentional asymmetry that renders a deleted-and-ended row INERT in an
+attendee's Past rather than openable.
+**Grant surface: two EXECUTE grants, both on NEWLY CREATED objects, nothing
+existing touched.** `app.events_within_radius` → `anon, authenticated`, consumed
+by the public wrapper, which is INVOKER and therefore runs as the caller —
+signed-out Explore feed. `app.event_detail` → `anon, authenticated`, same shape
+— signed-out event detail and every shared listing link. **anon is REQUIRED on
+both, not merely tolerated**, the same load-bearing grant as
+`app.organizer_profile` (0023) and `app.has_attendance` (0022), and its absence
+would reproduce 0021 from the other direction. Each is preceded by
+`revoke all ... from public`, removing the PUBLIC EXECUTE **Postgres mints
+implicitly on CREATE of a new function** — the implicit-grant trap that does not
+apply to `create or replace` (0027) but does apply here. No existing grant added
+or removed; no revoke at all, that is 0029.
+**Two deltas the post-arc diff should show on EXISTING rows, both deliberate:**
+the wrapper `search_path` moves `public, extensions` → `public, app` on both
+(the bodies touch no PostGIS and no table — they call one schema-qualified
+function each — and it matches the sibling wrappers), and nothing else. Section
+4 additionally gains two `app` rows for the new definers. **Noted and NOT acted
+on:** both public wrappers still carry `PUBLIC:EXECUTE` alongside
+`postgres`/`anon`/`authenticated`, unlike the three 0019 wrappers that 0025
+stripped. `create or replace` preserves it, which is correct here — a revoke is
+0029's lane and writing one into this file would have made the ACL-preservation
+question unobservable, 0027's reasoning.
+**Behavioral pass run by hand against the linked project, all three branches
+exercised.** Branch 2, signed out: feed loads, published events open including
+ENDED ones (still published with `archived_at` null, correctly admitted). Signed
+out, archived event fetched by direct id: returns nothing — the predicate
+filters, confirmed against a real archived event id with the dev server verified
+reachable first, so an empty result could not be mistaken for a dead server.
+Branch 1: host viewing their own archived event renders. Branch 3: an ended
+event owned by ANOTHER workspace and RSVP'd by the tester still opens from the
+attendee side, RSVP and un-RSVP both working. **Drafts are not testable through
+the UI and this is stated rather than glossed** — no draft id is ever surfaced
+(the wizard's URL is `/create/event` throughout and a row id exists only after
+insert), so the assurance is structural: `status = 'draft'` fails all three
+branches.
+**NO POST-ARC AUDIT AND NO `qa-0028` SCRIPT YET, deliberately, and neither is a
+skip.** The arc is two migrations; the post-arc export and its diff cover 0028
+and 0029 together, against pre-arc baseline
+`supabase/audits/baselines/2026-08-15-post-wrapper-search-path.md` — the post-arc
+baseline of 0027, correct rather than a substitute because no migration ran
+between it and 0028. **The behavioral SQL suite is OWED and lands with 0029**,
+and 0028 does not qualify for the 0025/0026 revokes-only exemption: it REPLACES
+function definitions, which fails in ways a revoke cannot (drifted body, changed
+signature, an argument name PostgREST routes on) — 0027's ruling, applied here.
+The hand-run above is verification, not a substitute for the suite.
+**Committed 2026-08-15 as `7c63cc3`, NOT pushed** — the push waits on 0029 and
+the post-arc diff that covers both.
 
 **Auth backend configured (2026-07-09, dashboard only — no app code):**
 email confirmations ON; Google OAuth provider ENABLED (GCP web client,
