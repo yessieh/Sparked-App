@@ -915,6 +915,27 @@ migration lands between, the NAME is the anchor, not the number.
       A small chip would close the gap. Deliberately not invented during the
       0022 build — the dimming is the minimal honest treatment and the label is
       a copy/design decision, not an implementation detail.
+- [ ] **Event Detail has no not-found empty state — an expired share link is a
+      permanent spinner.** `app/event/[id].tsx` loads over
+      `components/EventDetailView.tsx`; when `event_detail` returns zero rows the
+      screen holds its loading state forever instead of resolving to "this event
+      isn't available." Noticed during the 0028 behavioral pass, verified
+      signed-out against a real archived event id.
+      **The data layer is behaving correctly and must not change** — withholding
+      an archived or deleted event from a stranger is the whole point of the
+      three-branch predicate (0022 policy, transcribed into `app.event_detail` by
+      0028). This is purely the missing client-side terminal state for a legitimate
+      empty result.
+      **Why it matters more than it looks:** share links outlive listings. Every
+      path a host takes to withdraw an event — archive, delete, or an event that
+      simply ended and was tidied away — leaves live URLs in messages, posts and
+      bookmarks, and every one of them currently dead-ends on a spinner rather
+      than an explanation plus a way back to Explore. Distinct from the "Removed
+      by host" chip above, which covers the in-app Saved list for someone who
+      attended; this is the EXTERNAL visitor with no relationship to the event.
+      Copy must not leak why the row is withheld (archived vs. deleted vs. never
+      existed are indistinguishable to a stranger by design, and should stay that
+      way) — one neutral message covers all three.
 
 ---
 
