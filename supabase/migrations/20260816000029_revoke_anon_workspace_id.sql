@@ -1,0 +1,105 @@
+-- ============================================================================
+-- 0029 — Revoke anon SELECT on events.workspace_id.
+--
+-- MIGRATION 2 OF 2 IN THE CURBSIDE ANONYMITY ARC, and the one that closes it.
+-- One revoke. That is the entire payload.
+--
+-- ---------------------------------------------------------------------------
+-- WHAT IT CLOSES. An anonymous caller holding nothing but the public anon key
+-- could issue:
+--
+--   GET /rest/v1/events?select=id,curbside_anonymous,workspace_id,workspaces(name)
+--
+-- and resolve an anonymous Curbside post to its owning workspace and organizer
+-- name in a single request. `workspaces_select_public` is USING (true) and anon
+-- holds SELECT on `workspaces.name` (0015) — deliberately, the Organizer
+-- Profile is a public surface — so the join completes the deanonymization on
+-- its own. The RPCs were never the hole: 0009 masks the name and 0023 nulls
+-- `workspace_id` in RPC output. The DIRECT TABLE READ was the uncovered path,
+-- and it made the mask a formality for anyone who skipped the app.
+--
+-- THE FLAG WAS NOT EVEN NEEDED, which is why this closes more than the case it
+-- was written for. `curbside_anonymous` narrows the search but is not required:
+-- grouping ANY two events by `workspace_id` links them to the same poster, and
+-- any one of them that is not anonymous carries the name. So the exposure was
+-- never "anonymous posts are deanonymizable" — it was that every event on the
+-- table carried a correlatable owner key. This revoke closes the whole
+-- CORRELATION CLASS, not the flagged subset.
+--
+-- Both embed directions go with it: `events?select=workspaces(name)` and
+-- `workspaces?select=events(id)` both resolve through this same FK column, so
+-- neither is available to anon once the grant is gone.
+--
+-- ---------------------------------------------------------------------------
+-- WHY IT IS SAFE NOW AND WAS NOT BEFORE 0028. Both public read paths touch this
+-- column: `events_within_radius` joins `workspaces` ON it, and `event_detail`
+-- returns it masked. While those were SECURITY INVOKER, their bodies were the
+-- CALLER's own query and Postgres privilege-checked every column they touched —
+-- including one that appears only in a join predicate. Either would have raised
+-- `42501 permission denied for table events` for anon the moment this grant went
+-- away, taking down the signed-out storefront.
+--
+-- That is precisely the 0020 -> 0021 outage, and 0028 is what makes this
+-- survivable: both bodies now live on `app` definers and run as owner, so they
+-- no longer consult the caller's column grants at all. The ordering was recorded
+-- as NON-NEGOTIABLE in the tracker before either migration was written, and it
+-- was verified behaviorally between them rather than assumed — signed-out feed,
+-- signed-out published detail, archived-by-id correctly withheld, and the
+-- attendee-history branch still opening from the attendee side.
+--
+-- NO CLIENT PATH READS THIS COLUMN AS anon. Audited at the call site, not
+-- inferred: every anon-reachable surface goes through a definer RPC — Explore
+-- through `events_within_radius`, Event Detail through `event_detail`, the
+-- Organizer Profile through `organizer_profile` (0023). No anon path reads
+-- `events` directly.
+--
+-- ---------------------------------------------------------------------------
+-- WHAT THIS DELIBERATELY DOES NOT CLOSE — stated here so it is not mistaken for
+-- an oversight, and so the next reader does not "finish the job" without
+-- knowing what that costs.
+--
+-- `authenticated` RETAINS SELECT ON events.workspace_id. The consequence, in
+-- plain terms: an anonymous Curbside post is now protected against anyone
+-- holding the anon key, and remains correlatable by anyone holding an ACCOUNT.
+-- Accounts are free. This is a real and deliberate limit, not a closed hole.
+--
+-- Revoking it from `authenticated` too would require converting the host-side
+-- reads that filter or embed on that column onto definers FIRST. They are, by
+-- call site:
+--   * `saved.tsx` — the `workspaces(name)` embed on the Saved query. PostgREST
+--     resolves the embed through this FK, so the caller needs the column.
+--   * `workspace.tsx` — `.eq('workspace_id', workspaceId)` on the listings
+--     read. A WHERE-clause reference needs SELECT just as much as a selected
+--     column does; the column is not in that query's select list at all.
+--   * plus the Me hub and checkout reads that sit alongside them.
+-- Each is its own outage path with its own verification, and bundling four of
+-- them into an arc that already carries one conversion is exactly how the 0020
+-- sequence happened: several read paths changed at once, one of them checked
+-- nothing, and the storefront went down for anon. Tracked as its own item.
+--
+-- ---------------------------------------------------------------------------
+-- THE ROW STAYS FULLY ATTRIBUTED INTERNALLY. This removes a READ PRIVILEGE FROM
+-- ONE ROLE. It does not touch attribution, and nothing about accountability
+-- changes: `events.workspace_id` is still written at insert, still immutable
+-- (0011 withholds it from the UPDATE grant), still the FK the moderation path,
+-- the quota ledger and any lawful request read through. 0009's ruling is
+-- unchanged and now finally true over the API as well as the UI — "it stays
+-- tied to your account; you keep full access to this listing."
+--
+-- GRANT SURFACE: one privilege removed from one role. Nothing granted, no
+-- object created or replaced, no policy or function touched. Expected audit
+-- delta, section 1: anon's column grants on `events` 20 -> 19 (one row removed,
+-- `workspace_id | anon | SELECT`), total 115 -> 114. Any other delta is a
+-- finding. The revoke is effective rather than a no-op because anon holds NO
+-- table-level grant on `events` — 0011 revoked it and re-granted per column,
+-- and a column revoke against a standing table grant would have silently done
+-- nothing (0011's own warning).
+-- ============================================================================
+
+revoke select (workspace_id) on public.events from anon;
+
+-- PostgREST caches column privileges as part of its schema cache and builds its
+-- queries from that cache. Without this it would keep offering the column and
+-- the embed until its next periodic refresh, returning errors rather than the
+-- clean 42501-shaped denial the revoke intends.
+notify pgrst, 'reload schema';
