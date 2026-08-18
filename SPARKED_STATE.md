@@ -286,15 +286,36 @@ Nothing is gated at any width; the full desktop batch still runs once at the end
   NAMED curbside posts show NO ORGANIZER section; attribution folds into the
   ticket info card as "Posted by {first name} · community member" (first
   name = first token of the profile display name). The Curbside form carries
-  a "Post without my name" toggle. DISPLAY ONLY — the row stays fully
-  attributed to the workspace/account internally; quota, moderation, and
-  reports NEVER change. Implemented via `events.curbside_anonymous` (0009)
-  with server-side name-masking in the feed + detail RPCs (an anonymized name
-  never leaves the DB). NO LONGER AN ACCEPTED LIMIT — SCHEDULED: the
-  workspace_id→workspaces join is still API-visible, which does not meet this
-  toggle's stated intent. Tracked as its own arc in
-  SPARKED_CODE_STAGE_TRACKER.md, "ARC: Curbside anonymity — column-level
-  privacy", which carries the toggle copy in the same arc.
+  a "Post without my name" toggle. The row stays fully attributed to the
+  workspace/account INTERNALLY; quota, moderation, reports and lawful-request
+  paths NEVER change. Implemented via `events.curbside_anonymous` (0009) with
+  server-side name-masking in the feed + detail RPCs (an anonymized name never
+  leaves the DB).
+  **THE API-VISIBLE GAP IS CLOSED FOR anon — RESOLVED 2026-08-16 by the
+  Curbside anonymity arc (migrations 0028 + 0029).** This paragraph read
+  "DISPLAY ONLY" and carried a SCHEDULED limit until then, and the limit was
+  real: `events.workspace_id` held an anon SELECT grant, so
+  `/rest/v1/events?select=workspace_id,curbside_anonymous` joined to
+  `workspaces(name)` resolved an anonymous poster to their organizer name in one
+  request. The toggle was true in the UI and false over the REST API. 0029
+  revoked the grant; 0028 was the conversion that made revoking it survivable.
+  Verified live — that query, both embed directions, and the full
+  deanonymization request all return 42501, while a control select without the
+  column still returns rows.
+  **THE TOGGLE COPY NEEDED NO EDIT, recorded explicitly so nobody later hunts
+  for a change that was never made.** "Post without my name" and "Your post will
+  show 'Local host' instead of your name" were always accurate about DISPLAY;
+  what was missing sat behind them, at the API layer. Closing that made the
+  existing words true at every layer rather than requiring different words. The
+  tracker item reading "copy ships in THIS arc" was a SEQUENCING GUARD — it
+  existed to stop a claim shipping AHEAD of the fix that would back it — not a
+  rewrite request.
+  **STILL OPEN, deliberately: `authenticated` retains SELECT on
+  `events.workspace_id`.** An anonymous post is protected against anyone holding
+  the anon key and remains correlatable by anyone holding an account, and
+  accounts are free. Named as its own tracked item in
+  SPARKED_CODE_STAGE_TRACKER.md rather than folded away here, with the four call
+  sites that have to move first.
 - **Anonymous Curbside identity = "Local host" — DECIDED 2026-07-29,
   supersedes "verified neighbor" entirely.** An anonymous post renders the
   STANDARD Organizer section (eyebrow + avatar chip + name) reading
@@ -1352,7 +1373,7 @@ password protection, Pro-gated, deferred to the launch-prep upgrade). **This is
 the number that makes the corrected baseline true rather than merely accurate**
 — it read 0/3 in this document from 2026-07-09 while the database said 0/6, and
 it now says 0/3 because the database does.
-0028 read paths to app-definer (**APPLIED 2026-08-15**; behaviorally verified
+0028 read paths to app-definer (**APPLIED 2026-08-16**; behaviorally verified
 and committed the same day, **not pushed**). **Migration 1 of 2 in the Curbside
 anonymity arc** — the arc that waited on the privilege hardening arc and was
 unblocked by 0027. `public.events_within_radius` and `public.event_detail` move
@@ -1467,8 +1488,99 @@ and 0028 does not qualify for the 0025/0026 revokes-only exemption: it REPLACES
 function definitions, which fails in ways a revoke cannot (drifted body, changed
 signature, an argument name PostgREST routes on) — 0027's ruling, applied here.
 The hand-run above is verification, not a substitute for the suite.
-**Committed 2026-08-15 as `7c63cc3`, NOT pushed** — the push waits on 0029 and
-the post-arc diff that covers both.
+**Committed 2026-08-16 as `7c63cc3`, NOT pushed** — the push waits on 0029 and
+the post-arc diff that covers both. (Both dates in this entry read 2026-08-15
+when first written and were corrected to 2026-08-16 on the day, when the file
+version `20260816000029` made the off-by-one visible. The log's value is being
+accurate about WHEN things happened; 0027 was the 08-15 migration, not these.)
+0029 revoke anon SELECT on events.workspace_id (**APPLIED 2026-08-16**;
+behaviorally verified and committed the same day). **Migration 2 of 2 in the
+Curbside anonymity arc, and the one that CLOSES it.** One statement naming one
+role: `revoke select (workspace_id) on public.events from anon`. Then
+`notify pgrst, 'reload schema'`, because PostgREST builds its queries from a
+cached view of column privileges and would otherwise keep offering the column
+and the embed until its next periodic refresh.
+**WHAT IT CLOSES.** An anonymous caller holding nothing but the public anon key
+could issue
+`GET /rest/v1/events?select=id,curbside_anonymous,workspace_id,workspaces(name)`
+and resolve an anonymous Curbside post to its owning workspace and organizer
+name in a single request. `workspaces_select_public` is USING (true) and anon
+holds SELECT on `workspaces.name` (0015) — both deliberate, the Organizer
+Profile is a public surface — so the join finished the job unaided. **The RPCs
+were never the hole**: 0009 masks the name and 0023 nulls `workspace_id` in RPC
+output. The DIRECT TABLE READ was the uncovered path, and it made the mask a
+formality for anyone who skipped the app.
+**THE FLAG WAS NOT EVEN NEEDED, which is why this closes more than the case it
+was written for.** `curbside_anonymous` narrows the search but is not required:
+grouping ANY two events by `workspace_id` links them to the same poster, and any
+one of them that is not anonymous carries the name. The exposure was never
+"anonymous posts are deanonymizable" — it was that **every event on the table
+carried a correlatable owner key**. This closes the whole CORRELATION CLASS.
+**WHY IT WAS SAFE ONLY AFTER 0028.** Both public read paths touch the column —
+`events_within_radius` joins `workspaces` ON it, `event_detail` returns it
+masked. While those were SECURITY INVOKER their bodies were the CALLER's own
+query, and either would have raised `42501 permission denied for table events`
+for anon the moment the grant went away. That is the 0020 → 0021 outage exactly.
+0028 moved both onto `app` definers that run as owner and no longer consult the
+caller's column grants. **The ordering was recorded NON-NEGOTIABLE in the
+tracker before either file was written**, and verified between them rather than
+assumed.
+**VERIFIED LIVE, anon side, probed through the REST API against the linked
+project from the running dev server with the session confirmed signed out**
+(zero console errors, no auth token). Five probes: the direct
+`select=id,curbside_anonymous,workspace_id` → **42501**; the full
+deanonymization query above → **42501**; the forward embed
+`events?select=workspaces(name)` → **42501**; the REVERSE embed
+`workspaces?select=events(id)` → **42501**; and a CONTROL
+`select=id,title,starts_at` → **200 with rows**. The reverse-embed result
+confirmed a claim the migration header asserted and nothing had yet checked —
+both embed directions resolve through the same FK column. The control is what
+proves the revoke is surgical rather than a blanket denial.
+**Storefront intact, same run:** feed 11 rows with PostGIS distances computing
+(0.4 / 1.2 / 3.38 mi, which also confirms `extensions` on the 0028 definers'
+search_path); `event_detail` returns **null organizer_name AND null
+workspace_id** on an anonymous post and both populated on a named one;
+`organizer_profile` still reachable from the id `event_detail` hands back;
+the archived event by direct id returns **zero rows rather than an error**. The
+feed RPC returned exactly 3 masked rows while the rendered DOM showed exactly 3
+"Local host" cards — **two independent surfaces agreeing**, which is the check
+a single-source assertion cannot give you.
+**Signed-in side verified by hand**, and the first two matter most because they
+are the paths that depend on the grant this migration deliberately did NOT
+touch: Saved renders and taps through to detail (the `workspaces(name)` embed at
+`saved.tsx:187`); Workspace stats AND listings populate (the
+`.eq('workspace_id', …)` filter at `workspace.tsx:501`); an archived event opens
+from Workspace Past (branch 1); an ended RSVP'd event opens from Saved
+(branch 3).
+**WHAT IT DELIBERATELY DOES NOT CLOSE, and this is a limit rather than a
+finished job: `authenticated` RETAINS SELECT on `events.workspace_id`.** In
+plain terms — **an anonymous Curbside post is now protected against anyone
+holding the anon key, and remains correlatable by anyone holding an account.
+Accounts are free.** Revoking it there too requires converting the host-side
+reads that filter or embed on that column onto definers FIRST: `saved.tsx`
+(the embed), `workspace.tsx` (the filter), plus the Me hub and checkout reads
+beside them. Each is its own outage path with its own verification, and bundling
+four of them into an arc that already carried one conversion is **exactly how
+the 0020 sequence happened** — several read paths changed at once, one of them
+checked nothing, and the storefront went down for anon. Tracked as its own item
+in SPARKED_CODE_STAGE_TRACKER.md; **this entry must not be read as the gap being
+closed.**
+**Attribution is UNCHANGED.** This removes a read privilege from one role, not
+the attribution itself: `workspace_id` is still written at insert, still
+immutable (0011 withholds it from the UPDATE grant), and still the FK that
+moderation, the quota ledger and any lawful request read through. 0009's ruling
+stands and is now true over the API as well as the UI.
+**Behavioral suite: `scripts/qa-0028-0029-curbside-anonymity.sql`.** This arc
+does NOT get 0025/0026's revokes-only exemption — 0028 replaced function
+definitions and moved a visibility rule out of a policy and into a function
+body, which fails in ways a revoke cannot. Post-arc audit diffed against
+`supabase/audits/baselines/2026-08-15-post-wrapper-search-path.md`, the post-arc
+baseline of 0027 — correct rather than a substitute, because no migration ran
+between it and 0028. Expected deltas, all four named: two new `app` rows in
+section 4 (the 0028 definers), the `config` cell on the two existing `public`
+rows moving `search_path=public, extensions` → `public, app`, and section 1
+losing exactly one row (`events | workspace_id | anon | SELECT`, 20 → 19 anon
+column grants on `events`, total 115 → 114). Anything else is a finding.
 
 **Auth backend configured (2026-07-09, dashboard only — no app code):**
 email confirmations ON; Google OAuth provider ENABLED (GCP web client,

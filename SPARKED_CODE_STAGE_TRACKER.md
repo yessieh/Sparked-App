@@ -345,30 +345,79 @@ migration lands between, the NAME is the anchor, not the number.
 
 ---
 
-## ARC: Curbside anonymity — column-level privacy (own arc, after migrations 1-3 verify green)
+## ARC: Curbside anonymity — column-level privacy (COMPLETE for anon, 2026-08-16)
 
 > **The intent this serves:** a Curbside poster who selects "Post without my name"
 > must be anonymous to the public **including over the REST API**, remain identified
 > in our records for moderation and lawful request, and stay anonymous against
 > someone querying PostgREST with the anon key.
+>
+> **STATUS 2026-08-16: both migrations applied, verified end to end, committed.**
+> The intent above is met **against the anon key**. It is NOT met against a
+> signed-in caller — see the deferred item at the bottom of this section, which is
+> the honest remainder and is tracked rather than closed.
 
-- [ ] **The gap.** `events.workspace_id` carries an anon SELECT grant, so
-      `/rest/v1/events?select=workspace_id,curbside_anonymous` resolves an anonymous
+- [x] **The gap.** `events.workspace_id` carried an anon SELECT grant, so
+      `/rest/v1/events?select=workspace_id,curbside_anonymous` resolved an anonymous
       poster to their workspace, and `workspaces_select_public` (USING true) plus
-      anon's SELECT on `workspaces.name` completes the deanonymization. The RPCs mask
-      the name and 0023 nulls `workspace_id` in RPC output; **the direct table read is
-      the uncovered path.**
-- [ ] **Required order — NON-NEGOTIABLE.** Convert `public.events_within_radius` and
+      anon's SELECT on `workspaces.name` completed the deanonymization. The RPCs mask
+      the name and 0023 nulls `workspace_id` in RPC output; **the direct table read was
+      the uncovered path.** CLOSED by `0029_revoke_anon_workspace_id`
+      (`supabase/migrations/20260816000029_revoke_anon_workspace_id.sql`).
+      **It closed more than the flagged case:** the flag was never needed to run the
+      attack — grouping any two events by `workspace_id` links them to one poster and
+      any non-anonymous one carries the name — so the whole correlation class went
+      with it, not just anonymous posts.
+- [x] **Required order — NON-NEGOTIABLE.** Convert `public.events_within_radius` and
       `public.event_detail` to the `app`-definer / `public`-invoker convention FIRST,
       verify the signed-out storefront, THEN revoke anon SELECT on
       `events.workspace_id`. Reversed, this reproduces the 0020 → 0021 outage: an RLS
       policy expression needs no caller column privilege, but a SECURITY INVOKER
       function body privilege-checks every column it touches, including ones that
       appear only in a WHERE clause.
-- [ ] **Mini-form toggle copy ships in THIS arc, not after.** Today "Your post will
+      **Followed exactly:** `0028_read_paths_to_definer` applied and verified first,
+      `0029` second. **0028 also turned up something the brief had not anticipated** —
+      SECURITY DEFINER bypasses RLS, so moving `event_detail`'s body verbatim would
+      have un-hidden drafts, `pending_payment` rows and archived events to anyone
+      holding an id. `events_select_public`'s three branches are transcribed into the
+      body as a result; `events_within_radius` needed no such transcription because
+      its own filters are strictly narrower than any policy branch that could admit
+      its rows.
+- [x] **Mini-form toggle copy ships in THIS arc, not after.** Today "Your post will
       show 'Local host' instead of your name" is display-true and API-false. The
       schema change and the copy must land together or we are making a claim we do not
       back — the same reasoning that removed "verified neighbor."
+      **RESOLVED WITH NO COPY CHANGE, and that is the finding.** The copy was always
+      accurate about DISPLAY; what was missing sat behind it at the API layer, so
+      closing the gap made the existing words true at every layer rather than
+      requiring different words. **This item was a sequencing guard — stop a claim
+      shipping AHEAD of the fix that backs it — not a rewrite request.** Recorded here
+      and in SPARKED_STATE.md so nobody later hunts for a copy change that was never
+      needed.
+- [ ] **DEFERRED, and the honest remainder of this arc: `authenticated` still holds
+      SELECT on `events.workspace_id`.** State it plainly — **an anonymous Curbside
+      post is protected against anyone holding the anon key, and remains correlatable
+      by anyone holding an account. Accounts are free.** This is a real limit, not a
+      closed hole, and it is deliberately not papered over in the 0029 header or the
+      state log.
+      **Why it was not done in the same arc:** revoking it requires converting every
+      host-side read that filters or embeds on that column onto definers FIRST, or
+      each one 42501s the moment the grant goes — the 0021 failure, repeated four
+      times. The call sites, named so this starts from code rather than a
+      re-investigation:
+      - `apps/mobile/src/app/(tabs)/saved.tsx:187` — the `workspaces(name)` embed.
+        PostgREST resolves the embed through the FK, so the caller needs the column.
+      - `apps/mobile/src/app/(tabs)/workspace.tsx:501` — `.eq('workspace_id', …)` on
+        the listings read. **A WHERE-clause reference needs SELECT just as much as a
+        selected column does**; the column is not in that query's select list at all,
+        which is exactly how 0021 hid.
+      - the **Me hub** (`me.tsx`) and **checkout** (`create/checkout.tsx`) reads
+        alongside them — neither names the column today, both are on the same table
+        and want re-checking at conversion time rather than assuming.
+      Bundling four conversions into an arc that already carried one is how the 0020
+      sequence happened: several read paths changed at once, one of them checked
+      nothing, and the storefront went down for anon. **Do this as its own arc, with
+      its own pre/post audit.**
 
 ---
 
