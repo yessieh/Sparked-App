@@ -1,14 +1,18 @@
 // EventStub — the universal event card (photo + compact variants).
 // Rebuilt native from the design-reference visual spec, with the LOCKED rules:
-//   • category stripe (left edge) = category color, all variants
+//   • LANE stripe (left edge), all variants — free community post vs paid
+//     listing. This SUPERSEDES the earlier "stripe = category color" rule;
+//     reasoning and the WCAG failure that forced it live in
+//     theme/categoryColors.ts and docs/ACCESSIBILITY.md.
 //   • perforated divider + right utility column with Montserrat countdown
 //   • price line = ATTENDEE ENTRY FEE only, in the card body under the
 //     location row: Free = green semantic pill; paid = green $ icon +
 //     bright #eef0ff amount at 600, ONE $ only, never gradient
 //   • category badges = informational, outlined/tinted, never gradient
 //   • Going chip/button = SEMANTIC green; Saved = gold bookmark tint
-// No photos table yet — the photo header renders a category-tinted gradient
-// placeholder until real uploads land (stage 5).
+// No photos table yet — the photo header renders a lane-tinted gradient
+// placeholder until real uploads land (stage 5), so it is now one of two
+// colors rather than thirteen. It disappears when uploads arrive.
 // Save/Going buttons only render when handlers are passed; anonymous gating
 // (route to auth) is the calling screen's decision.
 
@@ -18,7 +22,7 @@ import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
 import { eventCountdown, eventDateLabel, eventTimeLabel } from '../lib/eventTime';
 import { brand, useTheme } from '../theme';
-import { categoryColor } from '../theme/categoryColors';
+import { laneStripeColor, type EventLane } from '../theme/categoryColors';
 
 export interface FeedEvent {
   id: string;
@@ -30,6 +34,17 @@ export interface FeedEvent {
   venue_name: string | null;
   entry_fee_cents: number;
   categories: string[] | null;
+  /**
+   * Which lane this listing is in — free community post vs paid listing. Drives
+   * the stripe color ONLY.
+   *
+   * This is a DERIVED field, not `tier_id`. Callers compute it with `laneFor()`
+   * and pass the result, so the card's data model never gains tier: the locked
+   * EventStub rule is consumer-facing data only, and tier is host economics
+   * (see the note at the top of organizer/[id].tsx). Standard and Plus both
+   * arrive here as 'paid' and are indistinguishable, by design.
+   */
+  lane: EventLane;
   /** Present on feed RPC rows; absent on Saved-screen fetches (no origin). */
   distance_miles?: number;
   rsvp_count?: number;
@@ -376,7 +391,7 @@ export default function EventStub({
   }, []);
 
   const cats = event.categories ?? [];
-  const stripe = categoryColor(cats);
+  const stripe = laneStripeColor(event.lane, theme.colors);
   const cd = eventCountdown(event.starts_at, event.ends_at);
 
   const actionButtons = (onToggleSave || onToggleGoing) && (
@@ -409,7 +424,15 @@ export default function EventStub({
           boxShadow: theme.shadows.card,
         }}
       >
-        <View style={{ width: 5, backgroundColor: stripe }} />
+        {/* Decorative: the lane is stated in words by the CURBSIDE badge, so
+            this carries no information of its own. Hidden from assistive tech
+            rather than announced as an unlabelled element. */}
+        <View
+          style={{ width: 5, backgroundColor: stripe }}
+          aria-hidden
+          accessibilityElementsHidden
+          importantForAccessibility="no"
+        />
         <View style={{ flex: 1, minWidth: 0, paddingHorizontal: 15, paddingVertical: 13 }}>
           <CategoryBadges categories={cats} />
           <Text
@@ -519,8 +542,14 @@ export default function EventStub({
         boxShadow: theme.shadows.card,
       }}
     >
-      {/* category stripe — locked: stripe color = category, ALL variants */}
-      <View style={{ width: 5, backgroundColor: stripe }} />
+      {/* lane stripe — free community post vs paid listing, ALL variants.
+          Decorative; hidden from assistive tech, see the compact variant. */}
+      <View
+        style={{ width: 5, backgroundColor: stripe }}
+        aria-hidden
+        accessibilityElementsHidden
+        importantForAccessibility="no"
+      />
 
       <View style={{ flex: 1, minWidth: 0 }}>
         {/* photo header — gradient placeholder until real uploads (stage 5) */}

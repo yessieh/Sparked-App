@@ -22,7 +22,7 @@ import Svg, { Path, Rect } from 'react-native-svg';
 import { useReducedMotion } from '../lib/useReducedMotion';
 import { eventCountdown, eventDateLabel, eventTimeLabel } from '../lib/eventTime';
 import { brand, useTheme } from '../theme';
-import { categoryColor } from '../theme/categoryColors';
+import { categoryColor, laneFor, laneStripeColor } from '../theme/categoryColors';
 import { GradientButton, GradientFill, SecondaryButton } from './AuthControls';
 import EventGallery, { type GalleryPhoto } from './EventGallery';
 import { CategoryBadges, Perforation, PriceLine } from './EventStub';
@@ -218,7 +218,13 @@ export default function EventDetailView({
   }, [going, reducedMotion, stampAnim, markOpacity, markScale, stampPressed]);
 
   const cats = event.categories ?? [];
-  const stripe = categoryColor(cats);
+  // This surface HAS tier_id (it is not FeedEvent), so the lane is derived here
+  // rather than passed in.
+  const stripe = laneStripeColor(laneFor(event.tier_id), theme.colors);
+  // SiteMap keeps the legacy category tint pending its own accent decision —
+  // pointing it at the lane would render every site map one color, since site
+  // maps are Plus-only and Plus is never Curbside. See theme/categoryColors.ts.
+  const siteMapTint = categoryColor(cats);
   const cd = eventCountdown(event.starts_at, event.ends_at);
   const shots = photos ?? placeholderPhotos(event.id, event.tier_id, stripe);
   const stripeColor = stampAnim.interpolate({
@@ -254,7 +260,7 @@ export default function EventDetailView({
               {event.title}
             </Text>
 
-            {/* Full-width ticket — stripe = category color (locked; the
+            {/* Full-width ticket — stripe = LANE color (the
                 prototype's gradient stripe was drift), perforation,
                 countdown column, fee line under the location row. */}
             <View
@@ -270,8 +276,16 @@ export default function EventDetailView({
                 marginBottom: 22,
               }}
             >
-              {/* stripe sweeps category color → semantic green on stamp */}
-              <Animated.View style={{ width: 5, backgroundColor: stripeColor }} />
+              {/* stripe sweeps lane color → semantic green on stamp.
+                  Decorative: the Going state is announced by the chip and the
+                  CTA, so this is hidden from assistive tech rather than
+                  announced as an unlabelled element. */}
+              <Animated.View
+                style={{ width: 5, backgroundColor: stripeColor }}
+                aria-hidden
+                accessibilityElementsHidden
+                importantForAccessibility="no"
+              />
               <View style={{ flex: 1, minWidth: 0, paddingHorizontal: 14, paddingVertical: 17, gap: 11, justifyContent: 'center' }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
                   <RowIcon kind="cal" color={brand.flameRed} />
@@ -493,7 +507,7 @@ export default function EventDetailView({
                   Site map &amp; vendors
                 </Text>
                 <View style={{ marginTop: 12 }}>
-                  <SiteMap vendors={vendors} tint={stripe} />
+                  <SiteMap vendors={vendors} tint={siteMapTint} />
                 </View>
                 <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 11.5, color: theme.colors.textFaint, marginTop: 8 }}>
                   Tap a pin or a vendor to highlight it · {vendors.length} vendor{vendors.length === 1 ? '' : 's'}

@@ -70,7 +70,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import { getOrCreateWorkspace, getOwnWorkspaceId } from '../../lib/workspace';
 import { brand, breakpoints, useTheme } from '../../theme';
-import { categoryColor } from '../../theme/categoryColors';
+import { categoryColor, laneFor, laneStripeColor } from '../../theme/categoryColors';
 
 const STEPS = ['Basics', 'When & Where', 'Tier', 'Details', 'Review'] as const;
 const TIER_STEP = STEPS.indexOf('Tier');
@@ -1030,8 +1030,12 @@ export default function EventWizard() {
       // The CARD reads the attendee entry fee — never the publish fee.
       entry_fee_cents: feeCents,
       categories: cats.length ? cats : null,
+      // The wizard never produces a Curbside event (that lane has its own mini
+      // form), so this is always 'paid' — derived through laneFor anyway rather
+      // than hardcoded, so the rule lives in exactly one place.
+      lane: laneFor(tier),
     }),
-    [title, startsAt, endsAt, venueName, address, feeCents, cats, workspaceName],
+    [title, startsAt, endsAt, venueName, address, feeCents, cats, workspaceName, tier],
   );
 
   /** The draft as the real Event Detail sees it. Note publish_fee_cents has no
@@ -1185,7 +1189,14 @@ export default function EventWizard() {
       <EventDetailView
         event={previewDetail}
         preview
-        photos={placeholderPhotos('preview', tier, categoryColor(cats), photos.length || 1)}
+        photos={placeholderPhotos(
+          'preview',
+          tier,
+          // Lane, matching the real Event Detail — the preview must render the
+          // same pixels as what publishes.
+          laneStripeColor(laneFor(tier), theme.colors),
+          photos.length || 1,
+        )}
         vendors={vendors}
         onBack={() => setShowPreview(false)}
       />

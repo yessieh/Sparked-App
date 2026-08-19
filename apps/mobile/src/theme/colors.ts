@@ -56,6 +56,18 @@ export interface Palette {
   green: string;
   danger: string;
   focusRing: string;
+  /**
+   * EventStub / Event Detail stripe. Encodes the LANE — free community post vs
+   * paid listing — NOT the category. See theme/categoryColors.ts for the
+   * reversal of the old "stripe = category color" rule.
+   *
+   * The two are deliberately close: the CURBSIDE badge already states the lane
+   * in text, and the stripe only reinforces it. Do not widen the gap between
+   * them. Each pair IS held to WCAG 1.4.11 (3:1) against its own card surface —
+   * ratios recorded in docs/ACCESSIBILITY.md.
+   */
+  stripeFree: string;
+  stripePaid: string;
 }
 
 export const darkPalette: Palette = {
@@ -76,6 +88,9 @@ export const darkPalette: Palette = {
   green: '#4ade80',
   danger: '#ef4444',
   focusRing: brand.ignitionGold,
+  // 6.05:1 and 4.65:1 against the composited card surface (#1d2a45).
+  stripeFree: '#E8964A',
+  stripePaid: '#E86F52',
 };
 
 export const lightPalette: Palette = {
@@ -96,4 +111,8 @@ export const lightPalette: Palette = {
   green: '#16a34a',
   danger: '#b91c1c',
   focusRing: brand.sparkOrange,
+  // Darker than the dark-mode pair, same hue — the semantic-green precedent
+  // (#4ade80 -> #16a34a). 3.51:1 and 4.90:1 against #ffffff cards.
+  stripeFree: '#C4762E',
+  stripePaid: '#C4472C',
 };

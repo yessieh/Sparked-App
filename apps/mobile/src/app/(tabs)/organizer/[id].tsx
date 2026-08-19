@@ -39,6 +39,7 @@ import { socialUrl, type SocialPlatform } from '../../../lib/socialLinks';
 import { supabase } from '../../../lib/supabase';
 import { SOCIAL_FIELDS, useMyWorkspace } from '../../../lib/workspace';
 import { brand, useTheme } from '../../../theme';
+import { laneFor } from '../../../theme/categoryColors';
 
 type Theme = ReturnType<typeof useTheme>;
 
@@ -48,6 +49,9 @@ type Theme = ReturnType<typeof useTheme>;
 interface ProfileEvent {
   id: string;
   title: string;
+  /** In the RPC payload. Read ONLY to derive the stripe lane — see the header
+   * note: it is still never mapped onto FeedEvent. */
+  tier_id: string | null;
   starts_at: string;
   ends_at: string | null;
   venue_name: string | null;
@@ -420,6 +424,9 @@ export default function OrganizerProfileScreen() {
       entry_fee_cents: e.entry_fee_cents,
       rsvp_count: (e.rsvp_count ?? 0) + rsvpDelta(e.id),
       categories: e.categories,
+      // The lane is DERIVED here; tier_id itself is still never mapped, which
+      // is what the header note above is protecting.
+      lane: laneFor(e.tier_id),
       // distance_miles deliberately absent: no origin on this surface.
     }),
     [profile?.name, rsvpDelta],

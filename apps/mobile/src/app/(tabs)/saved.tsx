@@ -19,6 +19,7 @@ import { useEngagement } from '../../lib/engagement';
 import { hasEnded, savedBucket, type SavedBucket } from '../../lib/eventTime';
 import { supabase } from '../../lib/supabase';
 import { brand, useTheme } from '../../theme';
+import { laneFor } from '../../theme/categoryColors';
 
 const BUCKET_LABELS: Record<SavedBucket, string> = {
   tonight: 'Tonight',
@@ -30,6 +31,8 @@ const BUCKET_ORDER: SavedBucket[] = ['tonight', 'weekend', 'coming'];
 interface SavedEventRow {
   id: string;
   title: string;
+  /** Stripe lane only — never rendered. See the select list below. */
+  tier_id: string | null;
   starts_at: string;
   ends_at: string | null;
   venue_name: string | null;
@@ -184,7 +187,10 @@ export default function Saved() {
     const { data, error: eventsError } = await supabase
       .from('events')
       .select(
-        'id,title,starts_at,ends_at,venue_name,entry_fee_cents,rsvp_count,curbside_anonymous,archived_at,deleted_at,workspaces(name),event_categories(category_id)',
+        // tier_id is read ONLY to derive the stripe lane (laneFor) — it is never
+        // rendered and never reaches FeedEvent, per the locked consumer-facing
+        // rule that keeps tier off the card.
+        'id,title,tier_id,starts_at,ends_at,venue_name,entry_fee_cents,rsvp_count,curbside_anonymous,archived_at,deleted_at,workspaces(name),event_categories(category_id)',
       )
       .in('id', ids)
       .eq('status', 'published')
@@ -232,6 +238,7 @@ export default function Saved() {
         entry_fee_cents: r.entry_fee_cents,
         rsvp_count: r.rsvp_count + rsvpDelta(r.id),
         categories: r.event_categories.map((c) => c.category_id),
+        lane: laneFor(r.tier_id),
       };
       // Ended events split off BEFORE bucketing. savedBucket reads starts_at
       // against two forward-looking windows only, so anything in the past fell

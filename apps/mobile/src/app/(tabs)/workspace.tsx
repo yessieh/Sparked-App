@@ -52,6 +52,7 @@ import {
   type Workspace,
 } from '../../lib/workspace';
 import { brand, breakpoints, useTheme } from '../../theme';
+import { laneFor } from '../../theme/categoryColors';
 
 type Theme = ReturnType<typeof useTheme>;
 
@@ -61,6 +62,9 @@ type Theme = ReturnType<typeof useTheme>;
 interface WorkspaceEventRow {
   id: string;
   title: string;
+  /** Stripe lane only — never rendered. `publish_fee_cents` is still never
+   * selected; tier here buys a stripe color, not a host-economics surface. */
+  tier_id: string | null;
   starts_at: string;
   ends_at: string | null;
   venue_name: string | null;
@@ -72,7 +76,7 @@ interface WorkspaceEventRow {
 }
 
 const EVENT_COLUMNS =
-  'id,title,starts_at,ends_at,venue_name,entry_fee_cents,rsvp_count,deleted_at,archived_at,event_categories(category_id)';
+  'id,title,tier_id,starts_at,ends_at,venue_name,entry_fee_cents,rsvp_count,deleted_at,archived_at,event_categories(category_id)';
 
 type Counts = Map<string, { rsvps: number; saves: number }>;
 
@@ -566,6 +570,7 @@ function WorkspaceDetail({
         // stats RPC is the thing that failed (see `renderStubs`).
         rsvp_count: r.rsvp_count,
         categories: r.event_categories.map((c) => c.category_id),
+        lane: laneFor(r.tier_id),
       };
       // Archived events go into their own section (0019).
       if (r.archived_at) {

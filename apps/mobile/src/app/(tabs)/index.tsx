@@ -23,6 +23,7 @@ import { TEST_ORIGIN } from '../../lib/devOrigin';
 import { useEngagement } from '../../lib/engagement';
 import { supabase } from '../../lib/supabase';
 import { brand, tracking, trackingEm, useTheme } from '../../theme';
+import { laneFor } from '../../theme/categoryColors';
 
 const RADIUS_MILES = 25;
 
@@ -44,7 +45,15 @@ export default function Explore() {
       setError(rpcError.message);
     } else {
       setError(null);
-      setEvents((data ?? []) as FeedEvent[]);
+      // Mapped rather than cast: the RPC returns tier_id, FeedEvent deliberately
+      // has no such field, and `lane` is derived from it here. A blanket cast
+      // would have compiled while leaving every stripe undefined.
+      setEvents(
+        (data ?? []).map((r: FeedEvent & { tier_id?: string | null }) => ({
+          ...r,
+          lane: laneFor(r.tier_id),
+        })),
+      );
     }
   }, []);
 
