@@ -34,6 +34,11 @@ iOS + Android via Expo/EAS. Read-heavy workload (far more reads than writes).
   `#ffca3a` gold (links/stat numbers/countdowns)
 - **Green `#4ade80`:** SEMANTIC only — free / going / confirmed states. Not a brand accent, not a
   category color. (Documented so it doesn't cause drift.)
+  **THIS RULE STANDS — it is the reason the whole category-colour map was
+  rejected in its original form** (see schema lock 6). Note only that "not a
+  category color" now describes a category that has no colour at all: the
+  thirteen-hue map was retired 2026-08-19 and nothing in the product assigns a
+  colour per category. Green's semantic reservation is unaffected and binding.
 - **Text:** `#eef0ff` primary, `rgba(238,240,255,0.5)` muted, `rgba(238,240,255,0.25)` hint
 
 ### Light mode
@@ -60,7 +65,12 @@ ONE `EventStub` component, multiple variants via a `variant` prop:
 - **`expanded`** — event detail page (full-width ticket)
 
 Constant across ALL variants:
-- **Category stripe** (left edge, color = event category)
+- ~~**Category stripe** (left edge, color = event category)~~
+  **SUPERSEDED 2026-08-19 → LANE stripe.** The left-edge stripe is constant on
+  all variants as stated; what it ENCODES changed. It is now the lane — free
+  community post (Curbside) vs paid listing (Standard/Plus) — in two near-
+  identical hues per mode, not thirteen category colours. Full reasoning at the
+  Stripe rule below.
 - **Perforated divider** (dashed vertical line)
 - **Right utility column** with the Montserrat countdown ("STARTS IN 4h", "IN 2 DAYS")
 
@@ -70,7 +80,10 @@ Constant across ALL variants:
   "Sponsored." This protects feed trust, which is the whole "no algorithm" pitch.
 - **Two badge languages, kept distinct:** *filter pills* (interactive, gradient when active) vs.
   *category badges* (informational, outlined/tinted, NEVER gradient).
-- **Stripe color = category.** Green stripe/chip = semantic (free/going), not a category.
+- ~~**Stripe color = category.**~~ **SUPERSEDED 2026-08-19 → stripe colour =
+  LANE.** See the Stripe rule below for why. **The second half of this line
+  survives unchanged and is still binding:** green stripe/chip = semantic
+  (free/going), never a lane colour and never a category.
 
 ### EventStub price line (LOCKED — resolved over a long debugging thread)
 - **The card shows the ATTENDEE ENTRY FEE only — never the host publish fee.**
@@ -81,13 +94,42 @@ Constant across ALL variants:
 - **Value binding:** card price reads `entryFee` (attendee fee), NOT the derived
   publish `price`. **DECIDED: entry-fee display is ALL-TIER** (customer trust —
   a Standard event charging at the door must not imply "free"). The prototype's
-  `isPlus &&` gate (AppScreens.jsx:404, :1009) is a KNOWN BUG in frozen
-  reference — production ignores it. Plus differentiates via gallery + site
-  map/vendors.
-- **Stripe rule (DECIDED):** the card stripe is the CATEGORY COLOR on ALL
-  variants. The prototype's gradient stripe (photo variant, Event Detail,
-  EventStub.tsx) was undecided drift — production removes ALL decorative
-  gradients; gradient = actionable only.
+  `isPlus &&` gate
+  (`design-reference/ui_kits/mobile-app/AppScreens.jsx:404, :1009`) is a KNOWN
+  BUG in frozen reference — production ignores it. Plus differentiates via
+  gallery + site map/vendors.
+- ~~**Stripe rule (DECIDED):** the card stripe is the CATEGORY COLOR on ALL
+  variants.~~ **SUPERSEDED 2026-08-19 — the stripe encodes the LANE, not the
+  category.** Two hues per mode instead of thirteen:
+  `stripeFree` / `stripePaid` in `theme/colors.ts`, resolved by
+  `laneFor(tier_id)` in `theme/categoryColors.ts`.
+  **Why the original rule did not survive contact, kept because it is the
+  argument against reinstating it:** it was never a complete system — only 9 of
+  13 categories ever got a hue, so Wellness, Nightlife, Sports and Tech fell
+  through to brand orange and their stripe already carried no category
+  information, rendering the same colour as the badge beside it; and the badges
+  render flat `#FCA311` regardless of category, so colour was doing half the job
+  even where a hue existed. **The decisive reason was accessibility: all ten
+  values FAILED WCAG 1.4.11 (3:1 non-text) against `#ffffff` light-mode cards,
+  measured 1.67:1 to 2.98:1.** They passed only in dark mode, which is why it
+  went unnoticed. Measurements and method in `docs/ACCESSIBILITY.md`.
+  **No information was lost** — the category is still conveyed as TEXT in the
+  badges, all thirteen labels intact.
+  **The lane is never carried by colour alone:** the CURBSIDE badge states it in
+  words, curbside is auto-tagged and sorts first (`sort_order` 0), so the
+  2-badge cap can never push it into the `+N` overflow.
+- **Gradient rule — STILL ABSOLUTE, with one named, expiring exception.**
+  Production removes ALL decorative gradients; gradient = actionable only. The
+  prototype's gradient STRIPE (photo variant, Event Detail) was undecided drift
+  and is gone for good.
+  **The exception, knowingly retained in the 2026-08-19 stripe pass:** the photo
+  header on the `photo` variant renders a deep-navy → lane-colour gradient
+  placeholder (`components/EventStub.tsx`) because **there is no photos table and
+  no Supabase Storage bucket yet** — it stands in for a real uploaded image, not
+  for decoration. It is now one of two colours rather than thirteen.
+  **It dies when real image uploads land**; at that point the gradient rule has
+  no exceptions again. Recorded here so the rule and its one carve-out are both
+  on the record and neither is discovered as a surprise.
 - **Free state:** green semantic pill ("Free" + ticket icon). `#4ade80`
   (light mode: `#16a34a`), never gradient.
 - **Paid state:** inline "$N per person" — `$` ICON green `#4ade80`, amount text
@@ -869,7 +911,7 @@ of reply and time-weighting, which are visible, or not at all.
 | Screen | State | Notes |
 |---|---|---|
 | **Filter finder** (Explore) | ✅ Proven | Inline expanding field; overlays dimmed feed (NOT full-screen). Matches filters only (interests/price/when/distance) via a **filter registry** array — new filters auto-searchable. Exact substring-on-label match (no fuzzy/keyword). Live "N nearby" counts computed from real events. Contiguous-only highlight. |
-| **Radius overflow** | ✅ Proven | SEARCH results only — feed stays strict in-radius. Triggers when in-radius matches < 3. Expansion cap `min(radius×1.5, radius+15mi)`. Overflow cards stepped-back, show BOTH "+X mi past radius" AND true total distance. Respects active filters. Finder counts stay strictly in-radius. **Demo distances are a hardcoded `mi` field — production MUST compute from real geography (PostGIS).** |
+| **Radius overflow** | ✅ Proven | SEARCH results only — feed stays strict in-radius. Triggers when in-radius matches < 3. Expansion cap `min(radius×1.5, radius+15mi)`. Overflow cards stepped-back, show BOTH "+X mi past radius" AND true total distance. Respects active filters. Finder counts stay strictly in-radius. ~~**Demo distances are a hardcoded `mi` field — production MUST compute from real geography (PostGIS).**~~ **DONE — PostGIS distance is live.** `events_within_radius` computes `st_distance / 1609.344` and the feed renders real values (0.4 / 1.2 / 3.38 mi verified 2026-08-16 during the 0028 pass). The hardcoded `mi` field exists only in the frozen reference. |
 | **Event detail** | ✅ Proven | Info card = full-width ticket (stripe/perforation/countdown). Category pills → outlined badges. RSVP "stamp" interaction (stripe turns green, Going chip + count, STAMPED mark animates in, CTA → confirmed). 1–3 photo gallery (swipeable hero w/ peek, gradient-pill dots, "1/3" counter, thumbnail strip w/ gold ring). "I'm Going" gradient primary; "Share" secondary outline. |
 | **Saved page** | ✅ Proven · **PAST SECTION ADDED 2026-07-29** | Ticket stubs grouped Tonight / This Weekend / Coming Up (section renders only if populated). Compact EventStub variant. Green "Going" / muted "Saved" chips + RSVP count. **Ended events now collapse into a "Past · N" section at the bottom** — see the Saved grouping lock below. |
 | **Logged-out "Me"** | ✅ Proven | Signup invitation (not empty shell). Lists what an account unlocks. Browse + share stay open to guests. |
@@ -914,8 +956,16 @@ of reply and time-weighting, which are visible, or not at all.
 Real image uploads (cover/gallery/vendor logo), Share button, gallery swipe + social links
 rendering on Review, and published events appearing in Workspace. All need real backend/APIs
 (Supabase + Stripe + device share). Wire at Code stage.
-| **Logo** (Twin Flames) | ✅ Proven | `SparkedLogo.tsx` + favicon SVG + 1024 app icon. |
-| **Pricing tiers** | ⚠️ Needs revisit | Built (Standard $10/day, Plus $30/day Recommended, Enterprise Custom). "Everything in X, plus" additive structure. Three checkmark states (orange-outline = included, solid-orange = new in tier, faded = coming soon). **MUST re-sync with Create Event's tier step now that Create is built.** |
+### PROVEN SCREENS, continued
+
+*(These two rows belong to the table above. They were orphaned by the prose
+sections inserted between — the header and separator are repeated here so they
+render as a table at all.)*
+
+| Screen | State | Notes |
+|---|---|---|
+| **Logo** (Twin Flames) | ✅ Proven | `SparkedLogo.tsx` + favicon SVG + 1024 app icon. Production component at `apps/mobile/src/components/SparkedLogo.tsx`. |
+| **Pricing tiers** | ⚠️ **STALE — SUPERSEDED 2026-07 by the PRICING MODEL lock immediately below** | ~~Built (Standard $10/day, Plus $30/day Recommended, Enterprise Custom).~~ **DO NOT PRICE FROM THIS ROW.** Every number in it is dead: the **per-day model is dead everywhere**, there is no Enterprise tier, and the tiers are Curbside (free) / Standard / Plus priced by DURATION BAND — $5/$12/$20 and $15/$29/$49. See "PRICING MODEL (LOCKED)" directly below, which is the only pricing source of record. What survives from this row is the SCREEN's visual structure: "Everything in X, plus" additive layout and three checkmark states (orange-outline = included, solid-orange = new in tier, faded = coming soon). **Still open: re-sync the Pricing screen's rendered numbers with `PRICING_TIERS` / Create Event's tier step.** |
 
 ---
 
@@ -996,12 +1046,44 @@ Create Event's tier step (per-day model is DEAD everywhere):
    Settings interests, onboarding. Prototype drift to fix in production: 'Live'
    is not a category (kill it); Explore's 9-item INTERESTS list vs the 13-item
    CREATE_CATEGORIES is the exact divergence that breaks fit-matching.
+   **STATUS 2026-08-19 — RESOLVED IN SCHEMA, with one half not yet exercised.**
+   Verified against `0001` and `apps/mobile/src` rather than assumed:
+   - **'Live' is dead — confirmed.** It is absent from the 13 seeded rows in
+     `public.categories` and appears nowhere in production source.
+   - **The 9-vs-13 divergence cannot recur — confirmed structurally.** There is
+     ONE table, and the onboarding subset is a COLUMN on it
+     (`show_in_onboarding`: 9 true, 4 false — Wellness/Nightlife/Sports/Tech).
+     There is no hardcoded category list anywhere in production for a second
+     list to drift from. 0001's own comment states the intent: "subset survives
+     only as `show_in_onboarding`".
+   - **CAVEAT, stated rather than glossed: nothing reads that column yet.** Both
+     consumers — Onboarding and the Settings "Interests & blocks" screen — are
+     unbuilt (Interests is a "Coming soon" stub). So the mechanism is correct and
+     untested. **It gets its first real exercise when Interests persistence and
+     Onboarding ship**, and that is when this lock is fully closed.
 5. **All display dates/times derive from the single UTC `starts_at`.** The
    prototype's hardcoded `date`/`time` strings alongside startISO are a demo shim
    (same trap class as the hardcoded `mi` field).
-6. **Curbside category color: NOT green** (green stays semantic-only for
-   free/going/confirmed; prototype's `Curbside: '#4ade80'` violates this — pick a
-   distinct hue at Code stage; give Outdoors' lime a squint at the same time).
+6. ~~**Curbside category color: NOT green**~~ **— RESOLVED BY RETIREMENT
+   2026-08-19. The binding half is the first clause and it STANDS:
+   green stays semantic-only, for free/going/confirmed.**
+   **The history, kept because it is the argument that stops someone re-picking
+   green:** the prototype set `Curbside: '#4ade80'`, which collided head-on with
+   the semantic reservation — a Curbside card would have wanted a green stripe
+   while green already meant "free entry" and "you're going" on the same card.
+   That is why it was rejected, and the reason has not expired.
+   **Both open questions this lock carried are now moot rather than answered:**
+   - *"pick a distinct hue at Code stage"* — there is no per-category hue to
+     pick. The thirteen-hue map was retired 2026-08-19; the stripe encodes the
+     LANE in two hues, and Curbside is a TIER/lane, not a coloured category.
+   - *"give Outdoors' lime a squint"* — `#84cc16` no longer exists in the
+     product. It was one of the ten values that failed WCAG 1.4.11 in light mode
+     (1.98:1 against `#ffffff`), and the squint it needed turned out to be the
+     whole map's.
+   **Live constraint going forward:** neither lane hue may be green, and no
+   future accent may take green for a non-semantic purpose. `stripeFree`
+   `#E8964A` / `stripePaid` `#E86F52` (dark) and `#C4762E` / `#C4472C` (light)
+   are all warm and deliberately nowhere near it.
 7. **Backstage is NOT a pricing tier.** It's a demand-capture teaser card,
    deliberately outside PRICING_TIERS. Copy spec (LOCKED): vague deliverables —
    "We're building new event and collaboration tools for teams and audiences."
@@ -1647,14 +1729,41 @@ migration then.
 
 ## OPEN WORK (in order)
 
-1. **Remaining funnel variants** (7 of 9) from the shared template.
-2. **Cold-start empty state** — feed + funnels with zero events in radius (the most common
-   real screen at launch; matters MOST on the web funnels).
-3. **Apple Developer enrollment — start WEEKS before App Store submission.**
-   Identity verification (and D-U-N-S if enrolling as an organization) has
-   multi-week lead time; it gates TestFlight and EAS iOS builds. Kick it off
-   early, it runs in parallel with build work.
-4. **Roadmap (NOT MVP):** teams/roles/task assignment + Backstage permissions (covers the
+*Reordered 2026-08-19 to the agreed sequence. The previous order led with the
+funnel variants, which are now explicitly a later phase, and buried the
+cold-start empty state at 2 while it was already in flight.*
+
+1. **THE EXPLORE ARC** — the consumer surface, taken in order. Each step is its
+   own pass; the map is its own arc at the end because it is the only one that
+   needs a new dependency.
+   1. ~~Lane stripe~~ **✅ DONE 2026-08-19** (also fixed a live WCAG 1.4.11
+      failure across all ten previous stripe values — see `docs/ACCESSIBILITY.md`).
+   2. **Cold-start empty state** — feed with zero events in radius. The most
+      common real screen at launch, and currently unhandled.
+   3. **Header controls** — the zip/radius inline-edit pattern.
+   4. **Date picker** on Explore.
+   5. **Timeline** view.
+   6. **Map — ITS OWN ARC.** Needs a mapping dependency and a provider decision;
+      does not ride along with the rest.
+2. **Interests persistence** — the "Interests & blocks" screen is a "Coming
+   soon" stub today, and it is the first real consumer of
+   `categories.show_in_onboarding` (schema lock 4).
+3. **Notifications** — channel/category/frequency + fit-gate (Architecture
+   Decision 6). Depends on 2: the fit-gate locks until ≥1 interest exists.
+4. **Onboarding** — the second consumer of `show_in_onboarding`, and where the
+   initial zip/radius is set.
+5. **Landing pages / funnel variants** (7 of 9) from the shared template —
+   deliberately LAST. They are acquisition surfaces, and they should point at an
+   app whose consumer arc is finished.
+
+**PARALLEL TRACK, not a numbered step — Apple Developer enrollment.** Start it
+WEEKS before App Store submission. Identity verification (and D-U-N-S if
+enrolling as an organization) has multi-week lead time and gates TestFlight and
+EAS iOS builds. **Unnumbered on purpose: it is lead-time-gated, not
+sequence-gated** — nothing above waits on it and it should not wait on anything
+above. Kick it off early and let it run alongside.
+
+**Roadmap (NOT MVP):** teams/roles/task assignment + Backstage permissions (covers the
    multi-business social-manager persona); multi-workspace richness; account handoff;
    advertising content (distinct card anatomy, always "Sponsored"); consumer
    momentum/light-gamification (deferred — contradicts "no algorithm"; NO streaks);
@@ -1689,24 +1798,54 @@ migration then.
 
 ---
 
-## KEY FILES (Claude Design prototype)
-- `AppScreens.jsx` / `Screens.jsx` — screen components
-- `FilterFinder.jsx` — filter registry + matcher + highlight
-- `Sparked App.html` — app shell / routing / state
-- `SparkedLogo.tsx` — logo component
-- Canonical data: `PRICING_TIERS` (single source — Pricing screen + tier step + fork card all
-  read it, incl. Curbside desc/limit), `SAMPLE_EVENTS`, filter presets (PRICE/WHEN/DIST),
-  shared FAQ content (landing + Help & feedback), APP_THEME_VARS (Components.jsx) + 
-  colors_and_type.css (theme tokens)
-- Screens added late: Settings (Interests & blocks, Notifications editable fields + fit-gate,
-  Quiet hours, Privacy, Feedback, Appearance), entry fork + Curbside mini form, Organizer
-  Profile (public view + Workspace editor), Report sheet, landing funnels under
-  mockups/landings/ (near-me, tonight, shared faq.js/_partials/_shared.css)
+## KEY FILES
 
-## DEMO EVENT DATA (13 events, distances hardcoded from zip 85001 — illustrative only)
-In-radius (≤25mi): Art Walk (1.2), Farmers Market (3.8), Riverside Food Trucks (4), Sunset
-Songwriters (6.5), Pop-Up Print Fair (12), Indie Film Night (18).
-Just past (25–37.5mi overflow zone): Gilbert Night Market (28), Desert Sky Music Fest (31), Cave
-Creek Pop-Up (32), Desert Amphitheater (34), Highlands Art Fair (34), Mountain Town Market (36).
-Beyond cap (never shows): Far Valley Rodeo (52).
-**Production: replace hardcoded `mi` with PostGIS-computed distance from user location.**
+**Two different things, and the distinction is load-bearing.** The list below
+used to name only the frozen reference, unpathed and untitled, which reads as
+"the file map" to anyone opening this doc fresh. Both maps are now here, with
+real paths.
+
+### Production — what actually ships
+
+| Path | Holds |
+|---|---|
+| `apps/mobile/src/app/(tabs)/` | Explore (`index.tsx`), Saved, Me, Workspace, `organizer/[id]`, `event/[id]` |
+| `apps/mobile/src/app/create/` | entry fork, `curbside.tsx` mini form, `event.tsx` 5-step wizard, `checkout.tsx` |
+| `apps/mobile/src/app/settings/` | the five Me-hub rows — all "Coming soon" stubs today |
+| `apps/mobile/src/components/` | `EventStub`, `EventDetailView`, `SiteMap`, `MarkdownText`, `pickers`, `SparkedLogo` |
+| `apps/mobile/src/lib/` | `auth`, `supabase`, `engagement`, `workspace`, `geocode`, `eventTime`, `moderation` |
+| `apps/mobile/src/theme/` | `colors.ts` (the `Palette` token system), `categoryColors.ts` (lane resolver), `spacing`, `typography` |
+| `supabase/migrations/` | `0001`–`0029`, applied in order |
+| `supabase/audits/` | `privilege_audit.sql` + dated `baselines/` |
+| `scripts/` | `qa-*.sql` behavioral suites, one per arc |
+| `docs/` | `SCHEMA_PLAN.md`, `BUILD_PLAN.md`, `ACCESSIBILITY.md` |
+
+### Frozen design reference — spec of record for VISUALS, never production source
+
+Under `design-reference/`. Its bugs are deliberately ignored (see SCHEMA LOCKS);
+cite it with the full path so nobody mistakes it for shipping code.
+
+| Path | Holds |
+|---|---|
+| `ui_kits/mobile-app/AppScreens.jsx` | screen components (2578 lines) — the `isPlus &&` entry-fee bug lives at `:404` and `:1009` |
+| `ui_kits/mobile-app/Screens.jsx` | screen components |
+| `ui_kits/mobile-app/FilterFinder.jsx` | filter registry + matcher + highlight |
+| `ui_kits/mobile-app/Components.jsx` | `APP_THEME_VARS` (the prototype's CSS-custom-property theming — production uses the `Palette` object instead) |
+| `ui_kits/mobile-app/Onboarding.jsx` | onboarding flow |
+| `Sparked App.html` | app shell / routing / state |
+| `colors_and_type.css` | theme tokens |
+| `components/EventStub/` | `.tsx` / `.html` / `.d.ts` |
+| `mockups/landings/` | `faq.js`, `_partials.html`, `_shared.css` (near-me, tonight) |
+| `preview/` | brand palette, card anatomy, pills/badges, type scale, surfaces |
+| `source/SparkedLogo.tsx` | reference copy; the shipping one is under `apps/` |
+
+**Canonical data still defined in the reference:** `PRICING_TIERS` (Pricing
+screen + tier step + fork card), `SAMPLE_EVENTS` (the 13 illustrative demo
+events, distances hardcoded from zip 85001 — **superseded in production by real
+PostGIS distances, and the beachhead is Sahuarita/Green Valley, not Phoenix**),
+filter presets (PRICE/WHEN/DIST), shared FAQ content.
+
+**Screens the reference added late:** Settings (Interests & blocks,
+Notifications editable fields + fit-gate, Quiet hours, Privacy, Feedback,
+Appearance), entry fork + Curbside mini form, Organizer Profile (public view +
+Workspace editor), Report sheet, landing funnels.

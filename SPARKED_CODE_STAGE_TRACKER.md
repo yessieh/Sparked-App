@@ -98,7 +98,8 @@ and verified in Cursor/Claude Code.
       stages find each other — this item OWNS `event_photos`; 0013 owns vendors.
 - [ ] **Entry-fee display: RESOLVED — ALL-TIER.** Any tier with paid entry on
       shows the fee. The prototype's `isPlus` gate is a known frozen-reference
-      bug (AppScreens.jsx:404, :1009) — production ignores it.
+      bug (`design-reference/ui_kits/mobile-app/AppScreens.jsx:404, :1009`) —
+      production ignores it.
 - [ ] **Share button** (device share sheet).
 - [ ] **Gallery swipe + social links rendering** on Review.
 - [x] **Published events appear in Workspace — DONE 2026-07-30.** The stub is
@@ -628,9 +629,16 @@ migration lands between, the NAME is the anchor, not the number.
 
 ## GEO / MAPS (carried from prior state doc)
 
-- [ ] **Replace hardcoded `mi` distances with PostGIS-computed distance** from
+- [x] **Replace hardcoded `mi` distances with PostGIS-computed distance** from
       real user location. All demo distances (Art Walk 1.2mi, etc.) are
       illustrative. Feed = strict in-radius; search = radius-overflow rules.
+      **DONE.** `events_within_radius` computes `st_distance(...) / 1609.344`
+      and orders by distance only; the feed renders real values (0.4 / 1.2 /
+      3.38 mi, verified 2026-08-16 during the 0028 pass). Origin is still the
+      dev constant `TEST_ORIGIN` — **real user location is the separate
+      "Explore zip/radius inline-edit + onboarding" item below**, which is what
+      replaces it. The hardcoded `mi` field now exists only in the frozen
+      reference. Radius-overflow SEARCH rules remain unbuilt.
 - [ ] **Geocoder: Nominatim → paid provider at scale.** Curbside address
       geocoding uses OpenStreetMap Nominatim (no key, ~1 req/s usage policy,
       identify via User-Agent) — fine for dev/MVP volume. Swap to a paid
@@ -841,7 +849,8 @@ migration lands between, the NAME is the anchor, not the number.
       `**markers**` stay in the input by design — markdown is saved as typed.
 - [ ] **Rich text editor (WYSIWYG) — host-experience polish, replaces the
       marker input.** Web `contentEditable` per the design reference
-      (`AppScreens.jsx` `_RichText`: live B / I / •, no visible markers);
+      (`design-reference/ui_kits/mobile-app/AppScreens.jsx` `_RichText`: live
+      B / I / •, no visible markers);
       native later — RN `TextInput` can't render inline formatting while
       editing, so native needs a webview-based editor or a later solution.
       Storage stays the locked markdown subset: the editor serializes down to
@@ -941,6 +950,69 @@ migration lands between, the NAME is the anchor, not the number.
       built screen does not yet do). Invisible below 1024px — the chip and the
       content share an edge on a phone. Defer to this batch rather than
       hand-tuning one screen.
+
+---
+
+## DOC RECONCILIATION — SECOND PASS (queued 2026-08-19)
+
+> **Why this exists as a tracked item rather than a memory.** The first pass
+> (2026-08-19) fixed what was actively misleading: five statements of the retired
+> stripe rule, a stale pricing table sitting four lines above the lock that
+> supersedes it, an unpathed file map, and two done-but-unticked PostGIS items.
+> Everything below was FOUND in that pass and deliberately left, so it is written
+> down with line numbers rather than rediscovered. **Line numbers are as of
+> 2026-08-19 and will drift — the quoted text is the anchor.**
+
+- [ ] **`SPARKED_STATE.md:867` — "PROVEN SCREENS (Design-verified, ready for
+      Claude Code handoff)".** The handoff completed 29 migrations ago. The table
+      is still useful as a record of what was visually proven; the heading is
+      what is wrong.
+- [ ] **`SPARKED_STATE.md:913` — Bucket 3 is partly done.** "Published events
+      appearing in Workspace" shipped 2026-07-30 with the Workspace screen
+      (0017). The rest of that list (real image uploads, Share button, gallery
+      swipe + social links on Review) is genuinely still open.
+- [ ] **`SPARKED_STATE.md:903` — "Create Event — OPEN fixes (Bucket 1 + 2, next
+      Design prompt)".** These are PROTOTYPE bugs, and several are already moot
+      in production: the date range is editable via the shared `DateField` with
+      min/max, and Review renders the price. **Mark reference-only, do not
+      delete** — the "THIRD failed fix" note on the date range is the reason the
+      shared picker exists.
+- [ ] **`SPARKED_CODE_STAGE_TRACKER.md:8-11` — this file's own framing is
+      outdated.** "Every item below is something the Design prototype SHOWS but
+      does not DO. The UI is proven; the wiring is not." That stopped being true
+      some arcs ago: this tracker now carries migration arcs, privilege audits,
+      an accessibility backlog, backburner UI defects and doc debt — none of
+      which the prototype ever showed. Rewrite the header to describe what it
+      actually holds.
+- [ ] **`SPARKED_STATE.md:16-19` — Design-stage builder context.** "building in
+      Claude Design (proving screens visually) before handing to Claude Code /
+      Cursor (production build)" describes a transition that has happened.
+      Same class: `:573` ("failed 3× in Design"), `:1685` (git commits belong in
+      Cursor, not Claude Design), and Architecture Decision 5's "Claude
+      Code/Design preview only has a mobile toggle; verify desktop by resizing a
+      real browser".
+- [ ] **`SPARKED_STATE.md:3` — "Read this first before working on Sparked".**
+      CLAUDE.md is read first in practice and carries the binding process rules.
+      Reword so the two do not compete for the same slot.
+
+- [ ] **SPLIT THE MIGRATION LOG into `docs/MIGRATION_LOG.md` — AGREED, its own
+      commit, touching nothing else.** The log is `SPARKED_STATE.md:1025-1584`
+      (~560 lines) sitting inside a section headed "SCHEMA LOCKS" whose actual
+      locks are nine items; the whole section is 984-1617. **Two lifecycles in
+      one heading:** the log is chronological and append-only, the locks are
+      current-state and get amended.
+      **Leave a stub in place** — the nine locks, a pointer to the new file, and
+      the last 2-3 entries — because the value of "read SPARKED_STATE.md first"
+      is largely the log, and a bare pointer makes that habit quietly return
+      less. **Three cross-references must move in the same commit**, all naming
+      "the SPARKED_STATE.md entry" for migration detail:
+      - `SPARKED_CODE_STAGE_TRACKER.md:315` (0026's `supabase_admin` reasoning)
+      - `SPARKED_CODE_STAGE_TRACKER.md:334` (the open 0023/0024 backfill item —
+        this one would otherwise point at the wrong file while asking someone to
+        write INTO it)
+      - `SPARKED_CODE_STAGE_TRACKER.md:338` (the in-place marker line)
+      Also check `docs/SCHEMA_PLAN.md:3` and `docs/BUILD_PLAN.md:11`, which both
+      enumerate the root docs as spec of record.
 
 ---
 
