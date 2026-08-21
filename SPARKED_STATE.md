@@ -714,8 +714,8 @@ confirmation, published events in Workspace.
 - **Desktop pass EXECUTED (prototype):** at ≥1024px, coordinator surfaces render OUTSIDE the
   PhoneFrame as full-bleed responsive pages (Option 1; bezel disappears — prototype scaffolding
   only, production Expo web has no PhoneFrame). Create Event = 60/40 two-column wizard w/ sticky
-  EventStub preview, site-map section expands full-width; fork centered ~640px; checkout +
-  Curbside mini form centered ~560px; Workspace = 4-across stats + listings table; Pricing =
+  EventStub preview, site-map section expands full-width; fork centered ~640px; ~~checkout +
+  Curbside mini form centered ~560px~~ **→ ~640px, AMENDED 2026-08-21, see below**; Workspace = 4-across stats + listings table; Pricing =
   3-column matrix from canonical PRICING_TIERS; Organizer Profile centered ~720px w/ 2-across
   event grid; Event Detail centered ~640px. Below 1024px everything stays in the phone frame.
   **As built 2026-08-02 the Organizer Profile is a single 560px column, not 720
@@ -723,6 +723,33 @@ confirmation, published events in Workspace.
   desktop decision is deliberately deferred to the one responsive batch, not
   taken early. Tracked there, along with the back chip that currently sits in a
   640 column beside 560 content.
+
+- **AMENDED 2026-08-21 — the create flow is ~640px END TO END. Checkout and the
+  Curbside mini form move from 560 to 640; the SPEC changes, not the code.**
+  The flow is fork → Curbside → wizard → checkout, and three of those four were
+  already built at 640. A host moving through it should not watch the column
+  narrow at the final step — the checkout is the moment to look most settled,
+  not least. 640 also matches Event Detail, the other content-heavy reading
+  surface, so the two places a user reads rather than scans now agree.
+  **Why the built value wins over the written one here, which is NOT the default
+  and must not be read as one:** the ~560 above was written in Design, before
+  the create flow existed as four connected screens. It was a per-screen call
+  made when there was no flow to be consistent with, so the built 640 reflects
+  something the spec did not yet know rather than a drift away from something it
+  did. Where a spec and the code disagree for any other reason, the spec still
+  governs and the code is the thing that changes.
+  **How this surfaced, because the mechanism matters more than the number.**
+  Curbside at 640 and checkout at 560 were two independent judgment calls made
+  against this one sentence, in opposite directions, and NEITHER was recorded.
+  Nobody chose them as a pair; they were found on 2026-08-21 only while
+  inventorying `maxWidth` line numbers for an unrelated tracker item. That is the
+  same failure shape as the privilege-audit rule in `CLAUDE.md` — a value written
+  once, reviewed once, then never re-read while things change around it. The
+  shared width token queued in the responsive batch is what makes the next such
+  divergence impossible rather than incidental.
+  **Not yet applied to code.** `create/checkout.tsx:213` still reads 560. It
+  moves with the token migration in the responsive batch, not before — this
+  amendment settles what the token will encode.
 
 ### 6. Notifications = channel/category/frequency, fit-gated (design locked, behavior = Code stage)
 - **Push fires only for USER-REQUESTED events** (bookmarks/RSVPs), never a discovery firehose.

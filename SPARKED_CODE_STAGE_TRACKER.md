@@ -1092,20 +1092,29 @@ migration lands between, the NAME is the anchor, not the number.
       only two files import it — `workspace.tsx` and `create/event.tsx`, both
       coordinator surfaces, exactly as §5 requires. The token belongs beside it.
 
-- [ ] **PREREQUISITE to the token above: resolve the 560-vs-640 spec conflict.
-      This is a separate step that comes FIRST, not part of writing the token.**
-      Curbside at 640 and checkout at 560 are two independent judgment calls
-      made against one sentence of §5, in opposite directions, and **neither was
-      recorded** — which is why the conflict was only found while inventorying
-      line numbers for the item above, not when either call was made.
-      **The resolution needs a ruling from Jas.** It is not a majority vote among
-      the 19 literals and not the token pass's to decide: a token encodes a rule,
-      so it will harden whichever number it is given, and picking by count would
-      let two undocumented decisions overwrite a written spec. The count is
-      evidence about what was built, never about what was intended.
-      Order is therefore: **ruling → §5 updated to match → token written from
-      §5 → the 19 literals migrated to it.** A token written before the ruling
-      would have to be rewritten after it.
+- [x] **PREREQUISITE to the token above — 560-vs-640 spec conflict: RULED
+      2026-08-21. The create flow is ~640px end to end.** Checkout and the
+      Curbside mini form move from 560 to 640, and **§5 was amended rather than
+      the code changed back** — the flow is fork → Curbside → wizard → checkout,
+      three of the four were already 640, and a host should not watch the column
+      narrow at the final step. 640 also matches Event Detail, the other
+      content-heavy reading surface. §5's ~560 predates the flow existing as four
+      connected screens, so the built value reflects something the spec did not
+      yet know. Full reasoning and the superseded text: SPARKED_STATE §5,
+      "AMENDED 2026-08-21".
+      **Kept as a record rather than deleted, because the mechanism is the
+      lesson:** Curbside at 640 and checkout at 560 were two independent
+      judgment calls made against one sentence, in opposite directions, and
+      neither was recorded — found only while inventorying line numbers for the
+      item above. The resolution was Jas's ruling, NOT a majority vote among the
+      19 literals: a token encodes a rule, so it hardens whichever number it is
+      given, and picking by count would let two undocumented decisions overwrite
+      a written spec. The count is evidence about what was built, never about
+      what was intended.
+      **Remaining order: token written from the amended §5 → the 19 literals
+      migrated to it.** `create/checkout.tsx:213` still reads 560 and moves with
+      that migration, not before — the ruling settles what the token encodes, it
+      does not itself change code. **The token is unblocked and stays queued.**
 
 ---
 
