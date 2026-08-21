@@ -515,6 +515,25 @@ migration lands between, the NAME is the anchor, not the number.
       device-local (AsyncStorage, caps at 5 — see GEO/MAPS below) and has no
       other delete path, so this screen is a hard dependency for it, not an
       optional nicety.
+      **NO LONGER HYPOTHETICAL AS OF 2026-08-20 — the history is now being
+      WRITTEN.** Stage 2a shipped it: `lib/origin.tsx` stores up to 5 confirmed
+      places under `sparked.origin.v1` and the Explore control reads them back
+      as tap-to-reuse rows. **So there is live user data on the device with no
+      user-reachable way to clear it, and that is a gap, not a deferral.** The
+      data is low-sensitivity (self-declared towns, device-local, never sent
+      anywhere) which is why it was allowed to ship ahead of the control — but
+      the ordering is backwards and this item is what corrects it. A comment in
+      `components/LocationControl.tsx` points here so nobody adds a delete
+      button in the wrong place instead.
+      **SHAPE OF THE CONTROL, DECIDED 2026-08-20: PER-ENTRY REMOVAL, NOT ONLY A
+      CLEAR-ALL.** A "clear everything" action is not the same feature as
+      "remove this one" — the 5-entry cap already ages old rows out on its
+      own, so a full clear answers a question nobody asked (the list tidies
+      itself) while leaving no way to do the thing a user actually wants:
+      drop one specific place they typed by mistake, or don't want sitting in
+      history, right now, without losing the other four. Build a swipe-to-
+      delete or per-row delete affordance on each history row; a bulk "Clear
+      history" action can sit alongside it but must not be the only option.
 - [ ] **Real ToS + Privacy Policy documents** (App Store gate — links exist,
       documents don't).
 - [ ] **Feedback form backend** (Supabase table).
@@ -536,16 +555,36 @@ migration lands between, the NAME is the anchor, not the number.
       `design-reference/mockups/landings/` have no empty-state handling and
       are not deployed at all (see "Web funnels deploy" above). Nothing in
       this arc touched them.
-- [ ] **STAGE 2A (IN FLIGHT) — Explore zip/radius inline-edit + onboarding —
-      MUST PRECEDE LAUNCH.** The feed origin is still the hardcoded
-      `TEST_ORIGIN` (Sahuarita) in `lib/devOrigin.ts`. The header's
-      "Sahuarita, AZ · within {N} mi" has editable radius only today — the
-      2026-08-19 empty-state arc added a session-state, one-shot 25→50mi
-      widen (`docs/ACCESSIBILITY.md` Entry 2) — the town half is still a
-      literal string. Without a typed town/zip every user sees one fixed
-      neighbourhood's events — the distance promise only means something
-      once the user can say where they are. Onboarding sets the initial
-      value.
+- [x] **STAGE 2A — Explore typed location + radius — DONE 2026-08-20.**
+      The header's "Sahuarita, AZ · within {N} mi" is now two controls, both
+      persisted device-locally in `lib/origin.tsx`. `TEST_ORIGIN` and
+      `lib/devOrigin.ts` are DELETED — both call sites (Explore feed, Event
+      Detail distance) read the live origin, so they still cannot disagree.
+      Full accessibility record in `docs/ACCESSIBILITY.md` Entry 3.
+      - **Geocode confirmation is enforced HERE, and only here.** A typed place
+        resolves to a candidate list the user picks from; nothing becomes the
+        origin unconfirmed, including a single confident hit. This does NOT
+        close the separate "Geocode confirmation step in both create flows"
+        item below — the create flows still trust `geocode()` silently, and
+        that is where the 632-mile publish happened.
+      - **Radius persistence REVERSES the 1b session-only ruling**, per the
+        location lock amended 2026-08-21 (a radius is a declared preference).
+        The empty state's one-shot 25→50 widen became a shortcut that doubles
+        the current radius, capped at 100 — a fixed 50 target would have
+        NARROWED the feed for anyone above it.
+      - **STILL OPEN, deliberately: the history has no delete control.** See
+        the Privacy screen item above — that screen is a hard dependency.
+      - **Nominatim usage-policy gap NOT closed:** the requests still carry no
+        `User-Agent` and no `email=` identification, for the place lookup and
+        the two create flows alike. `User-Agent` is a forbidden `fetch` header
+        on web, so `email=` is the only lever and it was left to the founder
+        rather than added silently. Pairs with the paid-geocoder swap below.
+- [ ] **STAGE 2A REMAINDER — Onboarding sets the initial value.** Stage 2a
+      built the control and seeds it from Sahuarita
+      (`SEED_PLACE` in `lib/origin.tsx`, commented as scaffolding). Onboarding
+      is the first FLOW that sets the initial value THROUGH that same control,
+      so a new user is ASKED rather than finding Arizona pre-filled and having
+      to notice it. One control, two callers, in that order.
       **Sequencing, resolved 2026-08-21 — this does not contradict
       SPARKED_STATE's OPEN WORK 1.3 (header controls listed before
       Onboarding):** both are true, in this order. Stage 2a BUILDS the

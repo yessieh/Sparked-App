@@ -18,8 +18,8 @@ import { SecondaryButton } from '../../../components/AuthControls';
 import EmptyState from '../../../components/EmptyState';
 import EventDetailView, { type EventDetailData } from '../../../components/EventDetailView';
 import { useAuth } from '../../../lib/auth';
-import { TEST_ORIGIN } from '../../../lib/devOrigin';
 import { useEngagement } from '../../../lib/engagement';
+import { useOrigin } from '../../../lib/origin';
 import { supabase } from '../../../lib/supabase';
 import { vendorFromRow, type Vendor, type VendorRow } from '../../../lib/vendors';
 import { brand, useTheme } from '../../../theme';
@@ -47,6 +47,12 @@ export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { session } = useAuth();
   const { savedIds, goingIds, toggleSave, toggleRsvp, refresh, rsvpDelta } = useEngagement();
+  // The SAME origin Explore measures from — one shared value is what keeps the
+  // feed's distance and this screen's distance line agreeing, which is the job
+  // the retired TEST_ORIGIN constant used to do.
+  // `place` is null until the stored origin resolves, which is the gate itself
+  // — no separate `loaded` read needed here.
+  const { place } = useOrigin();
   const [event, setEvent] = useState<EventDetailData | null>(null);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -70,10 +76,11 @@ export default function EventDetailScreen() {
       setState('missing');
       return;
     }
+    if (!place) return; // held by the focus effect's gate; see below.
     const { data, error: rpcError } = await supabase.rpc('event_detail', {
       event_id: id,
-      origin_lat: TEST_ORIGIN.lat,
-      origin_lng: TEST_ORIGIN.lng,
+      origin_lat: place.lat,
+      origin_lng: place.lng,
     });
     if (rpcError) {
       // 22P02 = invalid text representation. Unreachable behind the shape
@@ -108,8 +115,12 @@ export default function EventDetailScreen() {
         setVendors([]);
       }
     }
-  }, [id]);
+  }, [id, place]);
 
+  // `load` closes over `place`, so this re-fires when the stored origin
+  // resolves — no separate effect. The malformed-id branch inside `load` runs
+  // BEFORE the origin gate on purpose: it needs no origin, and making a
+  // garbled link wait on storage would put the forever-spinner back.
   useFocusEffect(
     useCallback(() => {
       load();

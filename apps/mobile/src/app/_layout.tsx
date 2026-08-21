@@ -17,6 +17,7 @@ import { Platform } from 'react-native';
 
 import { AuthProvider, createSessionFromUrl } from '../lib/auth';
 import { EngagementProvider } from '../lib/engagement';
+import { OriginProvider } from '../lib/origin';
 import { ThemeProvider, useTheme } from '../theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -96,8 +97,13 @@ export default function RootLayout() {
     <ThemeProvider>
       <AuthProvider>
         <EngagementProvider>
-          <AuthDeepLinkHandler />
-          <ThemedStack />
+          {/* Browsing origin + radius. Above the Stack because BOTH Explore
+              and Event Detail measure distance from it, and they must agree —
+              the same reason the retired TEST_ORIGIN was a shared constant. */}
+          <OriginProvider>
+            <AuthDeepLinkHandler />
+            <ThemedStack />
+          </OriginProvider>
         </EngagementProvider>
       </AuthProvider>
     </ThemeProvider>

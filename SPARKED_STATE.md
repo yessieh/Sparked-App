@@ -1068,6 +1068,26 @@ Create Event's tier step (per-day model is DEAD everywhere):
     currently a 7-line `SettingsStub`) — the history has no other delete
     path, so that screen is a hard dependency, not an optional nicety. See
     the tracker.
+    **BUILT 2026-08-20, AND THE GAP IS NOW LIVE RATHER THAN THEORETICAL.**
+    `lib/origin.tsx` writes the history; nothing in the app can clear it.
+    Stated plainly because the ordering is backwards and should not be
+    smoothed over in the record: user data is being persisted ahead of the
+    control that erases it. It shipped anyway on the judgment that the data is
+    self-declared town names, device-local, and never transmitted — but that is
+    a reason it is TOLERABLE, not a reason it is fine.
+
+  **Implementation notes from the 2026-08-20 build, recorded because they are
+  the kind of thing rediscovered expensively:**
+  - **Storage is validated on READ, not merely on write.** On web the store is
+    `localStorage`, writable by any script on the origin and by devtools. An
+    out-of-range coordinate is the dangerous shape: it reaches Postgres as
+    `null` and `events_within_radius` answers a null origin with an EMPTY FEED
+    AND NO ERROR, indistinguishable from "nothing near you". A poisoned blob
+    was written and the app verified to fall back to the seed.
+  - **The typed value is the ONLY thing stored, and the coordinate beside it is
+    the GEOCODER's answer for that typed place** — never a reading of where
+    anyone was. That is the whole typed-vs-sensed distinction, in the one file
+    that persists anything location-shaped.
 
 ## SCHEMA LOCKS (from the Code-stage conflict report — production rules; prototype is frozen reference and its bugs are IGNORED)
 
@@ -1785,16 +1805,25 @@ cold-start empty state at 2 while it was already in flight.*
       closed:** the empty feed has never been seen rendering from a genuinely
       empty result, and the archived-event path was never rendered. The
       FUNNELS half of this work is still open — see the tracker.
-   3. **Header controls — STAGE 2A (typed), then STAGE 2B (sensed).** The
-      zip/radius inline-edit pattern. **2a** builds the typed town/zip +
-      radius control and seeds it from a default (`TEST_ORIGIN`/Sahuarita) —
-      it does not wait on Onboarding (TOP-LEVEL item 4, not sub-item 4
-      above, which is the date picker). **2b** adds the device
-      locator, which needs `expo-location`, permission config and reverse
-      geocoding, none of which exist today. Onboarding, later, is the first
-      FLOW that sets the initial value THROUGH the 2a control — one control,
-      two callers, in that order. Privacy boundary: the location lock,
-      AMENDED 2026-08-21 (typed vs sensed). Tracker carries both items.
+   3. **Header controls — ~~STAGE 2A (typed)~~ ✅ DONE 2026-08-20, then STAGE
+      2B (sensed).** The zip/radius inline-edit pattern.
+      **2a SHIPPED.** The town half and the radius are both controls now, both
+      persisted device-locally (`lib/origin.tsx`), seeded from Sahuarita as
+      scaffolding until Onboarding asks properly. `TEST_ORIGIN` and
+      `lib/devOrigin.ts` are DELETED; Explore and Event Detail both read the
+      live origin, so they still cannot disagree on a distance.
+      **A typed place must be CONFIRMED before it becomes the origin** —
+      resolved candidates are listed and the user picks, including when there
+      is only one hit. Measured reason, not a precaution: the live geocoder
+      returns `85614` as Arizona, Bavaria and Poland with byte-identical
+      importance scores, so the old `limit=1` was picking a country on an
+      uncontrolled tie-break. `docs/ACCESSIBILITY.md` Entry 3.
+      **2b** adds the device locator, which needs `expo-location`, permission
+      config and reverse geocoding, none of which exist today. Onboarding,
+      later, is the first FLOW that sets the initial value THROUGH the 2a
+      control — one control, two callers, in that order. Privacy boundary: the
+      location lock, AMENDED 2026-08-21 (typed vs sensed). Tracker carries the
+      2a remainder and 2b.
    4. **Date picker** on Explore.
    5. **Timeline** view.
    6. **Map — ITS OWN ARC.** Needs a mapping dependency and a provider decision;

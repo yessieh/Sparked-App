@@ -420,13 +420,19 @@ un-archived before the check ran. Still on the human list.
   dropped by ruling — see the header note in `components/EmptyState.tsx`).
   That is the human feel-pass CLAUDE.md's verification budget calls for, and
   it covers ONE of the two states.
-- **The COLD-START EMPTY FEED has never been seen rendering from a genuinely
-  empty result.** The feed carries real data, and every check of that state
-  reached it by intercepting `window.fetch` in the browser. The DOM assertions
-  above hold for the intercepted path; nobody has watched the real path
-  produce it. **This is the weakest link in the entry** — an interception
-  proves the component renders given an empty array, not that the empty array
-  arrives the way production will deliver it.
+- ~~**The COLD-START EMPTY FEED has never been seen rendering from a genuinely
+  empty result.**~~ **CLOSED 2026-08-20, on device.** Every check up to this
+  point reached the empty state by intercepting `window.fetch` in the browser,
+  which proves the component renders given an empty array but not that the
+  empty array arrives the way production delivers it — that gap was the
+  weakest link named at the time. **Closed by a real device pass against
+  Phoenix, AZ**, an origin with no seeded events in radius, so the empty
+  result came from the live RPC returning zero rows rather than from an
+  intercepted response. Confirmed visually correct. This is the human
+  feel-pass CLAUDE.md's verification budget calls for; it was performed by
+  the reviewer on device, not reproduced in this session, so it establishes
+  appearance and behavior on that device and run, not a repeatable DOM
+  assertion this file can re-check on the next change.
 - **Nothing about iOS.** The `announceForAccessibility` call is written and
   gated to iOS; it has never run.
 - **Nothing about the archived-event path**, only never-existed and malformed.
@@ -454,3 +460,190 @@ un-archived before the check ran. Still on the human list.
 - **Backgrounded screens were checked, not assumed:** a departed route's live
   region stays in the DOM, but its container carries `aria-hidden="true"`, so it
   is out of the accessibility tree. Confirmed, not inferred.
+
+---
+
+# Entry 3 — 2026-08-20 — Explore header: editable location + radius (Stage 2a)
+
+**The arc:** the Explore header's `"Sahuarita, AZ · within 25 mi"` stopped being
+a literal string and became two controls. Both values are user-set, both persist
+device-locally (`lib/origin.tsx`), and a typed place must be **confirmed against
+a resolved candidate list** before it becomes the feed's origin. The
+`TEST_ORIGIN` constant and `lib/devOrigin.ts` are retired.
+
+## THE HEADLINE: a 44px-tall target that was 29px wide
+
+The radius control set `minHeight: TARGET` and no `minWidth`. Height passed at
+exactly 44; the rendered box measured **29 wide** around a two-digit number — a
+**WCAG 2.5.5 failure that a height-only assertion reports as green.**
+
+Found by measuring `getBoundingClientRect()` on both axes. Entry 2 established
+measuring rather than inferring from padding; this entry adds the narrower
+lesson: **measure BOTH axes.** `44 x 29` and `44 x 44` are one property apart in
+source and indistinguishable in a checklist that records only "minHeight set".
+
+Fixed with `minWidth: TARGET` + `alignItems: 'center'`. Re-measured: 44 x 44.
+
+| Control | Rendered | Pass |
+| ------- | -------- | ---- |
+| Change location | 94 x 44 | OK |
+| Change search radius (before) | **29 x 44** | FAIL |
+| Change search radius (after) | 44 x 44 | OK |
+| Town/zip input | full-width x 44 | OK |
+| Each candidate row | 490 x 44 | OK |
+
+## The live region is REUSED, not reinvented — and it is the subline itself
+
+Entry 2's mechanism, applied to a second surface. The subline `View` carries
+`role="status"` + `aria-live="polite"`, is mounted from first paint **including
+through the pre-load placeholder**, and only its children swap.
+
+**Verified by node identity across a real location change**, which is the check
+that separates a working region from a present attribute:
+
+| Check | Result |
+| ----- | ------ |
+| `[role="status"]` on Explore | **1** (EmptyState's is absent while the feed has rows) |
+| `aria-live` | `polite` |
+| Text before | `Sahuarita, AZ · within 25 mi` |
+| Text after picking Springfield MA | `Springfield, MA · within 25 mi` |
+| **Same region node across the change** | **true** |
+| Confirm panel inside the region | **false** |
+
+**One deliberate departure from Entry 2**, recorded so it is not read as drift:
+Entry 2 keeps CTAs *outside* the region because a region re-announces everything
+it contains. Here the region's contents **are** the two control labels — and the
+combined string is exactly the announcement wanted. There is no other chrome
+inside it. The confirm panel, which is a form, stays outside.
+
+## The text input has a real label, by both mechanisms
+
+A placeholder is not a label: it vanishes on first keystroke and is not reliably
+exposed. Asserted in the DOM, not in source:
+
+| Check | Result |
+| ----- | ------ |
+| `aria-label` | `"Town or zip code"` |
+| `aria-labelledby` | `sparked-place-label` |
+| That id resolves to a real node | **true**, text `"Town or zip code"` |
+| Placeholder (decorative only) | `"Green Valley, AZ"` |
+
+## Contrast — measured off the PAINTED element, not the token
+
+Read back with `getComputedStyle` and composited by walking to the first opaque
+ancestor, which resolved to `#14213d`. Hand-computed values agreed to rounding
+(8.98 / 4.04 predicted, 8.95 / 4.03 measured).
+
+### Dark — rendered
+
+| Element | Colour | Surface | Ratio | Held to |
+| ------- | ------ | ------- | ----- | ------- |
+| Editable value (`ignitionGold` `#F7B731`) | painted `rgb(247,183,49)` | `#14213D` | **8.95:1** OK | 4.5:1 |
+| Dotted underline (`rgba(247,183,49,0.6)` composites `#9C7B36`) | composited | `#14213D` | **4.03:1** OK | 3:1 |
+| Connective words (`within`, `·`, `mi`) | `textMuted` composites `#81899e` | `#14213D` | 4.57:1 OK | 4.5:1 |
+| Confirm panel body + candidate rows | `text` `#eef0ff` | card `#1d2a45` | 12.62:1 OK | 4.5:1 |
+
+### THE CARD CONSTRAINT WAS APPLIED, NOT REDISCOVERED
+
+Entry 2 recorded that `textMuted` **fails at 4.32:1 on a card** while clearing
+4.57:1 on the page background. The confirm panel **is** a card, so every text
+line on it is `colors.text`. A comment in `LocationControl.tsx` states this at
+the point of edit, because "soften that line to textMuted" is the obvious future
+change and it is the one that breaks it.
+
+### Light — COMPUTED, NEVER RENDERED, and the affordance FAILS
+
+| Element | Colour | Surface | Ratio |
+| ------- | ------ | ------- | ----- |
+| **Editable value** | `ignitionGold` `#F7B731` | `#f4f5f8` | **1.64:1 — FAILS** |
+| **Connective words** | `lightPalette.textMuted` `#7a849e` | `#f4f5f8` | **3.43:1 — FAILS** (pre-existing) |
+| Confirm panel body | `#1c2840` | `#ffffff` | 14.72:1 OK |
+
+**The gold failure is a KNOWN, RULED trade, not an oversight.** It was measured
+and put to the reviewer before the code was written; the ruling (2026-08-20) was
+to keep the frozen reference's affordance token
+(`design-reference/ui_kits/mobile-app/Screens.jsx:190`) and log the failure. It
+is **latent, not live**: light mode is unreachable while the Appearance screen is
+a stub, so nothing fails for a user today.
+
+**This is now the THIRD inherited light-mode failure owned by the Appearance
+arc**, and they must be fixed together:
+
+1. `lightPalette.textMuted` at 3.43:1 — body copy on every screen (Entry 2)
+2. `me.tsx:440` `brightOrange` at 1.85:1 (Entry 2)
+3. **`ignitionGold` inline-edit affordance at 1.64:1 — the worst of the three**
+
+Same root cause all three times, and Entry 1 named it: **a dark-first palette
+does not become a light palette by reusing its hexes.**
+
+## Correctness findings, because each one is a path to a WRONG value shown confidently
+
+Not contrast matters, but they belong in the same record.
+
+- **Confirmation is enforced for a SINGLE hit, not only ambiguous ones.**
+  Verified: with the confirm list open, storage still held the previous origin.
+  Nothing moves until a pick. The 2026-07-21 incident (632 miles off, no error)
+  *was* a single confident hit.
+- **Ambiguity is surfaced, never resolved silently.** `85614` renders all three
+  candidates — Arizona, Bavaria, Poland — which the live API returns with
+  **byte-identical importance scores**, so `limit=1` was picking a country on an
+  uncontrolled tie-break. Verified end to end: picking Massachusetts for
+  `Springfield` stored Massachusetts, **not** Illinois, which ranked first.
+- **Stored state is validated on READ.** On web this store is `localStorage` —
+  writable by any script on the origin and by devtools. A poisoned blob
+  (`lat: 999`, `lng: -99999`, `radius: 100000`, a `NaN` history entry) was
+  written and the page reloaded: the app fell back to the seed, `"Pwned"` never
+  rendered, and the out-of-range coordinate never reached an RPC. This matters
+  because an invalid coordinate reaches Postgres as `null`, and
+  `events_within_radius` answers a null origin with an **empty feed and no
+  error** — indistinguishable from "nothing near you".
+- **Place names are NOT run through `lib/moderation.ts`.** A decision, not an
+  omission: it is a blunt substring blocklist and it rejects real US towns —
+  *Killeen* contains "kill", *Gunnison* contains "gun", *Bombay Beach* contains
+  "bomb". Length caps at the network boundary are the guard instead.
+- **No XSS path**, stated so it is not re-litigated: `display_name` is
+  third-party community-editable data, but it renders through `<Text>`, which
+  sets text content and never markup, on every platform.
+
+## What this entry does NOT establish
+
+- **No screenshots. Again.** The Browser pane could not composite frames during
+  this arc — the identical limitation Entry 2 recorded, now seen twice, so treat
+  it as the normal condition of this environment rather than a one-off. Layout,
+  contrast and targets were DOM-measured. **Visual feel is on the human list.**
+- **Nothing about light mode**, unreachable for the same structural reason as
+  Entries 1 and 2.
+- **Nothing about iOS.** This arc adds no `announceForAccessibility` call of its
+  own; it relies on the `EmptyState` path Entry 2 wrote, which has still never
+  run on an iOS device.
+- **Nothing about native at all.** Every measurement is Expo web. The
+  AsyncStorage path in particular is exercised here as `localStorage`; the native
+  bridge implementation is untested by this pass.
+- **THE PRE-LOAD PLACEHOLDER HAS NEVER RENDERED, and the reason matters.**
+  `"Finding your area…"` exists to cover the async-storage gap. On web there is
+  effectively no gap — `localStorage` resolves inside a microtask, and sampling
+  the live region every 50ms from first paint caught the resolved text at
+  **6ms** and the placeholder never once. So the branch is written, typechecked
+  and **unexercised**. It is the NATIVE path that actually needs it (a real
+  bridge call), and native is untested by this pass. Same weakest-link shape as
+  Entry 2's cold-start empty feed.
+- **"No flash of the seed town" is argued structurally and confirmed AFTER the
+  fact, not captured sub-frame.** A `MutationObserver` cannot survive the
+  reload it is meant to observe, so no frame-by-frame capture exists. What IS
+  verified: a stored `Green Valley, AZ @ 40mi` survived a reload intact, the
+  seed did not overwrite it, and the string `"Sahuarita, AZ ·"` appeared
+  nowhere in the rendered page. The structural argument is that the seed is
+  written ONLY when the read returns nothing, so it cannot be rendered as a
+  pre-load default — but that is an argument, and the empirical leg is
+  post-hoc.
+- **The `focusout` caveat on radius commit.** Radius commit was verified by
+  dispatching `focusout` (React's `onBlur`); a synthetic `blur` event and an
+  element `.blur()` call both failed to reach the handler. The commit path is
+  proven, but **a real keyboard/tap blur on device has not been exercised** —
+  human list.
+- **No focus-ring audit and no reduced-motion audit.** This arc adds no motion.
+  Not regressed; simply not measured.
+- **The 30 bare `div[tabindex="0"]` elements still in the feed** were counted and
+  are NOT from this arc — every control it adds carries `role`. They are Entry
+  1/2's defect class surviving elsewhere (`saved.tsx`'s `FilterPill` is one
+  confirmed instance, with a sub-44px target as well). **Open item.**

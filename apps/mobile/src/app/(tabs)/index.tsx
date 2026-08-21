@@ -1,10 +1,13 @@
 // Explore — the anonymous distance-pure feed, now with save/going toggles on
 // each card. Anonymous taps on either route to the auth screen (progressive
 // gating); the feed itself never gates.
-// Location is HARDCODED to Sahuarita, AZ for now — device geolocation is a
-// later stage. Refetch on pull-to-refresh + screen focus only (no polling;
-// architecture lock #4) — focus refetch keeps rsvp_count and saved state
-// current after actions elsewhere.
+// Location and radius are USER-SET and PERSISTED (lib/origin.tsx) — the
+// hardcoded Sahuarita origin retired 2026-08-20 along with lib/devOrigin.ts.
+// Device geolocation is Stage 2b and is deliberately not here: nothing in this
+// screen reads device position (the typed-vs-sensed privacy boundary).
+// Refetch on pull-to-refresh + screen focus only (no polling; architecture
+// lock #4) — focus refetch keeps rsvp_count and saved state current after
+// actions elsewhere.
 
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
@@ -18,20 +21,27 @@ import {
 import { GradientButton, SecondaryButton } from '../../components/AuthControls';
 import EmptyState from '../../components/EmptyState';
 import EventStub, { type FeedEvent } from '../../components/EventStub';
+import LocationControl from '../../components/LocationControl';
 import SparkedLogo from '../../components/SparkedLogo';
 import { useAuth } from '../../lib/auth';
-import { TEST_ORIGIN } from '../../lib/devOrigin';
 import { useEngagement } from '../../lib/engagement';
+import { MAX_RADIUS, useOrigin } from '../../lib/origin';
 import { supabase } from '../../lib/supabase';
 import { brand, tracking, trackingEm, useTheme } from '../../theme';
 import { laneFor } from '../../theme/categoryColors';
 
-const RADIUS_MILES = 25;
-/** The empty-feed escape hatch — ONE step, not a ladder. A ladder is a
- *  control and controls belong to the Stage 2 filter work; this is the single
- *  action that can resolve an empty radius. 50mi from Sahuarita reaches
- *  Tucson, so it resolves the problem rather than deflecting it. */
-const WIDE_RADIUS_MILES = 50;
+/**
+ * The empty-feed escape hatch — a SHORTCUT now, no longer the only control.
+ *
+ * It was a one-shot 25->50 widen because there was no radius control and the
+ * 1b ruling refused to build a "ladder" inside an empty state. The header
+ * control IS that ladder now, so this button doubles the current radius (capped
+ * at MAX_RADIUS) rather than jumping to a fixed 50 — at the seeded 25 that is
+ * still exactly 25->50, and at 60 a fixed target would have NARROWED the feed.
+ * It writes the persisted radius, same as the header, so there is one value and
+ * one path. Hidden at MAX_RADIUS, where there is nothing further to offer.
+ */
+const widenTargetFor = (radius: number) => Math.min(radius * 2, MAX_RADIUS);
 
 export default function Explore() {
   const theme = useTheme();
@@ -40,18 +50,23 @@ export default function Explore() {
   const [events, setEvents] = useState<FeedEvent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  // SESSION STATE, never persisted. A stored 100mi radius silently breaks the
-  // hyperlocal promise for someone who set it once and forgot — persistence is
-  // a preference and belongs in Settings. Plain component state, so it resets
-  // when the app restarts and survives a trip to event detail and back (which
-  // is the whole point of an escape hatch).
-  const [radius, setRadius] = useState(RADIUS_MILES);
-  const widened = radius !== RADIUS_MILES;
+  // PERSISTED, reversing the 1b ruling that lived here.
+  //
+  // That comment argued radius must be session-only because "a stored 100mi
+  // radius silently breaks the hyperlocal promise for someone who set it once
+  // and forgot." The location lock AMENDED 2026-08-21 overrules it: a radius is
+  // a user-DECLARED preference, in the same class as a typed town, and the
+  // amendment says those persist so returning users and travellers do not
+  // re-enter them. The forgetting risk is real and is answered by the header
+  // control stating the current radius on every visit, which the old one-shot
+  // widen never did.
+  const { place, radius, loaded, setRadius } = useOrigin();
+  const canWiden = radius < MAX_RADIUS;
 
-  const load = useCallback(async (miles: number) => {
+  const load = useCallback(async (origin: { lat: number; lng: number }, miles: number) => {
     const { data, error: rpcError } = await supabase.rpc('events_within_radius', {
-      origin_lat: TEST_ORIGIN.lat,
-      origin_lng: TEST_ORIGIN.lng,
+      origin_lat: origin.lat,
+      origin_lng: origin.lng,
       radius_miles: miles,
     });
     if (rpcError) {
@@ -72,28 +87,37 @@ export default function Explore() {
 
   // Focus = initial mount + every return to this tab (covers RSVP counts and
   // saved state changed elsewhere). Never a poll.
-  // `radius` is a dependency so widening refetches through this same path
-  // rather than a second one — one place where the feed is read.
+  // `place` and `radius` are dependencies so a location or radius change
+  // refetches through this same path rather than a second one — one place
+  // where the feed is read.
+  //
+  // GATED ON `loaded`: AsyncStorage is async and this screen loads on mount.
+  // Firing before the stored origin resolves would read the feed against the
+  // seed and then re-read against the real value — a visible swap and a wasted
+  // round trip. Until then `events` stays null, which is already the
+  // EmptyState pending phase, so the existing spinner covers the gap.
   useFocusEffect(
     useCallback(() => {
-      load(radius);
+      if (!loaded || !place) return;
+      load(place, radius);
       refresh();
-    }, [load, refresh, radius]),
+    }, [load, refresh, loaded, place, radius]),
   );
 
   const onRefresh = useCallback(async () => {
+    if (!place) return;
     setRefreshing(true);
-    await Promise.all([load(radius), refresh()]);
+    await Promise.all([load(place, radius), refresh()]);
     setRefreshing(false);
-  }, [load, refresh, radius]);
+  }, [load, refresh, place, radius]);
 
-  // One-shot widen. Clearing `events` first puts the shared live region back
-  // into its pending phase, so the message that eventually lands is a CHANGE
-  // to the region rather than a silent in-place edit of identical text.
+  // Clearing `events` first puts the shared live region back into its pending
+  // phase, so the message that eventually lands is a CHANGE to the region
+  // rather than a silent in-place edit of identical text.
   const onWiden = useCallback(() => {
     setEvents(null);
-    setRadius(WIDE_RADIUS_MILES);
-  }, []);
+    setRadius(widenTargetFor(radius));
+  }, [radius, setRadius]);
 
   // Progressive gating: anonymous engagement taps invite an account; the
   // auth screen is a modal, so dismissing/finishing lands right back here.
@@ -133,16 +157,10 @@ export default function Explore() {
         >
           Explore
         </Text>
-        <Text
-          style={{
-            fontFamily: theme.fonts.bodyMedium,
-            fontSize: theme.fontSizes.bodySm,
-            color: theme.colors.textMuted,
-            marginTop: 4,
-          }}
-        >
-          Sahuarita, AZ · within {radius} mi
-        </Text>
+        {/* Was the literal string "Sahuarita, AZ · within {radius} mi". Both
+            halves are controls now, and the component owns the live region
+            that announces a change to either. */}
+        <LocationControl />
       </View>
     </View>
   );
@@ -191,19 +209,22 @@ export default function Explore() {
             <EmptyState
               pending={events === null}
               headline="Nothing nearby right now"
-              // The second sentence is dropped once widened: there is no
+              // The second sentence is dropped at MAX_RADIUS: there is no
               // further control behind it, and an instruction with nothing to
-              // act on is a dead end. See the arc report — this variant is the
-              // one copy slot still awaiting a ruling.
+              // act on is a dead end. The condition used to be "has already
+              // widened once"; with a persisted, user-set radius that test
+              // stopped meaning anything (anyone sitting at 50 would have lost
+              // the sentence permanently), so it now tracks whether widening
+              // is still POSSIBLE.
               body={
-                widened
-                  ? "Sparked only shows what's actually within your radius — no filler from other cities."
-                  : "Sparked only shows what's actually within your radius — no filler from other cities. Try looking a little further out."
+                canWiden
+                  ? "Sparked only shows what's actually within your radius — no filler from other cities. Try looking a little further out."
+                  : "Sparked only shows what's actually within your radius — no filler from other cities."
               }
             >
-              {!widened && (
+              {canWiden && (
                 <GradientButton onPress={onWiden} style={{ minHeight: 44, alignSelf: 'stretch', maxWidth: 300 }}>
-                  Widen to {WIDE_RADIUS_MILES} miles
+                  Widen to {widenTargetFor(radius)} miles
                 </GradientButton>
               )}
               {/* Host path, secondary. gated() rather than letting /create
