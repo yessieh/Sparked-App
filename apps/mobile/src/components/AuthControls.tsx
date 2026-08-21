@@ -59,6 +59,12 @@ export function GradientButton({ children, onPress, disabled, busy, style }: But
     <Pressable
       onPress={onPress}
       disabled={disabled || busy}
+      // Without this, react-native-web renders a bare div[tabindex=0] and
+      // screen readers announce focusable text, not a button (WCAG 4.1.2).
+      // Confirmed absent in the DOM, not inferred. `role` rather than
+      // `accessibilityRole`: the latter is deprecated in RNW 0.21.2
+      // (createDOMProps/index.js:605).
+      role="button"
       style={({ pressed }) => [
         {
           borderRadius: theme.radii.lg,
@@ -100,6 +106,7 @@ export function SecondaryButton({ children, onPress, disabled, busy, style }: Bu
     <Pressable
       onPress={onPress}
       disabled={disabled || busy}
+      role="button" // see GradientButton
       style={({ pressed }) => [
         {
           borderRadius: theme.radii.lg,

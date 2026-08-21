@@ -12,8 +12,10 @@ import * as Clipboard from 'expo-clipboard';
 import * as Linking from 'expo-linking';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Platform, Text, View } from 'react-native';
+import { Animated, Platform, Text, View } from 'react-native';
 
+import { SecondaryButton } from '../../../components/AuthControls';
+import EmptyState from '../../../components/EmptyState';
 import EventDetailView, { type EventDetailData } from '../../../components/EventDetailView';
 import { useAuth } from '../../../lib/auth';
 import { TEST_ORIGIN } from '../../../lib/devOrigin';
@@ -21,6 +23,24 @@ import { useEngagement } from '../../../lib/engagement';
 import { supabase } from '../../../lib/supabase';
 import { vendorFromRow, type Vendor, type VendorRow } from '../../../lib/vendors';
 import { brand, useTheme } from '../../../theme';
+
+/** Shape check only — never a claim that the row exists. A malformed id can be
+ *  answered without a round trip, and routing it to the same neutral state as
+ *  every other unreachable id keeps a raw Postgres 22P02 ("invalid input
+ *  syntax for type uuid") off a stranger's screen. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * `missing` is ONE state on purpose and must stay one.
+ *
+ * app.event_detail returns zero rows — and NO error — for archived, deleted,
+ * draft, pending_payment, never-existed, and exists-but-you-are-not-entitled
+ * alike (20260815000028 PART C). The indistinguishability is enforced at the
+ * data layer; this screen's only job is not to break it. Do not add a branch,
+ * a code, or a helpful-sounding variant that tells these apart — naming any
+ * one of them confirms a hidden row exists.
+ */
+type LoadState = 'loading' | 'found' | 'missing' | 'error';
 
 export default function EventDetailScreen() {
   const theme = useTheme();
@@ -30,6 +50,7 @@ export default function EventDetailScreen() {
   const [event, setEvent] = useState<EventDetailData | null>(null);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<LoadState>('loading');
   const [toast, setToast] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastOpacity = useRef(new Animated.Value(1)).current;
@@ -39,17 +60,40 @@ export default function EventDetailScreen() {
   const stampPressed = useRef(false);
 
   const load = useCallback(async () => {
-    if (!id) return;
+    // No id, or an id that is not a uuid: nothing to ask the server about, and
+    // both are the never-existed case in practice (a garbled shared link).
+    // Previously `!id` returned early and left the screen spinning forever.
+    if (!id || !UUID_RE.test(id)) {
+      setError(null);
+      setEvent(null);
+      setVendors([]);
+      setState('missing');
+      return;
+    }
     const { data, error: rpcError } = await supabase.rpc('event_detail', {
       event_id: id,
       origin_lat: TEST_ORIGIN.lat,
       origin_lng: TEST_ORIGIN.lng,
     });
-    if (rpcError) setError(rpcError.message);
-    else {
+    if (rpcError) {
+      // 22P02 = invalid text representation. Unreachable behind the shape
+      // check above, kept so a future param change cannot leak the raw
+      // database string onto the screen.
+      if (rpcError.code === '22P02') {
+        setError(null);
+        setEvent(null);
+        setVendors([]);
+        setState('missing');
+        return;
+      }
+      setError(rpcError.message);
+      setState('error');
+    } else {
       setError(null);
       const ev = ((data ?? []) as EventDetailData[])[0] ?? null;
       setEvent(ev);
+      // Zero rows is the whole not-found surface. See the LoadState note.
+      setState(ev ? 'found' : 'missing');
       // Vendors are a Plus-only feature — skip the extra read for every other
       // event (the common feed→detail path). event_vendors RLS lets anon read
       // rows of any publicly-visible event, so no RPC is needed.
@@ -119,7 +163,7 @@ export default function EventDetailScreen() {
     else router.replace('/(tabs)');
   };
 
-  if (error || (!event && error !== null)) {
+  if (state === 'error') {
     return (
       <View style={{ flex: 1, backgroundColor: theme.colors.bg, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
         <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 13, color: theme.colors.danger, textAlign: 'center' }}>
@@ -129,10 +173,34 @@ export default function EventDetailScreen() {
     );
   }
 
-  if (!event) {
+  // ONE returned subtree spans loading AND missing, so the live region inside
+  // EmptyState is the same node before and after the transition. Two separate
+  // `return`s (which is what this screen had) mount the region together with
+  // its text, and a region that arrives with its content does not reliably
+  // announce. This is the reason the spinner moved inside EmptyState instead
+  // of staying a branch of its own.
+  if (state !== 'found' || !event) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.colors.bg, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator color={brand.brightOrange} />
+        <EmptyState
+          pending={state === 'loading'}
+          headline="This event isn't available"
+          // Deliberately disjunctive and deliberately incomplete. It must not
+          // resolve to archived / deleted / private / never-existed — naming
+          // any one of them confirms a hidden event exists. No "contact the
+          // organizer" line either: it implies there is an organizer.
+          body="The link may have expired, or it may not be public. Nothing else to go on — try Explore for what's happening near you."
+        >
+          <SecondaryButton
+            // replace, not back(): the label names Explore, so the action has
+            // to be Explore regardless of where the dead link was opened from,
+            // and the unreachable event should not stay in history behind it.
+            onPress={() => router.replace('/(tabs)')}
+            style={{ minHeight: 44, alignSelf: 'stretch', maxWidth: 300 }}
+          >
+            Back to Explore
+          </SecondaryButton>
+        </EmptyState>
       </View>
     );
   }

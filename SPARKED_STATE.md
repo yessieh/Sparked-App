@@ -1776,8 +1776,15 @@ cold-start empty state at 2 while it was already in flight.*
    needs a new dependency.
    1. ~~Lane stripe~~ **✅ DONE 2026-08-19** (also fixed a live WCAG 1.4.11
       failure across all ten previous stripe values — see `docs/ACCESSIBILITY.md`).
-   2. **Cold-start empty state** — feed with zero events in radius. The most
-      common real screen at launch, and currently unhandled.
+   2. ~~Cold-start empty state~~ **✅ DONE 2026-08-19** — feed with zero events
+      in radius, the most common real screen at launch. Shipped together with
+      event not-found (which previously spun forever on any id the caller
+      could not see) because they are one problem and needed one accessibility
+      pass — see `docs/ACCESSIBILITY.md` Entry 2. Carries the one-shot
+      25→50mi widen and a secondary host path. **Two gaps recorded there, not
+      closed:** the empty feed has never been seen rendering from a genuinely
+      empty result, and the archived-event path was never rendered. The
+      FUNNELS half of this work is still open — see the tracker.
    3. **Header controls — STAGE 2A (typed), then STAGE 2B (sensed).** The
       zip/radius inline-edit pattern. **2a** builds the typed town/zip +
       radius control and seeds it from a default (`TEST_ORIGIN`/Sahuarita) —

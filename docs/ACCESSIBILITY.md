@@ -217,3 +217,240 @@ WCAG 2.x relative-luminance implementation over the hexes in
 `apps/mobile/src/theme/colors.ts`, compositing `rgba(255,255,255,0.04)` over
 `#14213D` for the dark card surface. Any conforming contrast checker reproduces
 them, provided it is given the **composited** `#1d2a45` rather than the raw navy.
+
+---
+
+# Entry 2 — 2026-08-19 — The two "nothing to show you" states
+
+**The arc:** cold-start empty feed (Explore) and event-not-found (event detail).
+They shipped together because they are one problem — a screen with no content
+and no explanation — and they share one component, `components/EmptyState.tsx`,
+which exists to own the ANNOUNCEMENT rather than to save duplicated markup.
+
+Before: the empty feed rendered one muted sentence with no control and no
+announcement; event detail **spun forever** on any id the caller could not see,
+because a successful RPC returning zero rows left `event === null` and
+`error === null`, and the only branch that could catch that was unreachable
+(`!event && error !== null` is implied by the `error` test above it).
+
+## THE HEADLINE: a live region that mounts with its text does not announce
+
+`aria-live` announces content that changes **after** the region is already in
+the tree. A region mounted together with its message is unreliable across
+screen readers — the failure is silent, and it looks correct in source, in a
+DOM snapshot, and to the typechecker. Both screens were restructured around it:
+
+- **Explore** — `ListEmptyComponent` already mounts while `events === null`, so
+  the region wraps that whole phase and only its children swap.
+- **Event detail** — previously two separate `return`s (spinner, then content),
+  which mount different subtrees. Now **one returned subtree spans loading and
+  missing**, so the region node survives the transition. This is the reason the
+  spinner moved inside `EmptyState` instead of staying a branch of its own.
+
+`ListEmptyComponent` is passed as an **element**, never as an inline
+`() => <…>`. An inline arrow is a new component type on every render, which
+would remount the region and break the announcement it exists to make.
+
+### Verified in the DOM, including node identity
+
+Sampled every 50ms across the real transition (react-native-web 0.21.2, Expo
+web dev server, dark mode, signed out):
+
+| Check | Result |
+| ----- | ------ |
+| `[aria-live="polite"]` on the empty feed | **1** |
+| `[role="status"]` on the empty feed | **1** |
+| Region text == shipped copy, both screens | **exact match** |
+| Event detail: distinct region nodes across loading to missing | **1** |
+| Phase 1 (~1500ms, forced delay) | node 0, empty text — spinner inside the region |
+| Phase 2 | node 0 — **same node**, text swapped in |
+| Explore widen: same node before / after resolve | **true**, text changed |
+| Regions left visible in the DOM after leaving a state | 0 |
+
+**The node-identity row is the meaningful one.** Asserting only that
+`aria-live="polite"` is present would have passed against a region that
+re-mounts on every transition and therefore never announces. The attribute
+check confirms the prop reaches the DOM; only node identity confirms the
+mechanism works.
+
+An independent positive check on the widen path: the recorded RPC payload was
+`{ origin_lat: 31.9576, origin_lng: -110.9556, radius_miles: 50 }`, so the
+control reaches the server rather than only repainting the header.
+
+**Baseline:** checked against the running Expo web dev server at
+`localhost:8081` on 2026-08-19, against `main` @ `8ec6f4a` plus this arc's
+working tree. Empty results were produced by intercepting `window.fetch` in the
+page — no source and no database was modified. **This does not establish native
+behaviour** (see the platform table below), nor appearance on real hardware.
+
+### Platform coverage of the announcement, traced not assumed
+
+| Platform | Mechanism | Evidence |
+| -------- | --------- | -------- |
+| web | `aria-live` forwarded to the DOM attribute | rnw 0.21.2 `forwardedProps/index.js:47`, `createDOMProps/index.js:460` |
+| Android | RN maps `aria-live` to `accessibilityLiveRegion` | rn 0.86 `View.js:66-68` |
+| iOS | **neither of the above does anything** — covered by `AccessibilityInfo.announceForAccessibility`, gated to iOS so Android does not announce twice | rnw compiles it to an explicit no-op on web (`AccessibilityInfo/index.js:79`) |
+
+`aria-live` is a typed View prop in RN 0.86 (`ViewAccessibility.d.ts:255`) and
+`role="status"` is a valid `Role` value (`:406`), so one spelling covers all
+three platforms. **`accessibilityLiveRegion` and `accessibilityRole` both log
+deprecation warnings in rnw 0.21.2** (`createDOMProps/index.js:456`, `:605`) —
+prefer `aria-live` and `role`. Per Entry 1's standing rule the iOS path is
+written but **NOT verified**; it is on the human list.
+
+## A second inert-prop finding, same class as Entry 1's
+
+**The two shared CTA components rendered as `div[tabindex="0"]` with no role.**
+`GradientButton` and `SecondaryButton` (`components/AuthControls.tsx`) set no
+role, so react-native-web emitted a bare focusable div and screen readers
+announced focusable text, not a button — **WCAG 4.1.2**. Found by querying the
+rendered DOM, not by reading source: it typechecks clean and looks correct in
+JSX, because the defect is an ABSENCE.
+
+Fixed by adding `role="button"` to both. **This is a shared-component change
+beyond the arc's stated file list**, taken because shipping two new buttons that
+screen readers do not announce as buttons is not defensible. It also repairs the
+auth screen and the Me hub, which use the same two components. No visual change.
+
+**Standing rule, restated because this is the second time: an accessibility prop
+is not verified by the typechecker, and its ABSENCE is not caught by source
+review either.** Assert the rendered output.
+
+## Contrast — measured against the real composited surfaces
+
+Body copy is held to **1.4.3 (4.5:1)**, not the 3:1 Entry 1's stripes were held
+to. Dark mode is the rendered surface; light is computed-never-rendered.
+
+### Dark — all pass
+
+| Element | Colour | Surface | Ratio |
+| ------- | ------ | ------- | ----- |
+| Headline | `text` `#eef0ff` | bg `#14213D` | **14.11:1** |
+| Body / subline | `textMuted` composites to `#81899e` | bg `#14213D` | **4.57:1** |
+| Primary CTA label | `brand.navy` on spark gradient | worst stop `#ff5f4e` | **5.32:1** |
+| Secondary CTA label | `text` `#eef0ff` | `cardBg` `#1d2a45` | **12.62:1** |
+
+### BINDING CONSTRAINT: these states must stay on the bare page background
+
+**`textMuted` clears 4.5:1 by 0.07 on the page background (4.57:1) and FAILS at
+4.32:1 on a card surface (`#1d2a45`).** That is not just a measurement, it is a
+constraint on future edits: moving either state into a card — the obvious
+"make it feel less bare" change — silently drops the body copy below 1.4.3.
+**Any future move onto a card requires a different body colour.** For the same
+reason `textFaint` cannot carry any of this: 2.92:1 on the background and
+2.85:1 on a card, below even the 3:1 non-text floor.
+
+### Light — COMPUTED, NEVER RENDERED, and the body line FAILS
+
+Same status as Entry 1's stripe pair, and unreachable for the same structural
+reason (the Appearance screen is still a "Coming soon" stub, so the theme
+preference is permanently `'system'`).
+
+| Element | Colour | Surface | Ratio |
+| ------- | ------ | ------- | ----- |
+| Headline | `#1c2840` | bg `#f4f5f8` | 13.50:1 |
+| **Body / subline** | `textMuted` `#7a849e` | bg `#f4f5f8` | **3.43:1 — FAILS** |
+| Primary CTA label | `brand.navy` on gradient | `#ff5f4e` | 5.32:1 (mode-independent) |
+| Secondary CTA label | `#1c2840` | `cardBg` `#ffffff` | 14.72:1 |
+
+**The failure is the token, not this arc.** `lightPalette.textMuted` is used as
+body copy on every screen in the app; at 3.43:1 it is below 1.4.3 everywhere it
+appears in light mode. It could not be fixed inside this arc's "no new colours"
+constraint. **Owner: the Appearance arc**, at the same moment Entry 1's light
+stripe pair gets its first real render.
+
+### STANDING RULE — the only two mode-safe label treatments
+
+Discovered while computing the above, and recorded because it will recur:
+
+> **Navy-on-spark-gradient and `colors.text`-on-card are the only two label
+> treatments in the app that pass 4.5:1 in BOTH modes.** Accent-coloured text
+> does not: `brightOrange` is **1.85:1** and `sparkOrange` **2.13:1** against the
+> light background. Any new CTA uses one of the two, or owes a measurement.
+
+Same root cause as Entry 1's headline finding — a dark-first palette whose
+accents were never given light values.
+
+## Touch targets — WCAG 2.5.5
+
+Measured with `getBoundingClientRect()` rather than inferred from padding, at
+both 1280x800 and 375x812:
+
+| Control | Desktop | Mobile |
+| ------- | ------- | ------ |
+| Widen to 50 miles | 300 x **51** | 295 x **51** |
+| Post something yourself | 300 x **48** | 295 x **48** |
+| Back to Explore | 300 x **46** | 300 x **48** |
+
+`minHeight: 44` is set explicitly on all three rather than left to padding
+arithmetic. No horizontal overflow at 375px.
+
+## The not-found message distinguishes NOTHING, and that is load-bearing
+
+`app.event_detail` (0028 PART C) returns zero rows **and no error** for
+archived, deleted, draft, `pending_payment`, never-existed, and
+exists-but-not-entitled alike. The indistinguishability is enforced at the data
+layer; the UI's only job is not to break it.
+
+One neutral message covers all of them. The copy is deliberately disjunctive
+("may have expired, or it may not be public") and deliberately incomplete. It
+does not say archived, removed, deleted, private, "no longer", or "was" — each
+would confirm a hidden row exists. **There is no "contact the organizer" line,
+because that implies there is an organizer.** A `LoadState` comment in
+`event/[id].tsx` states this so a future branch is not added casually.
+
+Malformed ids route to the same state (shape-checked client-side, with a `22P02`
+fallback), which also keeps a raw Postgres `invalid input syntax for type uuid`
+off a stranger's screen.
+
+**Verified:** rendered `innerText` for a malformed id and for a well-formed
+nonexistent id is **byte-identical**, and a scan of the rendered page for
+archiv / delet / remov / private / "no longer" / organizer / draft / cancel
+returned **zero** hits. **Not verified: the archived case** — it needs a real
+archived event id, which the test data no longer provides — the event was
+un-archived before the check ran. Still on the human list.
+
+## What this entry does NOT establish
+
+- **No screenshots from the build session.** The Browser pane could not
+  composite frames while the arc was being built, so layout and contrast were
+  computed and DOM-measured only. **Partially closed since, on device, dark
+  mode: the NOT-FOUND state was confirmed rendering correctly for a
+  nonexistent uuid, and reads fine without the icon tile** (the element
+  dropped by ruling — see the header note in `components/EmptyState.tsx`).
+  That is the human feel-pass CLAUDE.md's verification budget calls for, and
+  it covers ONE of the two states.
+- **The COLD-START EMPTY FEED has never been seen rendering from a genuinely
+  empty result.** The feed carries real data, and every check of that state
+  reached it by intercepting `window.fetch` in the browser. The DOM assertions
+  above hold for the intercepted path; nobody has watched the real path
+  produce it. **This is the weakest link in the entry** — an interception
+  proves the component renders given an empty array, not that the empty array
+  arrives the way production will deliver it.
+- **Nothing about iOS.** The `announceForAccessibility` call is written and
+  gated to iOS; it has never run.
+- **Nothing about the archived-event path**, only never-existed and malformed.
+  **Named because the reason matters: the test event was UN-ARCHIVED before
+  that check ran**, so the archived case was never rendered. It rests on the
+  RPC filter (`app.event_detail` returns zero rows for it, same as every other
+  unreachable id) and on the QA suite — not on a rendered confirmation. The
+  indistinguishability argument is structural and still holds; what is missing
+  is the empirical leg.
+- **`saved.tsx`'s empty state is a live 1.4.3 FAILURE and was left alone.** Its
+  body sentence renders in `textFaint` at 12px — **2.92:1 against a 4.5:1
+  requirement** — and its icon sits below the 3:1 non-text floor too. Out of
+  scope this arc; **open item.**
+- **`me.tsx:440` is a latent light-mode failure.** "Explore events near you →"
+  is `brightOrange` text, **1.85:1** on the light background. Invisible today
+  because light mode is unreachable; it fails the moment Appearance ships.
+  **Open item**, and the reason the standing rule above is written down.
+- **No audit of focus rings or reduced-motion** on these surfaces. This arc adds
+  no motion. Not regressed; simply not measured.
+- **Navigating event to event still shows the previous event's content while the
+  next one loads** — the route component is reused, so the screen does not
+  return to its loading phase. Pre-existing (the old code held the stale `event`
+  the same way), unchanged here, and out of scope: this arc is about the empty
+  result, not the wait.
+- **Backgrounded screens were checked, not assumed:** a departed route's live
+  region stays in the DOM, but its container carries `aria-hidden="true"`, so it
+  is out of the accessibility tree. Confirmed, not inferred.

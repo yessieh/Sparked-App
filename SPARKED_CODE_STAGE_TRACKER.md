@@ -520,7 +520,22 @@ migration lands between, the NAME is the anchor, not the number.
 - [ ] **Feedback form backend** (Supabase table).
 - [ ] **Light-mode QA sweep** on real devices — token conversion was 3-pass;
       expect stragglers.
-- [ ] **Cold-start empty state** (if not closed in Design) — feed + funnels.
+- [ ] **Cold-start empty state — FEED HALF DONE 2026-08-19, FUNNELS HALF
+      OPEN.** Deliberately left unticked: this item always covered two
+      surfaces and only one shipped.
+      **Done — the app feed.** Both "nothing to show you" states landed in one
+      arc with one accessibility pass: the cold-start empty feed (plain
+      message, one-shot 25→50mi widen, secondary host path) and event
+      not-found, which previously spun forever on any id the caller could not
+      see. Full record in `docs/ACCESSIBILITY.md` Entry 2, including what was
+      NOT verified — the empty feed has still never been seen rendering from a
+      genuinely empty result (every check intercepted `fetch`), and the
+      archived-event path was never rendered because the test event was
+      un-archived first.
+      **Open — the funnels.** The landing variants under
+      `design-reference/mockups/landings/` have no empty-state handling and
+      are not deployed at all (see "Web funnels deploy" above). Nothing in
+      this arc touched them.
 - [ ] **STAGE 2A (IN FLIGHT) — Explore zip/radius inline-edit + onboarding —
       MUST PRECEDE LAUNCH.** The feed origin is still the hardcoded
       `TEST_ORIGIN` (Sahuarita) in `lib/devOrigin.ts`. The header's
