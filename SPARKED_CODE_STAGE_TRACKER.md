@@ -1043,6 +1043,55 @@ migration lands between, the NAME is the anchor, not the number.
       content share an edge on a phone. Defer to this batch rather than
       hand-tuning one screen.
 
+- [ ] **Explore — header is left-aligned across the full content width while the
+      empty state is a 300px centred block inside it.** Same category as the
+      Organizer Profile deferral above: correct per the mobile-first rule,
+      visually odd at desktop width.
+      **Not a defect, and the first read of it was wrong.** There is ONE wrapper
+      and everything inherits it — `contentContainerStyle` on the feed FlatList
+      (`app/(tabs)/index.tsx:231`) is `maxWidth: 560 · width: '100%' ·
+      alignSelf: 'center' · paddingHorizontal: 20`, and the header, the cards and
+      the empty state all sit inside it. Nothing centres against the viewport.
+      Measured in the DOM at 1280×800: container `360→920`; header title box and
+      card shell BOTH `380→900` (520 wide, left-aligned); empty-state block
+      `490→790` (300 wide, centred on 640). Verified at 420 / 899 / 1280 / 1440 —
+      the rule is `container = min(viewport, 560) centred`, `header/card =
+      container.left + 20`, `empty = viewport / 2`.
+      So the mismatch is two things stacked, neither of them a bug: the header
+      is left-aligned where the empty state is centre-aligned
+      (`alignItems: 'center'`, `components/EmptyState.tsx:58`), and the empty
+      state additionally caps itself at 300 (`EmptyState.tsx:93`, plus the CTAs
+      at `index.tsx:265, 275, 286`) — a 220px width difference on top of the
+      alignment difference. Invisible on a phone, where 520 and 300 are close
+      enough that both read as centred.
+      **This became much more visible on 2026-08-21** when the ENDED filter
+      landed: the empty state went from a rare cold-start screen to the normal
+      state of Explore at every radius. That is why it surfaced now.
+
+- [ ] **Column width is 19 literals across 13 files with no shared token — the
+      batch must introduce the token, not just adjust the numbers.** Otherwise
+      every fix aligns one screen against a value the others disagree about,
+      which is exactly how the Organizer back chip above ended up 40px off.
+      - **560:** `(tabs)/index.tsx:231` (Explore) · `(tabs)/saved.tsx:310` ·
+        `(tabs)/me.tsx:73, 670` · `(tabs)/organizer/[id].tsx:558` (content) ·
+        `(tabs)/workspace.tsx:787` (mobile branch), `:1242` · `auth.tsx:134` ·
+        `create/checkout.tsx:213` · `reset-password.tsx:53` ·
+        `workspace/edit.tsx:224`
+      - **640:** `components/EventDetailView.tsx:242, 672, 713` ·
+        `(tabs)/create.tsx:133` (fork) · `create/curbside.tsx:160, 353` ·
+        `create/event.tsx:1210` (wizard) · `(tabs)/organizer/[id].tsx:480`
+        (back chip, over 560 content — the item above)
+      - **880:** `(tabs)/workspace.tsx:787` desktop branch, the only
+        breakpoint-driven width in the app.
+      **Note the create flow disagrees with itself:** fork 640 → Curbside 640 →
+      wizard 640 → **checkout 560**. SPARKED_STATE §5's recorded desktop pass
+      specifies "checkout + Curbside mini form centred ~560px", so Curbside's
+      640 and checkout's 560 are BOTH divergences from the same sentence, in
+      opposite directions. Resolve the spec before writing the token.
+      **`breakpoints.desktop = 1024` already exists** (`theme/spacing.ts:32`) and
+      only two files import it — `workspace.tsx` and `create/event.tsx`, both
+      coordinator surfaces, exactly as §5 requires. The token belongs beside it.
+
 ---
 
 ## DOC RECONCILIATION — SECOND PASS (queued 2026-08-19)
