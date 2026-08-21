@@ -647,3 +647,150 @@ Not contrast matters, but they belong in the same record.
   are NOT from this arc — every control it adds carries `role`. They are Entry
   1/2's defect class surviving elsewhere (`saved.tsx`'s `FilterPill` is one
   confirmed instance, with a sub-44px target as well). **Open item.**
+
+---
+
+# Entry 4 — 2026-08-21 — Explore drops ended events (feed ENDED filter)
+
+**The arc:** `events_within_radius` has no date predicate, so every published
+event stayed in Explore forever, sorted by distance, wearing an `ENDED`
+countdown chip. Last month's concert was in the feed. This arc filters ended
+events out client-side, at fetch time, in `app/(tabs)/index.tsx`.
+
+**No new interactive elements.** This was an accessibility *light* pass by
+design: the arc adds no control, no label, no target, no motion. Two things
+needed checking — that the existing live region still announces when the filter
+empties the feed, and that Entry 2's same-node property survives a transition
+this arc makes common.
+
+## THE HEADLINE: the filter turned a silent path into the likely one, so the path got fixed
+
+Entry 2's finding is that `aria-live` announces content changing **after** the
+region is in the tree; a region mounted together with its message is silent.
+`ListEmptyComponent` is unmounted whenever cards are rendering, so **cards →
+empty** mounts the region and its text together — silent.
+
+That path was theoretical before: a refresh that returned zero rows after
+returning some. The ENDED filter makes it ordinary — the feed can now empty
+without the RPC returning anything different. `onWiden` already solved this by
+calling `setEvents(null)` first, putting the region back into its pending phase
+so the message lands as a *change* to a node that already exists. **`onRefresh`
+now does the same.** The brief empty beneath the refresh spinner is what the
+pull gesture means; silence at the moment the app has something to say is not.
+
+## Verified in the DOM, including node identity
+
+Sampled every 50ms across the real cards to empty transition, driving the
+**shipped `onRefresh` handler** (pulled off the FlatList's `refreshControl`
+prop via the React fiber, so this is the real callback, not a reimplementation):
+
+| Check | Result |
+| ----- | ------ |
+| Pre-state: cards rendered, EmptyState region **absent** | `regionCount 1` (LocationControl only), cards present |
+| Region mounts EMPTY first (spinner phase) | **true** |
+| Same node every frame once mounted | **true** |
+| Message lands in **that same node** | **true** |
+| Mount to message | 559ms, 12 samples |
+| `[aria-live="polite"]` after | **2** — LocationControl (Entry 3) + EmptyState |
+| `[role="status"]` after | **2**, same two |
+| `ENDED` chips in the feed, clean state | **0** (previously the common case) |
+| `[tabindex]` nodes added by this arc | **0** |
+
+**The node-identity row is again the meaningful one.** Asserting only that the
+message appears would pass against a region that mounts with its text and never
+announces — which is exactly what this path did before the fix.
+
+An earlier run of this same test reported the region "never receiving text."
+That was a **probe defect, not an app defect**: the selector excluded any region
+containing the word "within", and the empty-state body copy is "…what's
+actually **within** your radius…". Recorded because a wrong probe that
+disproves a working fix is the same failure class as a wrong probe that
+confirms a broken one.
+
+## The filter was proven by what it KEEPS, not only by what it removes
+
+At the seeded origin every row has ended (see counts below), so the feed empties
+completely — and **an empty feed cannot distinguish a correct filter from
+`filter(() => false)`**. A positive check was required rather than optional.
+
+Five synthetic rows covering every branch of `hasEnded` were injected into the
+RPC **response** (page-side `fetch` wrapper — no source edit, no database
+write), then read back out of the rendered DOM:
+
+| Case | `starts_at` / `ends_at` | Expected | Rendered |
+| ---- | ----------------------- | -------- | -------- |
+| 1 — future | +2d / +2d3h | keep | **kept**, chip `2 DAYS` |
+| 2 — in progress | −1h / +6h | keep | **kept**, chip `NOW LIVE` |
+| 3 — just ended | −5h / −1h | drop | **dropped** |
+| 4 — null end, inside 3h grace | −1h / `null` | keep | **kept**, chip `NOW LIVE` |
+| 5 — null end, past 3h grace | −5h / `null` | drop | **dropped** |
+
+19 rows in, 3 rendered. Case 2 is the one the rule turns on: a live event is
+the most useful thing a discovery feed can show, and `eventCountdown` reads an
+in-progress event as `LIVE`, never `ENDED`.
+
+## Survivor counts at the seeded origin — zero, at every radius
+
+Read from the app's own RPC responses at 31.9576 / −110.9556, 2026-08-21
+~19:00Z:
+
+| Radius | RPC returned | Survived the filter |
+| ------ | ------------ | ------------------- |
+| 25 mi (default) | 13 | **0** |
+| 50 mi | 14 | **0** |
+| 100 mi (MAX) | 14 | **0** |
+
+The latest `ends_at` anywhere in the set is `2026-08-20T05:00:00Z` — about 38
+hours before the measurement. **Every seeded event has ended, so Explore is the
+empty state at every radius.** That is the filter working and the 1b empty state
+doing its job, not a regression.
+
+Side effect worth recording: at 100 mi the widen CTA correctly disappears
+(`canWiden` false at `MAX_RADIUS`). Entry 2 noted that branch had never been
+seen render; it has now.
+
+## What this entry does NOT establish
+
+- **No screenshots. Third arc running.** The pattern from Entries 2 and 3 holds —
+  treat it as the normal condition of this environment. Everything here is
+  DOM-measured. **Visual feel is on the human list.**
+- **The pull GESTURE is unproven, only the handler it calls.** `onRefresh` was
+  invoked directly off the fiber. Whether react-native-web wires a real pull to
+  it on a touch device, and whether the native `RefreshControl` does, is
+  untested. Same class as Entry 3's `focusout` caveat.
+- **The pre-state was captured in a separate observation**, immediately before
+  the sampled series, not inside it — by the first 50ms sample `setEvents(null)`
+  had already applied. So "cards were on screen" and "the region mounted empty"
+  are two adjacent measurements, not one continuous capture.
+- **Nothing about native or iOS.** Expo web only. This arc adds no
+  `announceForAccessibility` call of its own; it relies on the `EmptyState` path
+  Entry 2 wrote, which has still never run on an iOS device.
+- **Nothing about light mode**, unreachable for the same structural reason as
+  Entries 1–3.
+- **No contrast, target or focus measurements.** The arc paints nothing new and
+  adds no control. Not regressed; deliberately not measured.
+- **A never-empty feed was never observed**, because the seed data cannot produce
+  one. Every "cards rendering" state in this entry was synthetic. The
+  filter-keeps-things evidence is real but injected.
+- **THE FOCUS-REFETCH PATH IS STILL SILENT ON cards to empty, and this arc did
+  not close it.** `onWiden` and `onRefresh` blank to `null` first; the
+  `useFocusEffect` refetch does not. Return to Explore from another tab after the
+  last card ended and the region mounts with its text — silent, by Entry 2's own
+  finding. Left open deliberately: blanking on every focus return would flash a
+  spinner each time the user switches tabs back, which is a visible regression
+  traded for a rare case. **Partly mitigated:** a location or radius change also
+  routes through that effect, but LocationControl owns its own live region
+  (Entry 3) and announces the change itself, so only the plain tab-return case
+  is unannounced. **Open item.**
+- **`[tabindex]` count is 7 here versus Entry 3's 30 — that is not progress.**
+  The bare `div[tabindex="0"]` defect lives on the event cards, and this feed has
+  no cards to render. Entry 1/2's defect class is unchanged and still open.
+
+**Baseline:** checked against the running Expo web dev server at
+`localhost:8081` on 2026-08-21, against `main` @ `d9df9df` plus this arc's
+working tree (`CLAUDE.md`, `app/(tabs)/index.tsx`). `npx tsc --noEmit` clean.
+`npx expo lint` reports one error in `index.tsx` (`react/no-unescaped-entities`,
+the `Couldn't load events` apostrophe) which is **pre-existing at `d9df9df`
+line 205** and simply moved to line 244; this arc adds no new lint finding.
+Synthetic rows were injected into the `fetch` response in the page — **no source
+file and no database row was modified to produce any measurement here.**

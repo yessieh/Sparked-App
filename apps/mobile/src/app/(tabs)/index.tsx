@@ -8,6 +8,11 @@
 // Refetch on pull-to-refresh + screen focus only (no polling; architecture
 // lock #4) — focus refetch keeps rsvp_count and saved state current after
 // actions elsewhere.
+// ENDED EVENTS ARE FILTERED OUT HERE, client-side, at fetch time — see `load`.
+// events_within_radius has no date predicate and deliberately does not gain
+// one: a new argument means a signature change, which forces a DROP and resets
+// the wrapper's ACL. That is a grant-surface change, and it belongs to the
+// date-range arc, which needs server-side bounds for its own reasons.
 
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
@@ -25,6 +30,7 @@ import LocationControl from '../../components/LocationControl';
 import SparkedLogo from '../../components/SparkedLogo';
 import { useAuth } from '../../lib/auth';
 import { useEngagement } from '../../lib/engagement';
+import { hasEnded } from '../../lib/eventTime';
 import { MAX_RADIUS, useOrigin } from '../../lib/origin';
 import { supabase } from '../../lib/supabase';
 import { brand, tracking, trackingEm, useTheme } from '../../theme';
@@ -73,14 +79,38 @@ export default function Explore() {
       setError(rpcError.message);
     } else {
       setError(null);
+      // ONE instant for the whole response. hasEnded defaults `now` to a fresh
+      // Date per call, so without this a long response would be judged against
+      // as many slightly different clocks as it has rows, and a card sitting on
+      // the boundary could survive or not depending on its index.
+      const now = new Date();
+      // THE ENDED FILTER. `hasEnded` is the shared verdict — the same util the
+      // countdown chip renders from, so the feed and the card can never
+      // disagree about whether something is over. It carries the 3-hour grace
+      // for a missing ends_at; this file states no time constant of its own.
+      //
+      // The floor is `now`, not midnight: an event that ended at 11am is out by
+      // 4pm, so nobody scrolls past this morning to reach tonight. An event in
+      // PROGRESS stays — eventCountdown reads that as LIVE, never ENDED, and a
+      // live event is the most useful thing a discovery feed can show.
+      //
+      // Filtered HERE, once, where the response is handled — not derived at
+      // render. EventStub ticks every 60s to keep countdowns current, and that
+      // tick must never remove a card: an event vanishing under a thumb
+      // mid-scroll is worse than one that briefly reads ENDED until the next
+      // refresh. This runs on every fetch path (focus, pull-to-refresh, widen)
+      // because they all route through `load`.
+      //
       // Mapped rather than cast: the RPC returns tier_id, FeedEvent deliberately
       // has no such field, and `lane` is derived from it here. A blanket cast
       // would have compiled while leaving every stripe undefined.
       setEvents(
-        (data ?? []).map((r: FeedEvent & { tier_id?: string | null }) => ({
-          ...r,
-          lane: laneFor(r.tier_id),
-        })),
+        (data ?? [])
+          .filter((r: FeedEvent) => !hasEnded(r.starts_at, r.ends_at, now))
+          .map((r: FeedEvent & { tier_id?: string | null }) => ({
+            ...r,
+            lane: laneFor(r.tier_id),
+          })),
       );
     }
   }, []);
@@ -104,9 +134,18 @@ export default function Explore() {
     }, [load, refresh, loaded, place, radius]),
   );
 
+  // Clears to null FIRST, the same move onWiden makes below and for the same
+  // reason: the live region only announces content that changes AFTER it is
+  // already in the tree (docs/ACCESSIBILITY.md Entry 2). Going from cards to an
+  // empty feed would otherwise mount the region together with its text, which
+  // is silent — and the ENDED filter above turns cards→empty from a theoretical
+  // path into a common one. Blanking puts the region back into its pending
+  // phase so the message that lands is a CHANGE to a node that already exists.
+  // The brief empty beneath the refresh spinner is what the gesture means.
   const onRefresh = useCallback(async () => {
     if (!place) return;
     setRefreshing(true);
+    setEvents(null);
     await Promise.all([load(place, radius), refresh()]);
     setRefreshing(false);
   }, [load, refresh, place, radius]);

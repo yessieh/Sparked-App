@@ -44,4 +44,12 @@ Every arc runs: **pre-arc audit → build → QA suite → post-arc audit → co
 - **QA SUITE.** Every arc ships a behavioral SQL suite in `scripts/`, following the `scripts/qa-0018-quota-ledger.sql` pattern, plus a human verification list with exact URLs and named test data.
 - **POST-ARC.** Re-run the same audit, save as `YYYY-MM-DD-post-<arc-name>.md`, and DIFF it against the pre-arc baseline. Every added or changed grant, function, policy or default privilege must be named in the arc summary with the reason it exists. **An unexplained delta blocks the commit.**
 
+**N/A FOR SQL-FREE ARCS — STATED, NEVER OMITTED.** An arc that writes no SQL and
+touches no schema object has no grant surface to diff. The pre/post audit and the
+`qa-NNNN` suite are N/A, and the arc report must say so explicitly — stating that
+the grant surface is provably untouched and why — rather than omitting the gate.
+Silence reads as a skipped gate; a stated N/A is a decision. This does not extend
+to arcs that change RPC arguments, function bodies, or anything reachable from
+PostgREST: **if a migration file is written, the gate applies in full.**
+
 **The rule this enforces:** a grant is written once and reviewed once, at creation. Features change around it and nobody re-reads it. Four privilege incidents in this build traced to exactly that, and all four were found incidentally. The diff is what makes finding them non-incidental.
