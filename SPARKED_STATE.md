@@ -1031,6 +1031,44 @@ Create Event's tier step (per-day model is DEAD everywhere):
   driving. That covers the actual need without acquiring a tracking dataset we
   would then have to defend, disclose, and secure.
 
+  **AMENDED 2026-08-21 — the boundary is TYPED vs SENSED, not stored vs not.**
+  The original phrasing ("used live, never stored") reads as a blanket ban on
+  persisting anything location-shaped. The Stage 2a recon (2026-08-21)
+  surfaced the ambiguity directly: it blocks a persisted browsing origin, and
+  it never said whether a typed town counts as "location" at all. It doesn't.
+  A town or zip a user TYPES is a self-declared preference, no different in
+  kind from any other saved setting. A coordinate read from the device is a
+  position TRACE, and a history of those traces is exactly what this lock was
+  written to prevent — the travel-notifications case two paragraphs up,
+  restated: knowing where someone physically was, over time. The amended lock:
+
+  > Device position is used live and never stored. When a user taps the
+  > locator, the coordinate resolves a town name and is discarded — no
+  > coordinate is written to storage or retained anywhere. User-declared
+  > locations (town, zip) and radius are preferences and persist, including a
+  > recent-locations history, so returning users and travellers do not
+  > re-enter them. History is user-deletable.
+
+  Storing a resolved town name gives a list of places a user CHOSE, never a
+  record of where they physically were — the distinction the original rule
+  drew, now made explicit instead of left to inference. **What this does not
+  reopen:** the travel-notifications case above stays blocked. That case
+  needs an ONGOING, SENSED position evaluated against an event over time;
+  this amendment permits one sensed reading, resolved once, discarded
+  immediately, never stored — the opposite shape.
+
+  **Two implementation decisions made alongside this ruling, recorded as
+  decisions rather than left implicit:**
+  - **Storage is DEVICE-LOCAL (AsyncStorage), not a `profiles` column.** It
+    never leaves the phone, so there is nothing to purge server-side and it
+    creates no data-export obligation. Revisit only if cross-device sync
+    becomes a requirement.
+  - **Recent-locations history caps at 5.** The delete control ships with the
+    Privacy screen build (`apps/mobile/src/app/settings/privacy.tsx`,
+    currently a 7-line `SettingsStub`) — the history has no other delete
+    path, so that screen is a hard dependency, not an optional nicety. See
+    the tracker.
+
 ## SCHEMA LOCKS (from the Code-stage conflict report — production rules; prototype is frozen reference and its bugs are IGNORED)
 
 1. **entry_fee vs publish_fee are distinct columns.** Never one `price` field —
@@ -1740,7 +1778,16 @@ cold-start empty state at 2 while it was already in flight.*
       failure across all ten previous stripe values — see `docs/ACCESSIBILITY.md`).
    2. **Cold-start empty state** — feed with zero events in radius. The most
       common real screen at launch, and currently unhandled.
-   3. **Header controls** — the zip/radius inline-edit pattern.
+   3. **Header controls — STAGE 2A (typed), then STAGE 2B (sensed).** The
+      zip/radius inline-edit pattern. **2a** builds the typed town/zip +
+      radius control and seeds it from a default (`TEST_ORIGIN`/Sahuarita) —
+      it does not wait on Onboarding (TOP-LEVEL item 4, not sub-item 4
+      above, which is the date picker). **2b** adds the device
+      locator, which needs `expo-location`, permission config and reverse
+      geocoding, none of which exist today. Onboarding, later, is the first
+      FLOW that sets the initial value THROUGH the 2a control — one control,
+      two callers, in that order. Privacy boundary: the location lock,
+      AMENDED 2026-08-21 (typed vs sensed). Tracker carries both items.
    4. **Date picker** on Explore.
    5. **Timeline** view.
    6. **Map — ITS OWN ARC.** Needs a mapping dependency and a provider decision;

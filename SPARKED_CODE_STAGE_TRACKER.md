@@ -509,19 +509,37 @@ migration lands between, the NAME is the anchor, not the number.
 - [ ] **Privacy wiring:** Location toggle MIRRORS the OS permission (deep-link to
       system settings when OS says no); analytics opt-in enforced; "Download my
       data" export; "Delete account & data" cascade (MVP: solo workspace + its
-      events die with the account).
+      events die with the account). **Also required, added 2026-08-21 per the
+      amended location lock (SPARKED_STATE.md, Refunds & Cancellation section):
+      a control to clear the recent-locations history.** History is
+      device-local (AsyncStorage, caps at 5 — see GEO/MAPS below) and has no
+      other delete path, so this screen is a hard dependency for it, not an
+      optional nicety.
 - [ ] **Real ToS + Privacy Policy documents** (App Store gate — links exist,
       documents don't).
 - [ ] **Feedback form backend** (Supabase table).
 - [ ] **Light-mode QA sweep** on real devices — token conversion was 3-pass;
       expect stragglers.
 - [ ] **Cold-start empty state** (if not closed in Design) — feed + funnels.
-- [ ] **Explore zip/radius inline-edit + onboarding — MUST PRECEDE LAUNCH.**
-      The feed origin is still the hardcoded `TEST_ORIGIN` (Sahuarita) in
-      `lib/devOrigin.ts`; the header's "Sahuarita, AZ · within 25 mi" is not
-      yet editable. Without it every user sees one fixed neighbourhood's
-      events — the distance promise only means something once the user can
-      say where they are. Onboarding sets the initial value.
+- [ ] **STAGE 2A (IN FLIGHT) — Explore zip/radius inline-edit + onboarding —
+      MUST PRECEDE LAUNCH.** The feed origin is still the hardcoded
+      `TEST_ORIGIN` (Sahuarita) in `lib/devOrigin.ts`. The header's
+      "Sahuarita, AZ · within {N} mi" has editable radius only today — the
+      2026-08-19 empty-state arc added a session-state, one-shot 25→50mi
+      widen (`docs/ACCESSIBILITY.md` Entry 2) — the town half is still a
+      literal string. Without a typed town/zip every user sees one fixed
+      neighbourhood's events — the distance promise only means something
+      once the user can say where they are. Onboarding sets the initial
+      value.
+      **Sequencing, resolved 2026-08-21 — this does not contradict
+      SPARKED_STATE's OPEN WORK 1.3 (header controls listed before
+      Onboarding):** both are true, in this order. Stage 2a BUILDS the
+      typed town/zip + radius control and seeds it from a default
+      (`TEST_ORIGIN`/Sahuarita, unchanged) — it does not need Onboarding to
+      exist first. Onboarding, later, is the first FLOW that sets the
+      initial value THROUGH that same control, rather than a new user
+      finding Sahuarita pre-filled and having to notice and change it
+      unprompted. One control, two callers, in that order.
 - [ ] **Web funnels deploy (Vercel) — launch prep.** The landing variants under
       `design-reference/mockups/landings/` are static HTML and need a real
       host + domain. Blocked on the app-store link, which the CTAs point at,
@@ -636,9 +654,29 @@ migration lands between, the NAME is the anchor, not the number.
       and orders by distance only; the feed renders real values (0.4 / 1.2 /
       3.38 mi, verified 2026-08-16 during the 0028 pass). Origin is still the
       dev constant `TEST_ORIGIN` — **real user location is the separate
-      "Explore zip/radius inline-edit + onboarding" item below**, which is what
+      "Explore zip/radius inline-edit + onboarding" item below, now split into
+      Stage 2a (typed) and Stage 2b (sensed)**, which is what
       replaces it. The hardcoded `mi` field now exists only in the frozen
       reference. Radius-overflow SEARCH rules remain unbuilt.
+- [ ] **STAGE 2B (QUEUED) — device locator: expo-location install, permission
+      config, reverse geocoding, denied-permission path.** None of this
+      exists today — verified in the 2026-08-21 recon: `expo-location` is
+      absent from both `package.json` and `node_modules`; no location plugin
+      or permission block in `app.json`; no code anywhere has ever called a
+      permission-request API; `lib/geocode.ts` is forward-only
+      (address → point) with no reverse-geocode function (point → town
+      name). Builds on Stage 2a's typed control above, not a replacement for
+      it: a user taps a locator affordance, device position is read ONCE,
+      resolved to a town name via reverse geocoding, and the coordinate is
+      discarded immediately — never written to storage. See the amended
+      location lock, SPARKED_STATE.md's Refunds & Cancellation section
+      (AMENDED 2026-08-21), for the privacy boundary this must hold to.
+      Needs: the `expo-location` install + config, a reverse-geocode call
+      (provider TBD — `lib/geocode.ts`'s Nominatim swap-point note applies
+      here too), and an explicit denied-permission path — the Privacy
+      screen's toggle mirrors OS state (see Privacy wiring above), but this
+      is the in-context prompt/fallback for a user tapping the locator with
+      permission off.
 - [ ] **Geocoder: Nominatim → paid provider at scale.** Curbside address
       geocoding uses OpenStreetMap Nominatim (no key, ~1 req/s usage policy,
       identify via User-Agent) — fine for dev/MVP volume. Swap to a paid
@@ -994,6 +1032,24 @@ migration lands between, the NAME is the anchor, not the number.
 - [ ] **`SPARKED_STATE.md:3` — "Read this first before working on Sparked".**
       CLAUDE.md is read first in practice and carries the binding process rules.
       Reword so the two do not compete for the same slot.
+- [ ] **FILING ERROR — the location privacy lock lives under "REFUNDS &
+      CANCELLATION" (found 2026-08-21).** The lock — "location is used live,
+      never stored", AMENDED 2026-08-21 to the typed-vs-sensed boundary — sits
+      inside the refunds section because it arrived as a sub-point of the
+      travel-notifications ruling, which was itself about cancellation
+      notices. It has since become a standing privacy rule that governs Stage
+      2a/2b, the Privacy screen, and any future location feature. **A location
+      rule filed under refunds is a rule nobody looking for it will find.**
+      **The symptom is in this file:** the 2026-08-21 amendment had to cite it
+      by section name TWICE — once in the Privacy wiring item, once in the
+      Stage 2b item — precisely because "SPARKED_STATE.md's location lock" is
+      not a findable address. **Proposal: move it to ARCHITECTURE DECISIONS**,
+      leaving the travel-notifications reasoning where it is (it genuinely is
+      a cancellation-notice ruling) with a pointer to the relocated lock.
+      **When it moves, both citations above need updating** — search
+      `Refunds & Cancellation section` in this file. It returns three hits:
+      the two real citations (Privacy wiring, Stage 2b) and this line, which
+      is the instruction, not a citation. Update the first two only.
 
 - [ ] **SPLIT THE MIGRATION LOG into `docs/MIGRATION_LOG.md` — AGREED, its own
       commit, touching nothing else.** The log is `SPARKED_STATE.md:1025-1584`
