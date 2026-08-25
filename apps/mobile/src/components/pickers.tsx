@@ -41,17 +41,35 @@ function FieldShell({
   label,
   children,
   onPress,
+  a11yLabel,
+  expanded,
 }: {
   icon: 'calendar-outline' | 'time-outline';
   label?: string;
   children: React.ReactNode;
   onPress?: () => void;
+  /** Accessible name. Separate from `label`, which is the 9px eyebrow only —
+   *  "STARTS" alone does not tell a screen-reader user what the field holds. */
+  a11yLabel?: string;
+  /** Disclosure state of whatever this shell opens. */
+  expanded?: boolean;
 }) {
   const theme = useTheme();
   return (
     <Pressable
       onPress={onPress}
       disabled={!onPress}
+      // `role` / `aria-*`, never `accessibilityRole` / `accessibilityState`:
+      // rnw 0.21.2 logs a deprecation for EVERY accessibility* spelling
+      // (createDOMProps/index.js:605, :417, :339) and the aria form is a typed
+      // View prop in RN 0.86 (ViewAccessibility.d.ts:100, :39, :58), so one
+      // prop covers web, iOS and Android. ACCESSIBILITY.md Entry 2 established
+      // this; it is not a web-only choice.
+      // A shell with no onPress is inert chrome and must NOT announce as a
+      // button, hence the conditionals rather than unconditional props.
+      role={onPress ? 'button' : undefined}
+      aria-label={onPress ? a11yLabel : undefined}
+      aria-expanded={onPress ? expanded : undefined}
       style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -112,8 +130,54 @@ export function DateField({
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   const [vy, vm] = value.split('-').map(Number);
-  const [viewYear, setViewYear] = useState(vy || new Date().getFullYear());
-  const [viewMonth, setViewMonth] = useState((vm || new Date().getMonth() + 1) - 1);
+  const valueYear = vy || new Date().getFullYear();
+  const valueMonth = (vm || new Date().getMonth() + 1) - 1;
+  const [viewYear, setViewYear] = useState(valueYear);
+  const [viewMonth, setViewMonth] = useState(valueMonth);
+
+  // ---------------------------------------------------------------------
+  // THE CALENDAR ALWAYS SHOWS THE MONTH THE CURRENT VALUE LIVES IN.
+  //
+  // Two mechanisms, because they cover different paths and neither one
+  // subsumes the other:
+  //
+  //   (a) `toggleCalendar` re-derives the view at the moment it OPENS, so a
+  //       browse to November that was closed without picking does not persist
+  //       into the next open.
+  //   (b) the render-phase sync below catches `value` changing while the
+  //       calendar is ALREADY open.
+  //
+  // (b) is the shipped defect. In a linked pair — the wizard's Start bumping
+  // End (create/event.tsx), or Curbside's `changeStart` clamp — End's value
+  // moves from outside. Without this, End kept its MOUNT-time month: move
+  // Start from August to December and End's calendar opened on AUGUST, with
+  // no selected day and every day disabled by `min`. It typechecks, never
+  // throws, and reads to the host as "the date didn't change". A range picker
+  // moves the two fields against each other constantly, so it fires at once.
+  //
+  // Deliberately NOT a useEffect: an effect runs after commit, so the wrong
+  // month paints for a frame before correcting. Adjusting state during render
+  // re-renders before the browser paints anything.
+  //
+  // The guard is the VALUE, not the render. An unrelated re-render — theme,
+  // parent state, a sibling field — fails the comparison and changes nothing,
+  // so a user who browsed to November stays on November. The only re-syncs are
+  // their own pick (which closes the calendar in the same handler) and a real
+  // external change, where jumping IS the correct behaviour.
+  const [syncedTo, setSyncedTo] = useState(value);
+  if (value !== syncedTo) {
+    setSyncedTo(value);
+    setViewYear(valueYear);
+    setViewMonth(valueMonth);
+  }
+
+  const toggleCalendar = () => {
+    if (!open) {
+      setViewYear(valueYear);
+      setViewMonth(valueMonth);
+    }
+    setOpen((o) => !o);
+  };
 
   const firstDow = new Date(viewYear, viewMonth, 1).getDay();
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
@@ -130,7 +194,13 @@ export function DateField({
 
   return (
     <View>
-      <FieldShell icon="calendar-outline" label={label} onPress={() => setOpen((o) => !o)}>
+      <FieldShell
+        icon="calendar-outline"
+        label={label}
+        onPress={toggleCalendar}
+        a11yLabel={`${label}, ${formatUSDate(value)}`}
+        expanded={open}
+      >
         <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 14, fontWeight: '700', color: theme.colors.text }}>
           {formatUSDate(value)}
         </Text>
@@ -148,13 +218,18 @@ export function DateField({
           }}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <Pressable onPress={() => shiftMonth(-1)} accessibilityLabel="Previous month" hitSlop={8} style={{ padding: 4 }}>
+            {/* Qualified by the field, same reason as TimeField's AM/PM pair:
+                two DateFields on one screen otherwise put four buttons called
+                "Previous month"/"Next month" in the tree with nothing to tell
+                them apart (WCAG 4.1.2). Action first, so first-letter scanning
+                still works. */}
+            <Pressable onPress={() => shiftMonth(-1)} role="button" aria-label={`Previous month, ${label}`} hitSlop={8} style={{ padding: 4 }}>
               <Ionicons name="chevron-back" size={16} color={theme.colors.textMuted} />
             </Pressable>
             <Text style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 14, letterSpacing: -0.14, color: theme.colors.text }}>
               {MONTHS[viewMonth]} {viewYear}
             </Text>
-            <Pressable onPress={() => shiftMonth(1)} accessibilityLabel="Next month" hitSlop={8} style={{ padding: 4 }}>
+            <Pressable onPress={() => shiftMonth(1)} role="button" aria-label={`Next month, ${label}`} hitSlop={8} style={{ padding: 4 }}>
               <Ionicons name="chevron-forward" size={16} color={theme.colors.textMuted} />
             </Pressable>
           </View>
@@ -194,7 +269,13 @@ export function DateField({
                       setOpen(false);
                     }}
                     disabled={disabled}
-                    accessibilityLabel={formatUSDate(ymd)}
+                    aria-label={formatUSDate(ymd)}
+                    // accessibilityState is honoured on iOS/Android and is
+                    // INERT on web — rnw 0.21.2 has no handler for it in
+                    // forwardedProps, createDOMProps or Pressable. `disabled`
+                    // still reaches the DOM as aria-disabled (Pressable
+                    // /index.js:125); `selected` does not reach it at all.
+                    // Left in place because native reads it. See Entry 5.
                     accessibilityState={{ selected, disabled }}
                     style={{
                       flex: 1,
@@ -272,8 +353,25 @@ export function parseTimeText(
  * The user types freely ("1", "9:30", "130"); the value normalizes to h:mm
  * on blur/submit. Grid and segment pickers are dead — typing won QA.
  * Emits 24h 'HH:MM'.
+ *
+ * `label` is the accessible name and it is NOT optional in practice. It was
+ * hardcoded "Start time", so the wizard's END time field announced itself as
+ * "Start time" (WCAG 4.1.2, live on a shipped control). It also disambiguates
+ * the AM/PM pair: two TimeFields on one screen otherwise put four buttons
+ * called "AM"/"PM" in the accessibility tree with nothing to tell them apart.
+ * The default is deliberately neutral rather than "Start time" — a future call
+ * site that forgets to pass one should announce something vague, never
+ * something WRONG.
  */
-export function TimeField({ value, onChange }: { value: string; onChange: (hhmm: string) => void }) {
+export function TimeField({
+  value,
+  onChange,
+  label = 'Time',
+}: {
+  value: string;
+  onChange: (hhmm: string) => void;
+  label?: string;
+}) {
   const theme = useTheme();
   const [h24, m] = (value || '18:00').split(':').map(Number);
   const ampm: 'AM' | 'PM' = h24 >= 12 ? 'PM' : 'AM';
@@ -329,7 +427,7 @@ export function TimeField({ value, onChange }: { value: string; onChange: (hhmm:
         inputMode="numeric"
         maxLength={5}
         selectTextOnFocus
-        accessibilityLabel="Start time"
+        aria-label={label}
         placeholder="6:00"
         placeholderTextColor={theme.colors.textHint}
         style={{
@@ -348,7 +446,8 @@ export function TimeField({ value, onChange }: { value: string; onChange: (hhmm:
             <Pressable
               key={p}
               onPress={() => emit(h12, m, p)}
-              accessibilityLabel={p}
+              aria-label={`${label} ${p}`}
+              // Inert on web, honoured on native — same note as the day cells.
               accessibilityState={{ selected: active }}
               style={{ borderRadius: 6, overflow: 'hidden', paddingHorizontal: 9, paddingVertical: 4 }}
             >

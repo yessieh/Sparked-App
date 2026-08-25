@@ -794,3 +794,336 @@ the `Couldn't load events` apostrophe) which is **pre-existing at `d9df9df`
 line 205** and simply moved to line 244; this arc adds no new lint finding.
 Synthetic rows were injected into the `fetch` response in the page — **no source
 file and no database row was modified to produce any measurement here.**
+
+---
+
+# Entry 5 — 2026-08-25 — Date & time pickers: three shipped defects
+
+**The arc:** `components/pickers.tsx` — the shared `DateField` / `TimeField`
+used by the paid wizard and Curbside. Three defects found in the 2026-08-21
+date-surface recon, fixed together because they are one file and one DOM
+measurement. **No SQL, no schema, no migration, no RPC** — the privilege-audit
+gate is N/A under CLAUDE.md's carve-out, stated rather than omitted, and the
+grant surface is provably untouched because no file under `supabase/` was
+written and no `GRANT` / `CREATE` / `ALTER` statement was executed.
+
+## THE HEADLINE: the recurring live-region shape, and the rule that stops it
+
+**This is the fourth consecutive arc in which the same defect has been
+re-derived from scratch** — Entry 2 (both empty states), Entry 3 (Explore
+header), Entry 4 (`onRefresh`), and now this arc's validation message. It was
+re-discovered each time and the avoidance rule was never written down. Writing
+it down is the point of this section.
+
+**The shape.** `aria-live` announces content that changes *after* the region is
+already in the accessibility tree. A region that mounts *together with* its
+text announces nothing. The failure is silent, and it is invisible to the
+typechecker, to source review, and to a DOM snapshot taken after the fact —
+because at that moment the attribute IS present and the text IS in it.
+
+**The rule, and it is mechanical:**
+
+> **The live-region node is mounted unconditionally. Only its CHILDREN swap.**
+> Never `{cond && <View role="status">…</View>}` — that is a conditional NODE.
+> Write `<View role="status">{cond ? <Text>…</Text> : null}</View>`.
+> **Style the absence, never unmount it:** conditional margin, conditional
+> padding, conditional height — never a conditional node.
+
+This arc's validation message was first written in the wrong shape and caught
+in review before it shipped. That is the first time this defect has been caught
+rather than re-discovered, and the rule above is why it should be the last.
+
+**The corollary for the check:** asserting that the message *appears* proves
+nothing — it passes against a region that remounts every time and therefore
+never announces. **Assert node identity across the transition.** Every entry
+since Entry 2 has done this; this one does it below.
+
+## Defect 1 — the calendar opened on the wrong month
+
+`DateField` seeded `viewYear` / `viewMonth` with `useState` from `value` and
+never synced them again. When `value` changed from OUTSIDE — the wizard's Start
+bumping End (`create/event.tsx`), or Curbside's `changeStart` clamp — the
+calendar kept its MOUNT-time month.
+
+**It typechecks, never throws, and reads to the host as "the date didn't
+change."** Three attempts in Design failed to reproduce it, which is why this
+entry carries a before/after rather than an assertion of success.
+
+### Reproduced, then fixed, by the identical drive
+
+`pickers.tsx` was reverted to `615a427` with `git stash`, the drive re-run
+click-for-click, then the fix restored. Both runs: open Start, five real clicks
+on the month chevron to Dec 2026, click `Dec 3, 2026`, then open **End's**
+calendar and read the DOM.
+
+| Assertion (End's calendar, after Start moved to Dec 3) | Pre-fix `615a427` | Post-fix |
+| --- | --- | --- |
+| Month header | **`Aug 2026`** | **`Dec 2026`** |
+| `Dec 3, 2026` cell present | **false** | **true** |
+| Day cells rendered | 31 | 31 |
+| Cells DISABLED by `min` | **31 of 31** | **2 of 31** (Dec 1–2) |
+| Cells ENABLED | **0** | **29** |
+| Cells showing the selected treatment | **0** | **1** — `Dec 3, 2026` |
+
+**The enabled-cell count is the discriminating number.** A December header
+alone could come from something other than this fix; `0 enabled` → `29 enabled`
+is the defect itself — a calendar on which every day was inert.
+
+### Selection was asserted from the PAINTED element, and the reason matters
+
+**`accessibilityState` is inert on web.** rnw 0.21.2 has no handler for it in
+`forwardedProps/index.js`, `createDOMProps/index.js`, or
+`exports/Pressable/index.js` — so `accessibilityState={{ selected }}` reaches
+no DOM attribute at all. (`disabled` survives independently: `Pressable`
+emits `aria-disabled` and `tabindex="-1"` at `Pressable/index.js:125`.) There
+is therefore **no `aria-selected` to assert**, and selection was read off the
+painted treatment instead:
+
+| Treatment | Count | Meaning |
+| --- | --- | --- |
+| weight 900, `rgb(20,33,61)`, extra child node (`GradientFill`) | **1** | selected — `Dec 3, 2026` |
+| weight 600, `rgb(238,240,255)` | **28** | enabled, unselected |
+| weight 600, `rgba(238,240,255,0.25)`, `aria-disabled="true"` | **2** | disabled by `min` |
+
+1 + 28 + 2 = 31. `Dec 4, 2026` was read as an explicit negative control.
+
+This is **Entry 1's standing rule, third instance**: an accessibility prop is
+not verified by the typechecker, and here it was not verified by the
+platform either. **OPEN ITEM** — the durable fix is `role="gridcell"` +
+`aria-selected` inside a `role="grid"`, which is calendar structure and was out
+of scope for this arc.
+
+### The mechanism, and what it deliberately does not do
+
+Two mechanisms, because neither subsumes the other:
+
+- **`toggleCalendar` re-derives the view on OPEN**, so a browse to November that
+  was closed without picking does not persist into the next open.
+- **A render-phase sync** (`syncedTo` state compared against `value` during
+  render) catches `value` changing while the calendar is ALREADY open.
+
+**Not a `useEffect`**: an effect runs after commit, so the wrong month paints
+for a frame before correcting — and that frame is exactly what a screenshot
+would capture. Adjusting state during render re-renders before paint.
+
+**The guard is the VALUE, not the render.** An unrelated re-render — theme,
+parent state, a sibling field — fails the `value !== syncedTo` comparison and
+changes nothing, so a user who browsed to November stays on November. The only
+re-syncs are their own pick (which closes the calendar in the same handler) and
+a real external change, where jumping is the correct behaviour.
+
+## Defect 2 — labels, verified as real DOM attributes
+
+`TimeField` hardcoded `accessibilityLabel="Start time"`, so the wizard's **End**
+time field announced itself as "Start time" — a live 4.1.2 defect on a shipped
+control. `DateField`'s shell had no role, no label and no disclosure state.
+
+| Element | Before | After (read from the DOM) |
+| --- | --- | --- |
+| Start time input | `aria-label="Start time"` | `aria-label="Start time"` |
+| **End time input** | **`aria-label="Start time"`** | **`aria-label="End time"`** |
+| Date shell (Starts) | no role, no label | `role="button"`, `aria-label="Starts, Aug 25, 2026"` |
+| Date shell (Ends) | no role, no label | `role="button"`, `aria-label="Ends, Aug 26, 2026"` |
+| Disclosure state | absent | `aria-expanded` `false` → **`true`** on open, on that field only |
+| AM/PM pair | `"AM"` `"PM"` ×2 fields = 4 identical | `"Start time AM/PM"`, `"End time AM/PM"` |
+| Month chevrons | `"Previous month"` ×2 = 4 identical | `"Previous month, Starts"` / `", Ends"` |
+| Chevron role | **`generic`** (labelled div, not a button) | `role="button"` |
+
+The chevrons' `generic` reading was found by the accessibility-tree read, not by
+source — the label was present and correct while the element was not a button.
+Entry 2's `div[tabindex="0"]` finding, same shape.
+
+**All `accessibility*` spellings were converted to `aria-*` / `role`.** rnw
+0.21.2 logs a deprecation for EVERY one of them, `accessibilityLabel`
+included (`createDOMProps/index.js:417`, `:605`, `:339`) — not only the three
+Entry 2 named. The `aria-` form is a typed View prop in RN 0.86
+(`ViewAccessibility.d.ts:39, :58, :100`) and `TextInputProps extends ViewProps`,
+so one spelling covers web, iOS and Android.
+
+## Defect 3 — single-day events now require End time after Start time
+
+7:00pm → 10:00am on one day produced `ends_at < starts_at`, passed every client
+check, reached `.insert()`, and came back as the column check violation —
+surfaced raw, so the host read a Postgres constraint string.
+
+Blocked at **step 1**, where both offending fields are on screen, not only at
+Review three steps later. `canPublish` carries the same guard so `.insert()`
+stays unreachable either way.
+
+**Deliberately stricter than the database.** The column check is
+`ends_at is null or ends_at >= starts_at`
+(`20260708000001_core_spine.sql:268`), which ACCEPTS a zero-length event. The
+client blocks `<=`, so 7pm → 7pm is refused here. This is a client rule tighter
+than the constraint, not a mirror of it.
+
+### Verified by driving the real control
+
+| Check | Result |
+| --- | --- |
+| Valid state (7:00 PM → 10:00 PM, same day) | region present, **text empty**; Continue `tabindex="0"` |
+| Flip End to AM (7:00 PM → 10:00 AM, same day) | message renders; Continue **`aria-disabled="true"`, `tabindex="-1"`** |
+| Click Continue while invalid | **still `STEP 2 OF 5`** — the `next()` guard, not just the attribute |
+| **Same region node across valid → invalid → valid → invalid** | **true** |
+| Region count on the step | 1 |
+| Multi-day: End date → next day, times unchanged | message **cleared**, Continue re-enabled, **same node** |
+
+The multi-day row is the one the rule turns on: 7:00 PM day 1 → 10:00 AM day 2
+is inverted CLOCK time and a perfectly valid EVENT, and it stays allowed.
+
+### CONTRAST: THE NEW MESSAGE FAILS 1.4.3, AND THE TOKEN IS THE CAUSE
+
+Measured off the painted element per Entry 3's method, compositing to the first
+opaque ancestor:
+
+| Element | Painted | Surface | Ratio | Held to |
+| --- | --- | --- | --- | --- |
+| **Validation message** | `danger` `rgb(239,68,68)` | `#14213D` | **4.24:1 — FAILS** | 4.5:1 (12px / 400) |
+
+**The failure is the token, not this message.** `darkPalette.danger` `#ef4444`
+is **4.24:1 on the page background and 3.80:1 on a card**, and it is already
+used at 12px for the wizard's existing `{error}` line (`create/event.tsx`) —
+so this arc's message inherits a live failure rather than creating one.
+Candidates computed against `#14213D` / `#1d2a45`:
+
+| Token | hue | on `#14213D` | on card `#1d2a45` |
+| --- | --- | --- | --- |
+| `danger` `#ef4444` (current) | 0.0° | 4.24 ❌ | 3.80 ❌ |
+| `brand.flameRed` `#ff6348` | 8.9° | 5.42 ✅ | 4.85 ✅ |
+| `red-400` `#f87171` | 0.0° | **5.77** ✅ | **5.17** ✅ |
+
+`lightPalette.danger` `#b91c1c` on `#f4f5f8` is **5.93:1** and passes, so this
+is a dark-mode-only failure — the mirror image of Entries 1–3, where the
+light palette was the broken one.
+
+#### `flameRed` WAS PROPOSED, AUDITED, AND REJECTED — record the reason
+
+`brand.flameRed` was the obvious swap because it clears 4.5:1 and adds no new
+colour. **The audit that preceded the change killed it**, and the finding is
+recorded here because "use the existing token" will be proposed again:
+
+> **`flameRed` `#ff6348` and `sparkCoral` `#ff5f4e` are 3.1° apart in hue with a
+> contrast ratio of 1.019:1 between them — they are the same colour.**
+
+`sparkCoral` is **stop 0 of the spark gradient** (`colors.ts:31`), which
+`colors.ts:24` reserves for "ACTIONABLE elements only (CTAs, host/monetization
+actions…)". Painting `danger` with it would give every error message and every
+destructive-action label the colour of the primary CTA — and
+`(tabs)/workspace.tsx:423` states the opposing rule explicitly at the point of
+edit: *"Destructive confirm — danger-tinted, NEVER gradient. The gradient is
+reserved for actions a host wants to take."* The swap would have satisfied
+1.4.3 by breaking 1.4.1's neighbour — the meaning carried by colour.
+
+**`red-400` `#f87171` is the surviving candidate**: hue 0.0°, identical to
+today's `danger`, so it stays red-red; 5.77:1 / 5.17:1, clearing 4.5:1 on both
+surfaces; and 5.8° from `sparkCoral` on the far side, away from the gradient.
+It does introduce a new hex.
+
+#### The token is never a fill — but the same red IS, hardcoded, 11 times
+
+Audited before proposing any change. `theme.colors.danger` resolves only to
+text `color`, `Ionicons` `color`, and `ActivityIndicator` `color` — **never a
+`backgroundColor` and never a fill.** However **11 hardcoded
+`rgba(239,68,68, α)` literals** carry the same red as backgrounds and borders:
+
+| Site | Use |
+| --- | --- |
+| `create/event.tsx:428` | photo-cap slot border |
+| `create/event.tsx:1373, :1375` | "Trim your photos" panel background + border |
+| `(tabs)/workspace.tsx:346, :348` | delete-workspace panel background + border |
+| `(tabs)/workspace.tsx:433, :434` | **destructive confirm button** border + pressed/idle fill |
+| `(tabs)/workspace.tsx:1037, :1038` | delete-event row border + pressed fill |
+| `(tabs)/workspace.tsx:1154, :1155` | delete-event confirm border + fill |
+
+**Changing the token alone desynchronises these**: the panel keeps a red-red
+tint while its label text moves hue, on the two most safety-critical surfaces in
+the app. Any `danger` change must move these eleven literals in the same commit,
+or convert them to alpha derivations of the token. **OPEN ITEM** — the contrast
+failure is real and still live; the fix is a token change plus eleven literals,
+and it is deliberately NOT part of this arc.
+
+## Touch targets — WCAG 2.5.5, measured on both axes
+
+`getBoundingClientRect()`, calendar open, per Entry 3's measure-both-axes rule:
+
+| Control | Rendered | |
+| --- | --- | --- |
+| Date field shell | 592 x 56 | OK |
+| Time field (padded container — the real target) | 592 x 48 | OK |
+| `<input>` element inside it | 404 x 21 | — see note |
+| **Month chevron** (×2 per calendar) | **24 x 26** | **FAIL** |
+| **Calendar day cell** | **77 x 30** | **FAIL** |
+| **AM/PM segment** | **37 x 21** | **FAIL** |
+
+No horizontal overflow.
+
+**The three failures are pre-existing, were RULED not-fixed on 2026-08-25, and
+the reason is recorded so it is not re-litigated:** the day-cell fix reflows the
+calendar grid, which is the visual-design change this arc was fenced against,
+and doing it here would mean the demo gate tested a layout that changed
+underneath it.
+
+**`hitSlop` DOES NOT APPLY ON WEB, and this is the detail that gets "fixed"
+twice.** The chevrons carry `hitSlop={8}`, which on native expands the touch
+area to roughly 40 x 42 — still short of 44, and on react-native-web it does
+nothing at all. A future pass that reads the source, sees `hitSlop`, and
+concludes the target is already handled will have fixed nothing. **The fix is
+`minWidth: 44` + `minHeight: 44` + centring**, which is Entry 3's 44x29 remedy.
+
+The `<input>` row is listed for completeness, not as a failure: its target is
+the 592 x 48 padded container that receives the tap, not the text box.
+
+## What this entry does NOT establish
+
+- **NOT MEASURED AT 375 OR 1280.** Every number above was taken at a viewport
+  of **3822 x 1412** (`devicePixelRatio` 0.9, 3440px display). `resize_window`
+  reported success but `outerWidth` stayed at 3440 — the window is maximised
+  and the resize is a no-op, confirmed by re-measuring after requesting both
+  1280x800 and 420x800. **What IS established:** the wizard column is
+  `maxWidth: 640, width: '100%'` (`create/event.tsx:1248`) and step 1 contains
+  no viewport branch — the only `breakpoints` use in the file is inside the
+  vendor editor on the Details step — so the column renders at its 640 cap
+  (measured 592 inside padding) at any viewport ≥ 688, and the desktop numbers
+  are the 1280 numbers. **At 375 the column narrows to ~327 and the day-cell
+  WIDTH changes; that is unmeasured and still owed.**
+- **CURBSIDE'S `TimeField` LABEL IS UNVERIFIED IN THE DOM, and stays that way
+  deliberately.** The `label="Start time"` prop is the same one-line change
+  verified twice over in the wizard — where both `aria-label`s were read
+  straight off the rendered inputs — but the Curbside instance itself was never
+  rendered. The account is at its Curbside quota, so `/create/curbside` returns
+  the conversion screen and the form, and therefore the `TimeField`, never
+  mounts. **Clearing the quota means writing to the ledger, which is exactly
+  what the reseed declined to do**, so this is left open rather than bought with
+  a ledger edit. Per Entry 1's standing rule the wizard evidence does not
+  transfer: an accessibility prop is verified where it renders, not where an
+  identical call site renders. **Recorded as unverified — not as a pass.**
+- **No screenshots. Fourth arc running.** `Page.captureScreenshot` timed out at
+  30s on every attempt, in real Chrome this time rather than the Browser pane —
+  so treat it as the environment, not the surface. Entries 2, 3 and 4 recorded
+  the same. **Visual feel is on the human list**, and this arc's fence forbade
+  visual change, so there should be none to feel.
+- **Nothing about native or iOS.** Expo web only. `accessibilityState` is left
+  in place on the day cells and AM/PM segments precisely because native honours
+  it, and that native path has never run.
+- **Nothing about light mode**, unreachable for the same structural reason as
+  Entries 1–4. The `danger` contrast finding above is dark-mode-only; the light
+  value passes.
+- **The `syncedTo` render-phase sync is unexercised under React StrictMode
+  double-rendering.** It is idempotent by construction (the second pass finds
+  `value === syncedTo`), but that is an argument, not a measurement.
+- **No focus-ring audit, no reduced-motion audit.** This arc adds no motion.
+- **Day cells and AM/PM segments are still role-less `generic` elements** with
+  labels — 31 of them per open calendar. Only the shells and chevrons were given
+  `role`. Entry 1/2's defect class, still open, and the biggest remaining item
+  in this file.
+
+**Baseline:** checked against the running Expo web dev server at
+`localhost:8081` on 2026-08-25, against `main` @ `615a427` plus this arc's
+working tree (`components/pickers.tsx`, `app/create/event.tsx`,
+`app/create/curbside.tsx`). Driven in Chrome under a real signed-in session.
+`npx tsc --noEmit` exits 0. `npx expo lint` reports **64 problems (59 errors, 5
+warnings)** both before and after — the baseline was taken by stashing the three
+files back to `615a427`, re-running, and popping — so **this arc adds no lint
+finding**; none of the 64 are in `pickers.tsx`. The pre-fix reproduction was
+produced by `git stash` on `pickers.tsx` alone, and the fix restored and
+re-confirmed by grep for its markers. **No source file was edited to produce a
+measurement, and no database row was read or written by this arc.**

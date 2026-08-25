@@ -433,7 +433,7 @@ export default function CurbsideForm() {
                 thumbColor="#ffffff"
               />
               {timeOn ? (
-                <TimeField value={time} onChange={setTime} />
+                <TimeField value={time} onChange={setTime} label="Start time" />
               ) : (
                 <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 12.5, color: theme.colors.textFaint }}>
                   All-day post

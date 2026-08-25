@@ -73,6 +73,7 @@ import { brand, breakpoints, useTheme } from '../../theme';
 import { categoryColor, laneFor, laneStripeColor } from '../../theme/categoryColors';
 
 const STEPS = ['Basics', 'When & Where', 'Tier', 'Details', 'Review'] as const;
+const WHEN_WHERE_STEP = STEPS.indexOf('When & Where');
 const TIER_STEP = STEPS.indexOf('Tier');
 const DETAILS_STEP = STEPS.indexOf('Details');
 const REVIEW_STEP = STEPS.length - 1;
@@ -1070,7 +1071,36 @@ export default function EventWizard() {
     !title.trim() && 'a title',
     !address.trim() && 'an address',
   ].filter(Boolean) as string[];
-  const canPublish = missing.length === 0 && !busy && publishFeeCents !== null;
+
+  /**
+   * SINGLE-DAY EVENTS NEED END TIME AFTER START TIME.
+   *
+   * `DateField` already guards the date pair with `min`, so an out-of-order
+   * DATE is unreachable. The TIME pair had no guard at all: 7:00pm → 10:00am
+   * on one day produced ends_at < starts_at, passed every client check (the
+   * `missing` list above covers title and address only), reached .insert() and
+   * came back as the events_ends_at_check violation — surfaced raw, so the
+   * host read a Postgres constraint string.
+   *
+   * Both values are zero-padded 24h 'HH:MM' from TimeField, so lexical string
+   * order IS chronological order; no parsing needed.
+   *
+   * DELIBERATELY STRICTER THAN THE DATABASE. The column check is
+   * `ends_at is null or ends_at >= starts_at`
+   * (20260708000001_core_spine.sql:268), which ACCEPTS a zero-length event.
+   * 7pm → 7pm is not something a host means, so `<=` blocks it here. This is a
+   * client rule that is tighter than the constraint, not a mirror of it — if
+   * the constraint ever changes, this does not automatically follow.
+   *
+   * MULTI-DAY IS UNAFFECTED, by construction: the check only applies when the
+   * two dates are equal, so an event running to 10am on day three stays legal.
+   */
+  const timeInvalid = startDate === endDate && endTime <= startTime;
+  const timeError = timeInvalid
+    ? 'End time needs to be after start time on a single-day event. To run past midnight, move the end date to the next day.'
+    : null;
+
+  const canPublish = missing.length === 0 && !timeInvalid && !busy && publishFeeCents !== null;
 
   const back = () => {
     if (step === 0) {
@@ -1169,7 +1199,15 @@ export default function EventWizard() {
     }
   }, [session, workspaceId, workspaceName, canPublish, address, title, desc, tier, startsAt, endsAt, venueName, feeCents, draftId, cats, vendors]);
 
+  /** Continue is blocked on step 1 while the time pair is invalid, not merely
+   *  at Review. The two fields that caused it are on screen HERE and three
+   *  steps later they are not; a wizard that lets you walk forward and then
+   *  refuses to publish has only wasted the host's time. canPublish carries
+   *  the same guard so .insert() stays unreachable either way. */
+  const nextBlocked = step === WHEN_WHERE_STEP && timeInvalid;
+
   const next = () => {
+    if (nextBlocked) return;
     if (step < REVIEW_STEP) setStep((s) => s + 1);
     else toCheckout();
   };
@@ -1231,7 +1269,7 @@ export default function EventWizard() {
           )}
 
           {/* ---- STEP 1: WHEN & WHERE ---- */}
-          {step === 1 && (
+          {step === WHEN_WHERE_STEP && (
             <View style={{ marginTop: 8 }}>
               <Text style={styles(theme).h2}>When & Where</Text>
 
@@ -1256,12 +1294,38 @@ export default function EventWizard() {
               <View style={{ gap: 8, marginBottom: 14 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   <Text style={styles(theme).timeTag}>START</Text>
-                  <TimeField value={startTime} onChange={setStartTime} />
+                  <TimeField value={startTime} onChange={setStartTime} label="Start time" />
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   <Text style={styles(theme).timeTag}>END</Text>
-                  <TimeField value={endTime} onChange={setEndTime} />
+                  <TimeField value={endTime} onChange={setEndTime} label="End time" />
                 </View>
+              </View>
+
+              {/* At the point of edit — both offending fields are directly
+                  above this line.
+
+                  THE REGION IS MOUNTED UNCONDITIONALLY AND ONLY ITS CHILDREN
+                  SWAP. `aria-live` announces content that changes AFTER the
+                  region is already in the tree; wrapping this in
+                  `{timeError && …}` would mount the node together with its
+                  text and announce nothing — silently, and looking entirely
+                  correct in source. That is ACCESSIBILITY.md Entries 2, 3 and
+                  4's finding, and it is the reason the margin is conditional
+                  rather than the node. */}
+              <View role="status" aria-live="polite" style={{ marginBottom: timeError ? 14 : 0 }}>
+                {timeError ? (
+                  <Text
+                    style={{
+                      fontFamily: theme.fonts.bodyMedium,
+                      fontSize: 12,
+                      lineHeight: 17,
+                      color: theme.colors.danger,
+                    }}
+                  >
+                    {timeError}
+                  </Text>
+                ) : null}
               </View>
 
               <FormField label="Venue name" value={venueName} onChangeText={setVenueName} placeholder="e.g. The Lola Loft" />
@@ -1510,7 +1574,7 @@ export default function EventWizard() {
               <SecondaryButton onPress={back}>{step === 0 ? 'Cancel' : 'Back'}</SecondaryButton>
             </View>
             <View style={{ flex: 1 }}>
-              <GradientButton onPress={next} busy={busy} disabled={step === REVIEW_STEP && !canPublish}>
+              <GradientButton onPress={next} busy={busy} disabled={nextBlocked || (step === REVIEW_STEP && !canPublish)}>
                 {step < REVIEW_STEP ? 'Continue' : 'Continue to payment'}
               </GradientButton>
             </View>
