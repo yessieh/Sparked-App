@@ -69,7 +69,7 @@ import {
 } from '../../lib/pricing';
 import { supabase } from '../../lib/supabase';
 import { getOrCreateWorkspace, getOwnWorkspaceId } from '../../lib/workspace';
-import { brand, breakpoints, useTheme } from '../../theme';
+import { brand, breakpoints, useTheme, withAlpha } from '../../theme';
 import { categoryColor, laneFor, laneStripeColor } from '../../theme/categoryColors';
 
 const STEPS = ['Basics', 'When & Where', 'Tier', 'Details', 'Review'] as const;
@@ -425,7 +425,7 @@ function PhotoSection({ photos, cap, onChange }: { photos: number[]; cap: number
             borderWidth: 1,
             // Over-cap slots read as at-risk rather than normal — the host is
             // being asked to choose which ones go.
-            borderColor: i >= cap ? 'rgba(239,68,68,0.55)' : i === 0 ? 'rgba(252,163,17,0.45)' : theme.colors.cardBorder,
+            borderColor: i >= cap ? withAlpha(theme.colors.danger, 0.55) : i === 0 ? 'rgba(252,163,17,0.45)' : theme.colors.cardBorder,
             justifyContent: 'flex-end',
             padding: 6,
           }}
@@ -1370,9 +1370,9 @@ export default function EventWizard() {
                     marginTop: 14,
                     padding: 14,
                     borderRadius: 14,
-                    backgroundColor: 'rgba(239,68,68,0.08)',
+                    backgroundColor: withAlpha(theme.colors.danger, 0.08),
                     borderWidth: 1,
-                    borderColor: 'rgba(239,68,68,0.45)',
+                    borderColor: withAlpha(theme.colors.danger, 0.45),
                   }}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>

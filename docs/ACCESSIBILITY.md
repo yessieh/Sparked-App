@@ -1018,28 +1018,125 @@ today's `danger`, so it stays red-red; 5.77:1 / 5.17:1, clearing 4.5:1 on both
 surfaces; and 5.8° from `sparkCoral` on the far side, away from the gradient.
 It does introduce a new hex.
 
-#### The token is never a fill — but the same red IS, hardcoded, 11 times
+#### The token is never a fill — but the same red WAS, hardcoded, 12 times
 
-Audited before proposing any change. `theme.colors.danger` resolves only to
+Audited before proposing any change. `theme.colors.danger` resolved only to
 text `color`, `Ionicons` `color`, and `ActivityIndicator` `color` — **never a
-`backgroundColor` and never a fill.** However **11 hardcoded
-`rgba(239,68,68, α)` literals** carry the same red as backgrounds and borders:
+`backgroundColor` and never a fill.** But **12 hardcoded `rgba(239,68,68, α)`
+literals** (across 11 lines — `workspace.tsx:434` carried two in one ternary)
+painted the same red as backgrounds and borders:
 
-| Site | Use |
-| --- | --- |
-| `create/event.tsx:428` | photo-cap slot border |
-| `create/event.tsx:1373, :1375` | "Trim your photos" panel background + border |
-| `(tabs)/workspace.tsx:346, :348` | delete-workspace panel background + border |
-| `(tabs)/workspace.tsx:433, :434` | **destructive confirm button** border + pressed/idle fill |
-| `(tabs)/workspace.tsx:1037, :1038` | delete-event row border + pressed fill |
-| `(tabs)/workspace.tsx:1154, :1155` | delete-event confirm border + fill |
+| Site | α | Use |
+| --- | --- | --- |
+| `create/event.tsx:428` | 0.55 | photo-cap slot border |
+| `create/event.tsx:1373` | 0.08 | "Trim your photos" panel background |
+| `create/event.tsx:1375` | 0.45 | that panel's border |
+| `(tabs)/workspace.tsx:346` | 0.10 | delete-workspace panel background |
+| `(tabs)/workspace.tsx:348` | 0.28 | that panel's border |
+| `(tabs)/workspace.tsx:433` | 0.55 | **destructive confirm** border |
+| `(tabs)/workspace.tsx:434` | 0.26 | **destructive confirm** fill, *pressed* |
+| `(tabs)/workspace.tsx:434` | 0.16 | **destructive confirm** fill, idle |
+| `(tabs)/workspace.tsx:1037` | 0.22 | delete-event row border |
+| `(tabs)/workspace.tsx:1038` | 0.08 | delete-event row fill, pressed |
+| `(tabs)/workspace.tsx:1154` | 0.55 | delete-event confirm border |
+| `(tabs)/workspace.tsx:1155` | 0.16 | delete-event confirm fill |
 
-**Changing the token alone desynchronises these**: the panel keeps a red-red
-tint while its label text moves hue, on the two most safety-critical surfaces in
-the app. Any `danger` change must move these eleven literals in the same commit,
-or convert them to alpha derivations of the token. **OPEN ITEM** — the contrast
-failure is real and still live; the fix is a token change plus eleven literals,
-and it is deliberately NOT part of this arc.
+Changing the token alone would have desynchronised these — the panel keeping a
+red-red tint while its own label moved hue, on the two most safety-critical
+surfaces in the app. **All 12 moved in the same commit**, converted to alpha
+derivations via a new `withAlpha(hex, alpha)` helper in `theme/colors.ts`, so a
+tint is computed from the same value its label reads instead of duplicated
+beside it. Every α is preserved unchanged except the one noted below.
+
+**Second effect, a fix rather than a side effect:** those literals were
+dark-mode reds hardcoded into components that render in BOTH modes. Deriving
+from `theme.colors.danger` makes the tints mode-aware for the first time.
+
+#### THE HEADLINE OF THIS CHANGE: the label failed on its own panel, not on the page
+
+The page-background number (4.24:1) understated the problem. The real surface
+for a `danger` label is usually a `danger`-TINTED panel, and **all four tint
+levels failed 4.5:1** before this change:
+
+| Panel fill | label, old `#ef4444` | label, new `#f87171` |
+| --- | --- | --- |
+| α 0.08 | 3.97 ❌ | **5.24** ✅ |
+| α 0.10 | 3.90 ❌ | **5.07** ✅ |
+| α 0.16 | 3.67 ❌ | **4.62** ✅ |
+| α 0.26 (pressed) | 3.25 ❌ | 3.87 ❌ → **removed, see below** |
+
+#### The one alpha that changed, and why it is a destructive-control ruling
+
+`workspace.tsx:434`'s pressed fill was **α 0.26**, which left that button's own
+label at **3.87:1 at the instant of the press** — still a failure after the
+token swap. Ruled 2026-08-25: **the pressed fill drops to 0.16, matching idle,
+and press feedback moves to the border.** The reasoning is recorded because it
+generalises: α 0.20 would have reached 4.16, and shipping a number that fails by
+less is the worst of both. On a delete confirmation the press is the last moment
+someone can change their mind, so the label has to stay readable through it. A
+border-only press state is a smaller loss than a label that dims exactly when it
+matters most.
+
+The pressed border is `withAlpha(danger, 0.75)` against an idle `0.55` — a
+**1.483:1 step**, chosen in this arc and open to revision. **Status: COMPUTED,
+NOT RENDERED.** Exercising it means dispatching a pointer sequence at a button
+labelled "Delete everything" on a real workspace with real events; the risk of
+completing that gesture is not worth a contrast reading, and it is on the human
+list instead. Idle border measures 2.71:1 composited; pressed computes to 4.01:1.
+
+#### Verified off the painted element
+
+Read back with `getComputedStyle` and composited by walking to the first opaque
+ancestor, per Entry 3's method.
+
+| Surface | Painted | Measured |
+| --- | --- | --- |
+| Wizard step-1 validation message | `rgb(248,113,113)` on `rgb(20,33,61)` | **5.77:1** ✅ |
+| "Delete everything" confirm — label on its own α 0.16 tint | `rgb(248,113,113)` on composited `rgb(52,40,58)` | **5.03:1** ✅ |
+| Delete-event row border (α 0.22) | `rgba(248,113,113,0.22)` | hue 0.0° |
+| Delete-workspace panel (α 0.10 / 0.28) | `rgba(248,113,113,0.1 / 0.28)` | hue 0.0° |
+
+**Tint, border and label all resolve to hue 0.0° from one token** — asserted
+directly, and it is the check that proves the wash and its label can no longer
+drift apart.
+
+**One prediction was wrong in the safe direction and is corrected here rather
+than quietly restated:** the α 0.16 confirm was predicted at 4.62:1 against
+`#14213D`. It measures **5.03:1**, because the real surface under that sheet is
+`deepNavy` `#0f1a30`, not the page navy. The prediction used the wrong base
+surface. 4.62 remains the correct figure for an α 0.16 tint on `#14213D`.
+
+#### The four borders improve but stay below 3:1 — deliberately
+
+| α | old, composited on `#14213D` | new |
+| --- | --- | --- |
+| 0.22 | 1.24 | 1.39 |
+| 0.28 | 1.34 | 1.54 |
+| 0.45 | 1.75 | 2.15 |
+| 0.55 | 2.04 | 2.60 |
+
+All four rise; none reaches the 1.4.11 3:1 floor. **Held to be acceptable on
+Entry 1's lane-stripe argument, applied to a second surface:** the border is
+reinforcement and is never the sole carrier — every one of these panels states
+its meaning in text ("Delete this workspace?", "Delete everything", "Trim your
+photos to switch"), and each pairs the border with a `danger`-coloured label
+that does clear 4.5:1. WCAG 1.4.1 is satisfied for the same reason. **If a
+future panel drops its text and leans on the tint alone, this justification
+lapses and the borders need re-deciding.**
+
+#### Light mode — COMPUTED, NEVER RENDERED, and it improves
+
+`lightPalette.danger` `#b91c1c` is **unchanged**: it already measures 5.93:1 on
+`#f4f5f8`, and `#f87171` would fail there. This is a **dark-palette-only**
+change.
+
+The latent improvement is in the tints. Today's hardcoded literals would have
+painted dark-mode reds onto a white page in light mode regardless of the light
+token; derived, they become `#b91c1c`-based and a label on an α 0.08 light wash
+computes to **5.21:1**. Unreachable and unverified for the same structural
+reason as Entries 1–3 — the Appearance screen is still a stub — so it carries
+the same status: **computed, never rendered**, and it belongs to the Appearance
+arc's render pass alongside the three inherited failures listed there.
 
 ## Touch targets — WCAG 2.5.5, measured on both axes
 

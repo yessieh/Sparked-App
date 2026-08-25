@@ -12,7 +12,7 @@ import React, {
 } from 'react';
 import { useColorScheme } from 'react-native';
 
-import { brand, darkPalette, lightPalette, sparkGradient, type Palette } from './colors';
+import { brand, darkPalette, lightPalette, sparkGradient, withAlpha, type Palette } from './colors';
 import { breakpoints, darkShadows, lightShadows, radii, spacing, type Shadows } from './spacing';
 import {
   fontFamilies,
@@ -27,6 +27,7 @@ export {
   darkPalette,
   lightPalette,
   sparkGradient,
+  withAlpha,
   fontFamilies,
   fontSizes,
   lineHeights,

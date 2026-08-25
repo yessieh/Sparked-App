@@ -51,7 +51,7 @@ import {
   useWorkspaceStats,
   type Workspace,
 } from '../../lib/workspace';
-import { brand, breakpoints, useTheme } from '../../theme';
+import { brand, breakpoints, useTheme, withAlpha } from '../../theme';
 import { laneFor } from '../../theme/categoryColors';
 
 type Theme = ReturnType<typeof useTheme>;
@@ -343,9 +343,9 @@ function DeleteConfirm({
                 borderRadius: 12,
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: 'rgba(239,68,68,0.10)',
+                backgroundColor: withAlpha(theme.colors.danger, 0.10),
                 borderWidth: 1,
-                borderColor: 'rgba(239,68,68,0.28)',
+                borderColor: withAlpha(theme.colors.danger, 0.28),
               }}
             >
               <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
@@ -430,8 +430,14 @@ function DeleteConfirm({
                 flex: 1,
                 borderRadius: theme.radii.lg,
                 borderWidth: 1,
-                borderColor: 'rgba(239,68,68,0.55)',
-                backgroundColor: pressed ? 'rgba(239,68,68,0.26)' : 'rgba(239,68,68,0.16)',
+                // PRESS FEEDBACK IS THE BORDER, NOT THE FILL. The pressed fill
+                // was 0.26, which put this button's own label at 3.87:1 —
+                // below 4.5:1 — at exactly the instant of the press. On a
+                // delete confirmation that press is the last point someone can
+                // change their mind, so the label has to stay readable through
+                // it. Holding the fill at 0.16 in both states reaches 4.62:1.
+                borderColor: withAlpha(theme.colors.danger, pressed ? 0.75 : 0.55),
+                backgroundColor: withAlpha(theme.colors.danger, 0.16),
                 paddingVertical: 14,
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1034,8 +1040,8 @@ function WorkspaceDetail({
                 alignItems: 'center',
                 gap: 10,
                 borderWidth: 1,
-                borderColor: 'rgba(239,68,68,0.22)',
-                backgroundColor: pressed ? 'rgba(239,68,68,0.08)' : 'transparent',
+                borderColor: withAlpha(theme.colors.danger, 0.22),
+                backgroundColor: pressed ? withAlpha(theme.colors.danger, 0.08) : 'transparent',
                 borderRadius: theme.radii.lg,
                 paddingHorizontal: 16,
                 paddingVertical: 14,
@@ -1151,8 +1157,8 @@ function WorkspaceDetail({
                   flex: 1,
                   borderRadius: theme.radii.lg,
                   borderWidth: 1,
-                  borderColor: 'rgba(239,68,68,0.55)',
-                  backgroundColor: 'rgba(239,68,68,0.16)',
+                  borderColor: withAlpha(theme.colors.danger, 0.55),
+                  backgroundColor: withAlpha(theme.colors.danger, 0.16),
                   paddingVertical: 14,
                   alignItems: 'center',
                   justifyContent: 'center',

@@ -7,6 +7,27 @@
 // The category color map is deliberately NOT here — it has locked changes
 // pending (Curbside ≠ green) and lands with the taxonomy at schema stage.
 
+/**
+ * `#rrggbb` + alpha → an `rgba()` string.
+ *
+ * Exists so a tint is DERIVED from its token rather than hardcoded beside it.
+ * `danger` previously had twelve hardcoded `rgba(239,68,68, α)` copies across
+ * two files; when the token moved, every one of them would have stayed at the
+ * old hue. On a delete confirmation a panel whose wash disagrees with its own
+ * label is worse than either being wrong alone — so the wash is computed from
+ * the same value the label reads.
+ *
+ * Second effect, and it is a fix rather than a side effect: those literals were
+ * dark-mode reds hardcoded into components that render in BOTH modes. Deriving
+ * from `theme.colors.danger` makes the tints mode-aware for the first time.
+ *
+ * Expects a 7-character `#rrggbb`; it is only ever fed palette tokens.
+ */
+export function withAlpha(hex: string, alpha: number): string {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 /** Mode-independent brand constants. #14213D stays literal in both modes. */
 export const brand = {
   navy: '#14213D',
@@ -86,7 +107,13 @@ export const darkPalette: Palette = {
   textFaint: 'rgba(238,240,255,0.35)',
   textHint: 'rgba(238,240,255,0.25)',
   green: '#4ade80',
-  danger: '#ef4444',
+  // #ef4444 was 4.24:1 on the page and 3.80:1 on a card — a live 1.4.3 failure
+  // on every error surface. #f87171 is 5.77 / 5.17 and holds hue 0.0°, so
+  // danger still reads red-red. brand.flameRed was the obvious candidate and
+  // was REJECTED: it is 3.1° from sparkCoral, stop 0 of the spark gradient,
+  // which would paint destructive labels the colour of the primary CTA. See
+  // docs/ACCESSIBILITY.md Entry 5.
+  danger: '#f87171',
   focusRing: brand.ignitionGold,
   // 6.05:1 and 4.65:1 against the composited card surface (#1d2a45).
   stripeFree: '#E8964A',
