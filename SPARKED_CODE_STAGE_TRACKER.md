@@ -241,6 +241,30 @@ and verified in Cursor/Claude Code.
 > policy that is simply untrue. **None of it blocks development — all of it
 > blocks real signups.**
 
+- [ ] **DELETE THE `Sabino Canyon Night Hike` FIXTURE ROW before any demo or any
+      real user.** Inserted by hand on 2026-08-25 to verify Explore search's
+      overflow band (`scripts/seed-overflow-fixture.sql`), **deliberately
+      retained** by ruling because it is the only published event in the
+      25 → 37.5 mi band and deleting it makes that band unverifiable again.
+      **It is `status = 'published'`, not a draft and not soft-deleted, so it is
+      a live listing**: it will appear in the feed, in search, and on the
+      Organizer Profile of whichever workspace it was attached to, for **anyone
+      whose origin is within radius of 32.4087, -110.9556645** — that is the
+      Tucson area, and it is reachable from a Sahuarita or Tucson origin at
+      default radius. A fake yard-sale-adjacent listing in a stranger's feed is
+      the kind of thing that is only funny until it isn't.
+      **Not a production risk by the current strategy** — prod is a NEW EMPTY
+      project built from `supabase/migrations/` with no data crossing over (see
+      LAUNCH INFRASTRUCTURE), and this row is data, not schema. **The live risk
+      is a demo, a screenshot, or a test account pointed at dev**, which is
+      where every walkthrough currently happens.
+      Removal is the commented-out hard delete at the end of
+      `scripts/seed-overflow-fixture.sql`; `event_categories` cascades with it.
+      **Before deleting, read the "still owed" note in that same file** — the
+      both-populated divider case is still unverified and wants a SECOND fixture
+      row inside the radius, so the likely sequence is add-one-more, verify,
+      then delete both.
+
 - [ ] **BLOCKER — 90-day hard-purge job is UNBUILT.** AD 8 states a 90-day
       retention window on soft-deleted events, and nothing enforces it: today
       `deleted_at` rows live forever. **A stated retention window that isn't
@@ -796,6 +820,23 @@ migration lands between, the NAME is the anchor, not the number.
       regardless of countdown math (server decides admission, client decides
       section, and the two clocks can disagree). Deleted-ended rows render inert;
       archived rows keep their tap. Full table in AD 8.
+      **AMENDED 2026-08-25 — PAID TIERS ONLY. Curbside is carved out and the
+      carve-out is UNBUILT (Arc C):** an ended Curbside post leaves the feed,
+      search, the detail page by direct link AND the attendee's Saved → Past,
+      with the host retaining it in Workspace. What ships above still describes
+      what 0022 APPLIED and is accurate as history — but for `curbside` rows the
+      third branch must come to REFUSE what it was built to admit. Reasoning and
+      the client surfaces that follow the server are in AD 8, "Curbside history
+      does not survive."
+- [ ] **Curbside history does not survive — UNBUILT (Arc C).** Ships with the
+      date bounds; both are server-side visibility changes over
+      `events_select_public` / `event_detail` and **share one privilege gate**.
+      A migration file is written, so the per-arc audit applies IN FULL — the
+      SQL-free N/A carve-out does not reach it. Note the trigger is TIME (the
+      event ending), not a host action, which is a new class of visibility
+      change here. Watch `ExploreSearch.tsx`'s widened overflow read: it is a
+      second RPC call at a larger radius and will re-admit anything the feed
+      excludes unless the server refuses it there too.
 - [x] **Behavioral suite — DONE, 27 assertions** (`scripts/qa-0019-delete-archive.sql`).
       Covers delete/archive/un-archive across every read path, ledger immunity to
       both host verbs AND to a hard delete, non-member authorization, and the

@@ -2,6 +2,22 @@
 
 If the user answers only part of a multi-part question, treat unanswered parts as unresolved and ask; never infer permission.
 
+# Commit direct to main — do not branch, do not ask
+
+**When asked to commit, commit to `main` and push to `main`.** Do not create a
+branch first, and do not ask whether to. This is the standing answer, recorded
+2026-08-25 so it stops being re-litigated once per arc.
+
+The default agent behaviour is to branch when it finds itself on the default
+branch. That default protects other contributors from unreviewed history landing
+under them. **There are no other contributors here** — every commit in this repo
+is direct to `main`, from one person, and a branch would create a PR flow nobody
+uses and a review step nobody performs. The safety it buys is zero and the
+friction is real.
+
+What this does NOT change: commit or push only when actually asked. The rule
+governs WHERE a requested commit goes, not whether an unrequested one happens.
+
 # Verification budget
 
 Machine-verify logic and state (typecheck, DOM/state checks, API probes). Never attempt visual verification of animations or motion via browser screenshots; list those for human feel-pass instead.

@@ -153,6 +153,20 @@ export default function Saved() {
     // decides admission — it hands back an archived or deleted event only when
     // it has ENDED and this user has a save or RSVP on it. Filtering here would
     // simply re-close the exception the policy exists to open.
+    //
+    // AMENDED 2026-08-25, NOT YET BUILT — Arc C. That rule is now PAID TIERS
+    // ONLY. An ended CURBSIDE post must leave every surface including this
+    // one's Past section: a yard sale posted from a home address, under the
+    // "Local host" mask 0028/0029 closed at the API layer, leaves a persistent
+    // trace of that neighbour's activity if it sits in a stranger's Saved
+    // forever. Same leak, displaced in time rather than surface.
+    //
+    // WHEN IT LANDS IT LANDS IN THE POLICY, NOT HERE. The comment above is
+    // still the operative instruction for this file: RLS decides admission and
+    // a client filter cannot narrow a policy that already handed the row over.
+    // Adding a `tier_id !== 'curbside'` guard at this call site would hide the
+    // row while the RPC kept serving it — the appearance of the fix without
+    // the fix. See SPARKED_STATE.md, "Curbside history does not survive."
     const { data, error: eventsError } = await supabase
       .from('events')
       .select(

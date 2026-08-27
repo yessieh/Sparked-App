@@ -831,7 +831,7 @@ constraint that shapes what Archive and Delete are actually allowed to do.
   system; two independent timestamps express independence, which one enum
   cannot; and a timestamp records WHEN, which a status discards.
 
-#### Attendee history — the limit on both verbs (LOCKED 2026-08-02, AMENDS the above)
+#### Attendee history — the limit on both verbs (LOCKED 2026-08-02, AMENDS the above; **AMENDED 2026-08-25 — Curbside is carved out entirely, see "Curbside history does not survive" below**)
 
 **What already happened stays in the attendee's record. What hasn't happened yet
 is the host's to withdraw.** A host may take down a listing; they may not
@@ -842,7 +842,16 @@ This SUPERSEDES the earlier phrasing that a deleted event is "hidden from EVERY
 read surface" and that an archived event "leaves ALL public surfaces." Both were
 written before the rule existed and were too broad.
 
-| Event state | Feed / search / Organizer Profile | Attendee's Saved — upcoming | Attendee's Saved — Past |
+**SCOPE, AS OF 2026-08-25: this rule governs PAID listings only.** It is
+unchanged for Standard and Plus and still says exactly what it said. **Curbside
+no longer follows it** — an ended Curbside post leaves every surface including
+the attendee's own Past. Read the amendment at the end of this section before
+applying anything below to a Curbside row.
+
+**The matrix below is the PAID-TIER matrix.** For `tier_id = 'curbside'` see the
+amendment.
+
+| Event state (Standard / Plus) | Feed / search / Organizer Profile | Attendee's Saved — upcoming | Attendee's Saved — Past |
 |---|---|---|---|
 | **Archived** | hidden | hidden | **visible** |
 | **Deleted**, event in the future | hidden | hidden | n/a |
@@ -904,6 +913,63 @@ housekeeping. The quota side is moot either way — consumption survives in the
 ledger — and the FK's `on delete set null` is exactly what preserves it when the
 event rows vanish. Consequence accepted and stated: this is the one path where
 an attendee's history row does disappear, because the event row itself is gone.
+
+#### Curbside history does not survive — full anonymity through time (LOCKED 2026-08-25, AMENDS the attendee-history rule above; **UNBUILT — Arc C**)
+
+**An ended Curbside event is removed from public reach ENTIRELY at end: the feed,
+search, the detail page BY DIRECT LINK, and the attendee's Saved → Past. The host
+retains it in Workspace.** Anonymity holds through time, not just at the moment
+of posting.
+
+**This AMENDS "what already happened stays in the attendee's record."** It does
+not replace it, and the paid rule above is untouched — it still governs Standard
+and Plus exactly as written, including the narrow archived/deleted exception and
+its three conditions. Curbside is removed from that rule's scope, and only
+Curbside.
+
+**Why the original rule does not fit Curbside.** It was written for paid events,
+where the host is a *business operating publicly* and an attendee's record of a
+concert they went to is their own history to keep. **Curbside is the opposite
+case in every particular**: a neighbour posting a yard sale, from a home address,
+under the "Local host" mask that the 0028/0029 arc closed at the API layer. An
+ended Curbside post sitting in a stranger's Saved → Past is a **persistent trace
+of that neighbour's activity at their home** — which is the same leak that arc
+closed, displaced in time rather than in surface. Closing a leak at the API layer
+while leaving it open in a saved row is closing one door in a two-door room.
+
+**What is new here, and why it needs its own build:**
+
+- **The trigger is TIME, not a host action.** Every removal rule above fires on
+  something the host DOES (archive, delete, cancel). This one fires when the
+  event ENDS, with nobody acting. That is a genuinely new class of visibility
+  change and it is why this is not a one-line predicate on an existing branch.
+- **It removes a row the attendee-history branch currently ADMITS.** `0022`'s
+  third branch of `events_select_public` exists precisely to let an ended,
+  personally-saved event through. For Curbside, that branch must now refuse —
+  so the change is inside the policy that the exception was built as, not
+  alongside it.
+- **`event_detail` by direct link has to close too.** The ruling says "by direct
+  link" explicitly. A link that still resolves after the row has left every
+  listing is the leak with extra steps.
+- **The host keeps it in Workspace**, which is member-scoped and already reads
+  through a definer — so the host side is a retention requirement, not a
+  permission change.
+
+**NOT IMPLEMENTED. This is Arc C's**, alongside the date bounds. Both are
+server-side visibility changes and **both go through the same privilege gate**:
+pre-arc `supabase/audits/privilege_audit.sql` baseline → build → `qa-NNNN`
+behavioural suite → post-arc audit → diff → commit. Touching
+`events_select_public` and `event_detail` means a migration file is written, so
+the gate applies **in full** — the SQL-free N/A carve-out does not reach this.
+
+Client surfaces that will need to follow the server, listed so none is missed
+when the arc runs: `(tabs)/saved.tsx` (the Past section and its clock-skew
+forcing), `(tabs)/index.tsx` (feed), `components/ExploreSearch.tsx` (both tiers
+AND the widened overflow read, which is a second call at a wider radius and will
+otherwise re-admit exactly what the feed excluded), and `(tabs)/event/[id].tsx`
+(the direct-link path). **The server is the enforcement layer in every case** —
+no client filter can narrow a policy that already handed the row over, and the
+Saved screen's own comment at `saved.tsx:152` says so.
 
 ### 9. Reputation and history — if it is ever built (ROADMAP, not MVP)
 
