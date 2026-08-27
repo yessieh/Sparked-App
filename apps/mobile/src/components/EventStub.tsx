@@ -72,6 +72,29 @@ export interface EventStubProps {
   onToggleSave?: () => void;
   onToggleGoing?: () => void;
   onTap?: () => void;
+  /**
+   * How far past the searched radius this event sits, in miles. Set ONLY by
+   * Explore search's "just past your radius" overflow band; absent everywhere
+   * else, so every existing call site is unaffected.
+   *
+   * Presence — not truthiness — is the switch: a card 0.4 mi past the radius is
+   * still an overflow card, and `0.4` must not be read as "not set".
+   *
+   * WHAT IT DOES: steps the card back (dimmed) and adds a "+X mi" badge stating
+   * the excess. The TRUE total distance is NOT duplicated here — the meta line
+   * below already renders `venue · X.X mi` from `distance_miles`, so the card
+   * shows both numbers without this prop restating one of them.
+   *
+   * PORTED HALFWAY, DELIBERATELY. The reference's overflow treatment is
+   * `opacity: 0.82` PLUS `filter: saturate(0.55)` and a stripe recoloured to
+   * grey (design-reference/ui_kits/mobile-app/event-stub.jsx:164-167). `filter`
+   * is not a React Native style property — it would be silently dropped on
+   * native — so only the opacity half is portable, and these cards read as
+   * DIMMED rather than desaturated. The stripe is deliberately NOT recoloured:
+   * muting it would drop the lane cue and introduce a hardcoded hex beside a
+   * token, and dimming the card already dims the stripe with it.
+   */
+  pastRadiusMi?: number;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -380,6 +403,7 @@ export default function EventStub({
   onToggleSave,
   onToggleGoing,
   onTap,
+  pastRadiusMi,
 }: EventStubProps) {
   const theme = useTheme();
   // Minute tick so the countdown stays current — local re-render only, never
@@ -393,6 +417,8 @@ export default function EventStub({
   const cats = event.categories ?? [];
   const stripe = laneStripeColor(event.lane, theme.colors);
   const cd = eventCountdown(event.starts_at, event.ends_at);
+  // PRESENCE, not truthiness — 0.4 mi past the radius is still overflow.
+  const stepped = pastRadiusMi != null;
 
   const actionButtons = (onToggleSave || onToggleGoing) && (
     <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -540,6 +566,10 @@ export default function EventStub({
         borderRadius: theme.radii.xl,
         overflow: 'hidden',
         boxShadow: theme.shadows.card,
+        // The "stepped back" overflow treatment — see `pastRadiusMi`. Opacity
+        // only; the reference's companion `filter: saturate()` has no React
+        // Native equivalent.
+        opacity: stepped ? 0.82 : 1,
       }}
     >
       {/* lane stripe — free community post vs paid listing, ALL variants.
@@ -563,8 +593,29 @@ export default function EventStub({
             </Defs>
             <Rect x="0" y="0" width="100%" height="132" fill={`url(#ph-${event.id})`} />
           </Svg>
-          <View style={{ position: 'absolute', top: 10, left: 10 }}>
+          <View
+            style={{ position: 'absolute', top: 10, left: 10, flexDirection: 'row', gap: 5 }}
+          >
             <CategoryBadges categories={cats} />
+            {/* "+X mi past your radius". OUTLINED AND TINTED, NOT GRADIENT: the
+                reference paints this pill with the spark gradient, which this
+                repo reserves for ACTIONABLE elements (theme/colors.ts:44-48)
+                and which the locked card rule keeps off informational badges
+                (see this file's header). It is informational, so it wears the
+                informational treatment; its TEXT is what tells it apart from a
+                category badge, and no icon library is pulled into this file to
+                do a job a "+" already does.
+
+                One decimal, not the reference's Math.round: a card 0.4 mi out
+                would round to "+0 mi", and the meta line below already states
+                the total to one decimal — the two now agree. */}
+            {stepped && (
+              <View style={styles.badge}>
+                <Text style={[styles.badgeText, { fontSize: 9, letterSpacing: 0.5 }]}>
+                  +{(pastRadiusMi as number).toFixed(1)} MI PAST
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 

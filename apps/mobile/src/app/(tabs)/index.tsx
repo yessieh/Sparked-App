@@ -26,6 +26,7 @@ import {
 import { GradientButton, SecondaryButton } from '../../components/AuthControls';
 import EmptyState from '../../components/EmptyState';
 import EventStub, { type FeedEvent } from '../../components/EventStub';
+import ExploreSearch, { SearchTrigger } from '../../components/ExploreSearch';
 import LocationControl from '../../components/LocationControl';
 import SparkedLogo from '../../components/SparkedLogo';
 import { useAuth } from '../../lib/auth';
@@ -56,6 +57,11 @@ export default function Explore() {
   const [events, setEvents] = useState<FeedEvent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // Search is a pure OVERLAY over this feed. It reads `events`, `place` and
+  // `radius`; it never writes them, and nothing below this line changed when it
+  // was added. The feed's own filtering — the radius passed to the RPC and the
+  // ENDED filter in `load` — is exactly what it was.
+  const [searchOpen, setSearchOpen] = useState(false);
   // PERSISTED, reversing the 1b ruling that lived here.
   //
   // That comment argued radius must be session-only because "a stored 100mi
@@ -168,9 +174,44 @@ export default function Explore() {
     [session],
   );
 
+  /**
+   * One card, rendered identically wherever it appears. Search results get the
+   * same save/going wiring, the same anonymous gating and the same rsvp delta
+   * as feed cards because they come through here — rather than ExploreSearch
+   * learning anything about engagement or auth.
+   *
+   * A tap CLOSES the panel before navigating, so returning from a detail screen
+   * lands on the feed rather than under a stale overlay.
+   */
+  const renderSearchEvent = useCallback(
+    (item: FeedEvent, pastRadiusMi?: number) => (
+      <EventStub
+        event={
+          typeof item.rsvp_count === 'number'
+            ? { ...item, rsvp_count: item.rsvp_count + rsvpDelta(item.id) }
+            : item
+        }
+        saved={savedIds.has(item.id)}
+        going={goingIds.has(item.id)}
+        pastRadiusMi={pastRadiusMi}
+        onToggleSave={gated(() => toggleSave(item.id))}
+        onToggleGoing={gated(() => toggleRsvp(item.id))}
+        onTap={() => {
+          setSearchOpen(false);
+          router.push({ pathname: '/event/[id]', params: { id: item.id } });
+        }}
+      />
+    ),
+    [savedIds, goingIds, rsvpDelta, gated, toggleSave, toggleRsvp],
+  );
+
   const header = (
     <View style={{ paddingTop: 24, paddingBottom: 16, gap: 14 }}>
-      <SparkedLogo mode={theme.mode} variant="lockup" size={34} />
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <SparkedLogo mode={theme.mode} variant="lockup" size={34} />
+        <View style={{ flex: 1 }} />
+        <SearchTrigger open={searchOpen} onPress={() => setSearchOpen((v) => !v)} />
+      </View>
       <View>
         <Text
           style={{
@@ -292,6 +333,20 @@ export default function Explore() {
           )
         }
       />
+
+      {/* Mounted only while open, so the panel's live region enters the tree
+          EMPTY and its first result count is a change to a node already there
+          (docs/ACCESSIBILITY.md Entry 5). Gating inside the component instead
+          would have meant an early return before its hooks. */}
+      {searchOpen && (
+        <ExploreSearch
+          events={events ?? []}
+          radius={radius}
+          place={place}
+          onClose={() => setSearchOpen(false)}
+          renderEvent={renderSearchEvent}
+        />
+      )}
     </View>
   );
 }

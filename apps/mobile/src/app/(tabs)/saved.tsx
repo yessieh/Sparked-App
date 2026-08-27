@@ -11,8 +11,9 @@ import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
-import { GradientButton, GradientFill } from '../../components/AuthControls';
+import { GradientButton } from '../../components/AuthControls';
 import EventStub, { type FeedEvent } from '../../components/EventStub';
+import Pill from '../../components/Pill';
 import SparkedLogo from '../../components/SparkedLogo';
 import { useAuth } from '../../lib/auth';
 import { useEngagement } from '../../lib/engagement';
@@ -48,45 +49,13 @@ interface SavedEventRow {
   event_categories: { category_id: string }[];
 }
 
-/** Filter pill per the locked pill language — gradient when active. */
-function FilterPill({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  const theme = useTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityState={{ selected: active }}
-      style={{
-        borderRadius: theme.radii.pill,
-        overflow: 'hidden',
-        paddingHorizontal: 16,
-        paddingVertical: 7,
-        backgroundColor: active ? undefined : theme.colors.iconChipBg,
-        borderWidth: active ? 0 : 1,
-        borderColor: theme.colors.cardBorder,
-      }}
-    >
-      {active && <GradientFill />}
-      <Text
-        style={{
-          fontFamily: theme.fonts.bodySemiBold,
-          fontWeight: '800',
-          fontSize: theme.fontSizes.caption,
-          color: active ? brand.navy : theme.colors.textMuted,
-        }}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
+// The local `FilterPill` that lived here was REPLACED BY components/Pill.tsx —
+// the same control had been written twice (here and in the wizard's category
+// picker) and both copies carried the same two defects: no `role`, so RNW
+// rendered a bare div[tabindex="0"] (WCAG 4.1.2), and a height left to padding
+// arithmetic that measured ~30pt against 2.5.5's 44. Both are fixed in the one
+// component. `accessibilityState={{selected}}` went with it — inert on web per
+// docs/ACCESSIBILITY.md Entry 5, replaced by `aria-pressed`.
 
 function SignedOutSaved() {
   const theme = useTheme();
@@ -344,10 +313,10 @@ export default function Saved() {
 
       {inventoryTotal > 0 && (
         <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
-          <FilterPill label="All" active={filter === 'all'} onPress={() => setFilter('all')} />
-          <FilterPill
+          <Pill label="All" selected={filter === 'all'} onPress={() => setFilter('all')} />
+          <Pill
             label="Going"
-            active={filter === 'going'}
+            selected={filter === 'going'}
             onPress={() => setFilter('going')}
           />
         </View>

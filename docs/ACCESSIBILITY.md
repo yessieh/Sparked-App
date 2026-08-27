@@ -1224,3 +1224,327 @@ finding**; none of the 64 are in `pickers.tsx`. The pre-fix reproduction was
 produced by `git stash` on `pickers.tsx` alone, and the fix restored and
 re-confirmed by grep for its markers. **No source file was edited to produce a
 measurement, and no database row was read or written by this arc.**
+
+---
+
+# Entry 6 — 2026-08-25 — Explore header search (Stage 2b-i)
+
+**The arc:** a collapsed search icon in the Explore header expanding to a
+two-tier finder — Tier 1 matches filter NAMES (the 13 `public.categories` rows
+plus "Free"), Tier 2 matches event TITLES against the feed's already-loaded
+array, with a "just past your radius" overflow band for Tier 2 only. New:
+`components/ExploreSearch.tsx`, `components/Pill.tsx`, `lib/searchMatch.ts`,
+`lib/categories.ts`. **No SQL, no schema, no migration, no RPC** — the
+privilege-audit gate is N/A under CLAUDE.md's carve-out, stated rather than
+omitted. The grant surface is provably untouched: no file under `supabase/` was
+written and no `GRANT` / `REVOKE` / `CREATE` / `ALTER` statement was executed.
+`lib/categories.ts` reads `public.categories`, which `anon` and `authenticated`
+have held `select` on since 0002 — it CONSUMES an existing grant and adds none.
+The widened read calls the existing `events_within_radius` with a different
+`radius_miles`; no argument was added, so no DROP, so no ACL reset.
+
+## THE HEADLINE: the live-region rule was APPLIED, not re-derived — first time
+
+Entry 5 wrote the rule down after four consecutive arcs re-discovered the same
+defect from scratch. **This arc is the first to consume it.** The region was
+written in the correct shape at first draft — mounted unconditionally inside the
+panel, only its children swapping, the absence styled with conditional padding —
+and there was no defect to find, because the rule pre-empted it.
+
+Two design consequences fell out of the rule rather than out of taste:
+
+- **The result rows are OUTSIDE the region.** A live region re-announces
+  everything it contains, so rows inside it would read the whole list aloud on
+  every keystroke. Only the count summary lives in the region. That is Entry 2's
+  CTA rule, applied to a list.
+- **The announcement is HELD until the widened read settles.** A sparse search
+  fires a second RPC; announcing the in-radius count and then correcting it a
+  round trip later is two announcements for one user action. `overflowPending`
+  is derived, not stored, and gates the string.
+
+### Verified by node identity across FIVE transitions, not by presence
+
+Asserting the text *appears* proves nothing — it passes against a region that
+remounts every time and therefore never announces. The panel's region node was
+captured on open and compared after every transition:
+
+| Panel state | Region text | Same node |
+| --- | --- | --- |
+| Opened, nothing typed | *(empty)* | — captured here |
+| `"mar"` | `1 filter` | **true** |
+| `"can"` | `1 event` | **true** |
+| `"zzzq"` | `No matches` | **true** |
+| Markets applied | `1 event for Markets` | **true** |
+| Filter cleared | *(empty)* | **true** |
+
+`[role="status"]` count inside the panel: **1**. On the page while the panel is
+open: **2** — this one plus LocationControl's (Entry 3), which is outside the
+panel and carries the location string. On close the panel's region unmounts and
+the page is back to 1. The trigger's `aria-expanded` tracks it: `true` on open,
+`false` after Escape, after Cancel, and after a scrim tap.
+
+## The input has a real, VISIBLE label — Entry 3's precedent, both mechanisms
+
+| Check | Result |
+| --- | --- |
+| `aria-label` | `"Search filters and events"` |
+| `aria-labelledby` | `sparked-explore-search-label` |
+| That id resolves to a real node | **true**, text `"Search"` |
+| That node is VISIBLE (a rendered eyebrow, not a hidden span) | **true** |
+| Placeholder (decorative only) | `"Free, Music, or an event name"` |
+| Trigger → panel association | `aria-controls="sparked-explore-search"`, resolves |
+
+## Touch targets — `getBoundingClientRect()`, BOTH axes, both viewports
+
+Entry 3's `44 x 29` is why no measurement here is height-only.
+
+| Control | 1280 wide | 375 wide |
+| --- | --- | --- |
+| Search trigger (collapsed) | **44 x 44** | 44 x 44 |
+| Search input | 406 x **44** | 168 x **44** |
+| Clear search (`×`) | 44 x 44 | 44 x 44 |
+| Cancel | 44+ x 44 | 44+ x 44 |
+| Filter row (Markets / Free) | 518 x **47** | 333 x **47** |
+| Clear applied filter | **44 x 44** | 44 x 44 |
+| `Pill` — longest label ("Art") | 50 x **44** | — |
+| `Pill` — SHORTEST label ("All") | **49 x 44** | — |
+
+The `Pill` "All" row is the one that matters: at the old `paddingHorizontal: 16`
+with no floor it is the narrowest case in the app, and `minWidth: TARGET` is
+what keeps it above 44. Height was ~30 before this arc.
+
+## A LAYOUT DEFECT FOUND BY MEASURING, invisible in source and at 1280
+
+At 375x812 the panel measured **861pt tall in an 812pt viewport** — 49pt hanging
+off the bottom, with the inner `ScrollView` unable to scroll to reach it.
+
+The cause: the panel's `maxHeight: '100%'` had **no definite parent height to be
+a percentage of**. Its container was `position: absolute` with `top/left/right`
+and no `bottom`, so the box was auto-height and the cap resolved to nothing. It
+reads as correct in source, and at 1280x720 the content was short enough that
+nothing overflowed — the bug only existed where the content was taller than the
+screen.
+
+Fixed by giving the container `bottom: 0` (a definite height for the cap) plus
+`pointerEvents="box-none"` — **the second half is not optional**: a full-screen
+container swallows the taps meant for the scrim behind it, and tap-outside-to-
+close would have silently stopped working. Both halves re-measured:
+
+| Check, 375x812, query `"a"` (3 filters + 2 events) | Before | After |
+| --- | --- | --- |
+| Panel height | **861** | 763 |
+| Panel bottom vs viewport (812) | **863 — off-screen** | 763 — fits |
+| Inner scroller present and scrollable | — | **true** |
+| Scrim element under a click at (60, 300) | — | the `aria-hidden="true"` scrim |
+| Scrim tap closes the panel | — | **true** |
+| `document.scrollWidth > innerWidth` (horizontal overflow) | false | **false** |
+
+## `Pill` — one component, two live defects retired
+
+`FilterPill` (`saved.tsx`) and the `CategoryPicker` pill (`create/event.tsx`)
+were the same control written twice, and both carried the same two defects: no
+`role`, so RNW rendered a bare `div[tabindex="0"]` (4.1.2 — Entry 2's finding),
+and a height left to padding arithmetic (`paddingVertical: 7` around 12px text
+≈ 30pt, failing 2.5.5). A third copy was about to be written for search. It was
+written once instead.
+
+| Property | Before (both copies) | After (`components/Pill.tsx`) |
+| --- | --- | --- |
+| Tag / role | `DIV`, `tabindex="0"`, no role | **`BUTTON`, `role="button"`** |
+| Selected state | `accessibilityState={{selected}}` — **no DOM attribute** | **`aria-pressed="true"` / `"false"`, read from the DOM** |
+| Height | ~30pt | **44** |
+| Width floor | none | **`minWidth: 44`** (measured 49 at "All") |
+| Selected fill | gradient | gradient — `svg` present only when pressed |
+
+### `aria-pressed`, and why not the two obvious alternatives
+
+- `accessibilityState={{selected}}` is **inert on web** (Entry 5) — it reaches
+  no DOM attribute at all.
+- `aria-selected` IS typed by RN 0.86, but it is not valid ARIA on
+  `role="button"`; it belongs to option/tab/row.
+- `aria-pressed` is correct for a toggle button, and **rnw 0.21.2 forwards it** —
+  `dist/modules/forwardedProps/index.js` lists it in `accessibilityProps`. But
+  **RN 0.86 does not TYPE it**: `ViewAccessibility.d.ts` declares `aria-busy`,
+  `-checked`, `-disabled`, `-expanded`, `-selected` and no `pressed`. Hence the
+  one-line spread shim in `Pill.tsx` rather than an inline prop, which does not
+  compile. Verified in the DOM, not assumed from the forward list.
+
+**OPEN ITEM:** RN maps no NATIVE trait for `aria-pressed`, so on iOS/Android the
+pressed state is carried by the label and the gradient alone. Web is the
+platform this arc could verify and the platform it is verified on.
+
+## Contrast — measured off the PAINTED element, composited to the first opaque ancestor
+
+The panel paints `bgDeep` `#0f1a30`; the field paints `cardBg` over it,
+compositing to `rgb(25,35,56)`. Hand-computed values agreed with the measured
+ones to rounding (8.64 / 4.74 predicted, 8.58 / 4.71 measured).
+
+### Dark — rendered
+
+| Element | Painted | Surface | Ratio | Held to |
+| --- | --- | --- | --- | --- |
+| `"Search"` label eyebrow (`brightOrange`) | `rgb(252,163,17)` | `#0f1a30` | **8.58:1** OK | 4.5:1 |
+| **Match highlight span** (`brightOrange`, 14px/900) | `rgb(252,163,17)` | `#0f1a30` | **8.58:1** OK | 4.5:1 |
+| Filter row subline (`textMuted`, 12px) | composited | `#0f1a30` | **4.71:1** OK | 4.5:1 |
+| Live-region count (`textMuted`, 12px) | composited | `#0f1a30` | **4.71:1** OK | 4.5:1 |
+| Cancel / Clear (`sparkGold`, 14px/800) | `rgb(255,202,58)` | `#0f1a30` | **11.37:1** OK | 4.5:1 |
+| Applied filter name (`text`, 20px/900) | `#eef0ff` | `#0f1a30` | **15.32:1** OK | 4.5:1 |
+| No-results headline (`text`, 15px/900) | `#eef0ff` | `#0f1a30` | **15.32:1** OK | 4.5:1 |
+| No-results body (`textMuted`, 12.5px) | composited | `#0f1a30` | **4.71:1** OK | 4.5:1 |
+| Search + clear glyphs (`textMuted`, non-text) | composited | `rgb(25,35,56)` | **4.52:1** OK | 3:1 |
+
+### THE CARD CONSTRAINT WAS APPLIED, NOT REDISCOVERED
+
+Entry 2 measured `textMuted` at **4.32:1 on a card** — a failure — while it
+clears 4.5:1 on the bare page background. Two decisions here follow directly
+from that, and neither would be visible as a fix if the constraint were not
+named:
+
+1. **Filter rows carry NO card fill.** The reference's rows have a
+   `rgba(255,255,255,0.03)` background (`FilterFinder.jsx:80`). Porting it would
+   have put every `textMuted` subline onto a card surface and into the same
+   4.32:1 failure. The rows sit on the bare panel background instead, which is
+   why the subline measures 4.71.
+2. **The overflow note, which IS on a card, uses `text` rather than
+   `textMuted`** — 12.62:1 on that surface instead of 4.32:1.
+
+## 1.4.1 — the match highlight is colour plus a weak weight cue, and that is RECORDED, not designed around
+
+The highlight is `brightOrange` at weight 900 against the label's 800 — the
+reference's own treatment, ported as instructed. **The weight bump is a weak
+non-colour channel at 14px.** As decoration this is fine; if the highlight is
+ever asked to CARRY the reason a row matched, it needs a real second channel.
+That is a design decision and it was not invented mid-arc. Open item.
+
+## The matcher's ordering was verified against rendered output, not unit-asserted
+
+Query `"a"` at the seeded origin rendered exactly three filter rows in this
+order: **Art, Family, Markets**. `Art` matches at offset 0; `Family` and
+`Markets` both match at offset 1 and tie-break on label length (6 before 7).
+That is `matchLabels`' documented rule — offset, then length — observed end to
+end rather than argued. Casing is preserved from the label: typing `mar`
+highlights **`Mar`**, not `mar`.
+
+The widened read was proven by instrumenting `window.fetch`: typing `"fair"`
+produced **exactly one** call to `events_within_radius`, body
+`{"origin_lat":31.9576,"origin_lng":-110.9556,"radius_miles":37.5}` — one call
+per settled query, not one per keystroke (200ms debounce), at
+`min(25 × 1.5, 25 + 15) = 37.5`. Applying a filter fired **no** call, which is
+the Tier-1-is-not-location-bound rule holding.
+
+**The `{cap}` claim in the no-results copy is asserted, not assumed.** It renders
+`"…out to 37.5 mi"` only when the widened read completed; the failure and
+never-ran branches fall back to copy that claims only the radius. Observed in
+the completed branch; **the failure branch is unexercised.**
+
+## What this entry does NOT establish
+
+- **THE OVERFLOW BAND IS VERIFIED SINGLE-SIDED ONLY. THE BOTH-POPULATED DIVIDER
+  CASE HAS NEVER BEEN DRAWN.** Reviewer verification, 2026-08-25, using the
+  `scripts/seed-overflow-fixture.sql` row: the town and radius were moved so the
+  fixture sat **in-radius**, **just outside** (inside the band) and **far
+  outside** (past the cap), and all three branches behaved correctly — so the
+  divider, the note, the stepped-back card, the `+X MI PAST` badge and the
+  overflow announcement HAVE now rendered.
+
+  What has not: **a divider with a non-empty group on BOTH sides.** With one
+  far-out event, moving the origin shows the in-radius group or the overflow
+  group, never both at once — the two are mutually exclusive by construction of
+  the only available fixture. That matters specifically because **the zero-count
+  copy bug ("Only 0 within 25 mi") lived in exactly that seam**, and its fixed
+  form — the `titleMatches.length > 0` branch reading "Only N within X mi. Here
+  is 1 more…" — is the string that has never been on screen. Cause: no seeded
+  event besides the fixture occupies the 25–37.5 mi band, so there is nothing to
+  populate the in-radius side while the fixture populates the overflow side.
+  **Closing it needs a SECOND fixture row inside the radius whose title shares a
+  substring with the first.** Recorded as owed.
+- **`Pill`'s two host screens: VERIFIED by the reviewer**, 2026-08-25, under a
+  signed-in session that this build session did not have. Saved's All/Going pair
+  and the wizard's category grid both lay out correctly at the new 44pt height —
+  which is the check the build session could not run and flagged as owed. The
+  search panel was also confirmed to read correctly at desktop width. The
+  COMPONENT's own contract (tag, role, `aria-pressed` both ways, both-axis
+  target, gradient on selected) remains as measured in the table above.
+- **A SOURCE FILE WAS EDITED TO PRODUCE THAT MEASUREMENT**, unlike Entry 5. Two
+  `Pill`s were temporarily mounted in the search panel, measured, and removed;
+  removal was confirmed by grep for both markers (`PillProbe`, `pill-probe`,
+  zero hits) and by `tsc --noEmit` exiting 0 afterwards. Stated because the
+  alternative — quietly reverting and reporting the number — would make the
+  measurement unreproducible from the committed tree.
+- **No screenshots. Fifth arc running.** The Browser pane was not displayed, so
+  the page never composited frames and every capture timed out at 5s. Entries
+  2–5 recorded the same failure from different causes. **Visual feel, the panel
+  drop animation, and the stepped-back card treatment are all on the human
+  list** — and per CLAUDE.md motion is never screenshot-verified anyway.
+- **No focus trap, and Tab can leave the open panel.** The scrim is
+  `aria-hidden` and pointer-only; the keyboard/AT exits are Escape (verified)
+  and the Cancel button (verified). But nothing stops Tab from reaching the feed
+  behind the panel, and the panel does not declare `role="dialog"` /
+  `aria-modal` — declaring it without a trap would be worse than not declaring
+  it. Open item, deliberately not invented mid-arc.
+- **The overlay does not cover the tab bar.** It is mounted inside the Explore
+  screen, so the bottom tabs stay above it and remain tappable with the panel
+  open. Leaving the tab unmounts the panel, so there is no stale state — but the
+  scrim is not a full-screen scrim, and at 375 the panel's own bottom edge
+  overlaps the tab bar region.
+- **EVENT CARDS IN THE RESULTS ARE STILL ROLE-LESS.** `EventStub`'s outer
+  `Pressable` renders as `DIV[tabindex="0"]` with no `role` — Entry 1/2's defect
+  class again. **Confirmed pre-existing, not introduced**: the card behind the
+  panel on the feed and the card inside the panel were read in the same probe
+  and are byte-identical in this respect. Fixing it changes every card on
+  Explore, Saved, Workspace and the organizer profile, which is wider than this
+  arc's fence — so it is named here and left. **This is now the largest open
+  accessibility item in the app**, ahead of Entry 5's calendar day cells.
+- **Nothing about native.** Expo web only. `aria-pressed` has no native mapping
+  (above), and the panel has never mounted on iOS or Android.
+- **Nothing about light mode**, unreachable for the same structural reason as
+  Entries 1–5: the Appearance screen is a stub. The panel paints `bgDeep`, which
+  is `#ffffff` in the light palette, and `lightPalette.textMuted` `#7a849e` on
+  `#ffffff` is **3.43:1 — the same token-level failure Entry 2 logged**, which
+  this panel's sublines, count line and no-results body would inherit. Computed,
+  **never rendered**. Owner: the Appearance arc, alongside its three existing
+  inherited failures.
+- **No reduced-motion audit.** This arc adds no animation — the reference's
+  `ffPanelDrop` was not ported, so `lib/useReducedMotion.ts` had nothing to
+  gate. If the drop animation is added later, it acquires that obligation.
+
+## AN EMPTY FEED HERE IS THE PRODUCT WORKING, NOT A DEFECT — read this first
+
+**The reviewer's persisted browsing location is PHOENIX, not Sahuarita.** The
+six reseeded events sit ~100 mi south, so Explore correctly shows almost
+nothing, and search correctly finds almost nothing to match Tier 2 against.
+
+Recorded because it presents exactly as a broken feed to whoever opens the app
+next, and the wrong repair — widening a radius cap, loosening a filter, blaming
+the RPC — is easy to reach for. **The distance-pure feed refusing to show
+Tucson-area events to a Phoenix origin IS the hyperlocal promise being kept.**
+`lib/origin.tsx` persists the location device-locally, so it survives reloads
+and differs per machine: the build session measured from Sahuarita and saw two
+events, the reviewer measured from Phoenix and saw none, and **both readings are
+correct**. Before treating a thin feed as a bug, read the header — it states the
+origin and radius on every visit for this reason — or move the location and
+watch the feed repopulate.
+
+**Baseline:** checked against the running Expo web dev server at
+`localhost:8081` on 2026-08-25, against `main` @ `e96efa6` plus this arc's
+working tree (4 new files; `(tabs)/index.tsx`, `(tabs)/saved.tsx`,
+`create/event.tsx`, `components/EventStub.tsx` modified). Driven **signed out**,
+in the in-app Browser pane, at the persisted Sahuarita origin with radius 25 —
+two events in range (`San Xavier Craft Fair` 10.7 mi, `Madera Canyon
+Stargazing` 16.6 mi). `npx tsc --noEmit` exits 0. `npx expo lint` reports **64
+problems (59 errors, 5 warnings)** both before and after — the baseline was
+taken by `git stash -u`, re-running, and popping — so **this arc adds no lint
+finding**, and none of the 64 are in any of the four new files. Console: **no
+errors and no rnw deprecation warnings**, which is the independent check that no
+`accessibility*` spelling survived. **No database row was written by this arc**;
+the only reads are the anonymous feed RPC and `public.categories`.
+
+**Reviewer pass, 2026-08-25**, under a signed-in session from a Phoenix origin,
+after running `scripts/seed-overflow-fixture.sql` by hand in the Supabase
+Dashboard → SQL Editor. That run is the one write in this arc's vicinity, it was
+made by the reviewer rather than by the build, and **the fixture row is left in
+place** — so a future reader finding `Sabino Canyon Night Hike` in
+`public.events` should know it is a deliberate verification fixture, not
+production data. It closed the two items the build session recorded as owed
+(overflow rendering, single-sided; the two `Pill` host screens) and left the
+both-populated divider case open, above.

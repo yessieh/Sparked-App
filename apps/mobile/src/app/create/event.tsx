@@ -43,6 +43,7 @@ import { FormField, GradientButton, GradientFill, SecondaryButton } from '../../
 import EventDetailView, { type EventDetailData, placeholderPhotos } from '../../components/EventDetailView';
 import EventStub, { type FeedEvent } from '../../components/EventStub';
 import MarkdownText from '../../components/MarkdownText';
+import Pill from '../../components/Pill';
 import SiteMap from '../../components/SiteMap';
 import { SubHeader } from '../../components/SubHeader';
 import { DateField, TimeField, format12h } from '../../components/pickers';
@@ -346,38 +347,20 @@ function CategoryPicker({
   const theme = useTheme();
   return (
     <View>
+      {/* components/Pill.tsx — the shared control. This picker used to draw its
+          own copy of the same pill, with no `role` (RNW rendered a bare
+          div[tabindex="0"], WCAG 4.1.2) and a ~32pt height against 2.5.5's 44.
+          Both are fixed by using the one component; `accessibilityState`, inert
+          on web per docs/ACCESSIBILITY.md Entry 5, is now `aria-pressed`. */}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        {categories.map((c) => {
-          const active = selected.includes(c.id);
-          return (
-            <Pressable
-              key={c.id}
-              onPress={() => onToggle(c.id)}
-              accessibilityLabel={c.label}
-              accessibilityState={{ selected: active }}
-              style={{
-                borderRadius: 9999,
-                overflow: 'hidden',
-                borderWidth: active ? 0 : 1,
-                borderColor: theme.colors.borderStrong,
-                paddingHorizontal: 14,
-                paddingVertical: 8,
-              }}
-            >
-              {active && <GradientFill />}
-              <Text
-                style={{
-                  fontFamily: theme.fonts.bodySemiBold,
-                  fontWeight: '800',
-                  fontSize: 12.5,
-                  color: active ? brand.navy : theme.colors.textMuted,
-                }}
-              >
-                {c.label}
-              </Text>
-            </Pressable>
-          );
-        })}
+        {categories.map((c) => (
+          <Pill
+            key={c.id}
+            label={c.label}
+            selected={selected.includes(c.id)}
+            onPress={() => onToggle(c.id)}
+          />
+        ))}
       </View>
       {warn && (
         <View
