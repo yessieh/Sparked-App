@@ -1548,3 +1548,321 @@ place** — so a future reader finding `Sabino Canyon Night Hike` in
 production data. It closed the two items the build session recorded as owed
 (overflow rendering, single-sided; the two `Pill` host screens) and left the
 both-populated divider case open, above.
+
+---
+
+# Entry 7 — 2026-08-25 — Explore header interest pills (Stage 2b-ii)
+
+**The arc:** a wrapped row of category pills in the Explore header filtering the
+feed itself, multi-select with OR semantics. New: `components/InterestPills.tsx`,
+`lib/eventFilters.ts`. **No SQL, no schema, no migration, no RPC** — the
+privilege-audit gate is N/A under CLAUDE.md's carve-out, stated rather than
+omitted, and the grant surface is provably untouched: nothing under `supabase/`
+was written and no `GRANT` / `REVOKE` / `CREATE` / `ALTER` was executed. The only
+reads are the ones Explore and search already made.
+
+## THE HEADLINE: the fifth instance of the live-region shape, and the first the standing rule could not answer on its own
+
+Entry 5 wrote the rule after four arcs re-derived the same defect:
+
+> The live-region node is mounted unconditionally. Only its CHILDREN swap.
+
+**This arc found the rule's unstated premise: it assumes a node exists to
+change.** The obvious place to announce "your filter emptied the feed" is
+`EmptyState` — but `EmptyState` is `ListEmptyComponent`, and a FlatList renders
+that **only while the list is empty**. So the dangerous transition is not
+empty→empty, which the rule covers; it is **cards → filtered-empty**, where
+there is no region in the tree yet and the region therefore arrives already
+holding its text. Silent, for the fifth time, by a different mechanism.
+
+The brief for this arc aimed the requirement at the branch change and was
+corrected on this point before code was written.
+
+**The fix is structural, not a swap:** the filter announcement lives in the
+**header**, which always renders, one level above the pill row — and above it
+deliberately, because the row is gated on load and a region inside it would be
+conditional for a second, independent reason. `EmptyState`'s own region keeps
+doing its original job for the load-time case.
+
+**The corollary the rule now needs:** *before applying "unconditional node,
+children swap", check that the subtree containing the node is itself
+unconditional.* A conditional node inside an unconditionally-mounted parent is
+the defect; an unconditional node inside a conditionally-mounted parent is the
+same defect wearing a disguise.
+
+### Verified by node identity across SIX transitions
+
+The header region node was captured on load and compared after every change:
+
+| Transition | Region text | Same node |
+| --- | --- | --- |
+| Loaded, no pills selected | *(empty)* | — captured here |
+| Tap **Outdoors** (auto-joins Curbside) | `Showing 1 of 1 · Curbside, Outdoors` | **true** |
+| Untap **Outdoors** → filtered-empty | `No events match Curbside` | **true** |
+| Untap **Curbside** → full feed | *(empty)* | **true** |
+| Re-tap **Outdoors** | `Showing 1 of 1 · Outdoors` | **true** |
+| Event detail → **Back** | `Showing 1 of 1 · Outdoors` | **true** |
+
+`[role="status"]` count on Explore: **2** with cards present (LocationControl's
+from Entry 3, plus this one), **3** when the list is empty (`EmptyState`'s
+joins). The absence is styled with conditional padding, never unmounted.
+
+## THE EMPTY STATE DOES NOT OFFER WIDENING WHEN A FILTER EMPTIED THE FEED
+
+The named hazard for this arc: passing filtered data to `data=` while leaving
+`pending={events === null}` renders *"Nothing nearby right now / **Widen to 50
+miles**"* — proposing more distance as the remedy for a category filter, an
+action that cannot work and that leaves the user further from what they wanted.
+
+Driven and read out of the DOM:
+
+| State | Headline | Action offered |
+| --- | --- | --- |
+| Feed genuinely empty | `Nothing nearby right now` | `Widen to 50 miles` |
+| **Filtered to empty** | **`Nothing tagged Curbside right now`** | **`Clear filters`** |
+
+Body in the filtered branch: *"Everything else within 50 mi is still here —
+clearing your filters brings it back."* — it names the radius so the reader knows
+which lever moved, and the action states exactly what will happen.
+
+**ONE `EmptyState` ELEMENT, TWO BRANCHES.** Swapping in a different component for
+the filtered case would swap its live-region node too. Same element, same
+position, only props change.
+
+## Pills — every one verified in the DOM, not trusted from the component
+
+`Pill.tsx` already carried `role="button"`, `aria-pressed` and the 44 target
+from Entry 6, but Entry 6 verified them on a **temporary probe mount**, never in
+a real host. Re-verified here on the rendered row:
+
+| Check | Result |
+| --- | --- |
+| Tag / role | `BUTTON`, `role="button"` |
+| `aria-pressed`, unselected | **`"false"`** |
+| `aria-pressed`, selected | **`"true"`** |
+| Row container | `role="group"`, `aria-label="Filter the feed by interest"` |
+| `flex-wrap` (computed, not source) | `wrap` |
+| Pill rect @ 1280 | **88.2 × 44** |
+| Pill rect @ 375 (`outerWidth` confirmed 375) | **88.2 × 44** |
+| Horizontal overflow @ 375 | **false** (`scrollWidth` 375 = viewport) |
+
+`role="group"` is typed by RN 0.86 (`ViewAccessibility.d.ts:375`) and forwarded
+by rnw 0.21.2, which is why it is used rather than a visually-hidden heading.
+
+## The Curbside auto-join, driven end to end
+
+Curbside is not lit on open — a lit pill with no filter applied is phantom state
+— and joins the user's FIRST topical selection so the free community lane
+arrives with their choice instead of vanishing behind it.
+
+| Step | Pills (`label:aria-pressed`) | Feed |
+| --- | --- | --- |
+| Loaded | `Outdoors:false` | 1 card |
+| Tap Outdoors | **`Curbside:true`, `Outdoors:true`** — Curbside leftmost | 1 card |
+| Untap Outdoors | `Curbside:true`, `Outdoors:false` | **0 cards** |
+| Untap Curbside | `Outdoors:false` — Curbside pill gone | 1 card |
+| **Re-tap Outdoors** | **`Outdoors:true` only — Curbside did NOT return** | 1 card |
+
+The last row is the ruling holding: `curbsideDecided` means *"the user has an
+opinion about Curbside"*, not *"auto-join has run"*, so a direct tap in either
+direction settles it permanently. Curbside's leftmost position needs no code —
+`sort_order` 0 and `useCategories()`'s `.order('sort_order')` already produce it.
+
+**The second row also demonstrates the zero-count exception**: Curbside has no
+events in radius, so it exists as a pill ONLY because it is selected. Without
+that exception auto-join would add an invisible filter.
+
+## Active pills survive a trip to an event, by not unmounting
+
+Plain `useState` in `Explore()`, no context and no storage. Verified by the real
+path — a card tap, `router.push`, then the Back control:
+
+| Check | Result |
+| --- | --- |
+| Explore's pill row still in the DOM **while the event screen showed** | **true** |
+| `aria-pressed` after Back | **`Outdoors:true`** — unchanged |
+| Header region node across the round trip | **same node** |
+
+`event/[id]` is a `Tabs.Screen` in the SAME navigator as `index`
+(`(tabs)/_layout.tsx:85`), and this navigator keeps blurred screens mounted.
+
+**A METHOD WARNING WORTH MORE THAN THE RESULT.** During recon the same question
+was first tested with `history.pushState` + a synthetic `popstate`, which
+reported the screen as **unmounted and the state as lost** — the opposite of the
+truth. A synthetic popstate makes React Navigation rebuild its state from the
+URL rather than push onto it. **Do not test navigation persistence with
+`pushState`;** drive the real control.
+
+## CONTRAST — A LIVE 1.4.3 FAILURE ON THE UNSELECTED PILL, FOUND AND FIXED IN THIS ARC
+
+Measured off the painted element, composited to the first opaque ancestor.
+
+| Element | Surface | Before | After | Held to |
+| --- | --- | --- | --- | --- |
+| **Unselected pill label** (`textMuted`, 12px) | `#1D2A45` → **`#14213D`** | **4.32:1 FAILS** | **4.55:1 OK** | 4.5:1 |
+| Selected pill label (`navy` on the spark gradient) | `#ff5f4e` → `#ffca3a` | 5.32 → 10.47:1 OK | unchanged | 4.5:1 |
+| Filter status region (`textMuted`, 12px) | `#14213D` | 4.55:1 OK | unchanged | 4.5:1 |
+
+**4.32:1 was not a new number — it is the exact figure Entry 2 recorded for
+`textMuted` on a card surface**, and `iconChipBg` composites to that same
+surface. The token was the cause, as it was then.
+
+**FIXED BY OPTION A, BY RULING: the unselected fill is gone and the pill is
+border-only**, which puts the label back on the bare page background. Verified
+after the change, not predicted: `backgroundColor` reads `rgba(0, 0, 0, 0)`, the
+composited surface resolves to `rgb(20,33,61)`, and the label measures
+**4.55:1** — the predicted value to the hundredth.
+
+The rejected alternative is recorded because it will be proposed again: keeping
+the fill and lifting the label to `text` `#eef0ff` measures **12.63:1**, which
+is comfortable, and it was refused anyway. Its comfort comes from making
+unselected pills read closer to selected ones, and on a multi-select row the
+selected/unselected distinction is the one contrast the control exists to draw.
+Satisfying 1.4.3 by eroding 1.4.1's neighbour — the same trade Entry 5 refused
+when `flameRed` was proposed for `danger`.
+
+### BINDING CONSTRAINT — 4.55:1 CLEARS THE FLOOR BY 0.05
+
+**This is a constraint, not a measurement.** `textMuted` on the bare page
+background has 0.05 of headroom against 1.4.3. Three changes re-break it, none
+of which look like an accessibility change in review:
+
+1. **Any fill behind the label.** That is precisely what broke it — 4.32:1 came
+   from a `rgba(255,255,255,0.04)` chip, the lightest fill in the palette.
+2. **Any darkening of the page beneath it**, including a future surface token
+   or a card wrapper placed around the pill row.
+3. **Any move of the label off `textMuted`** in the darker direction.
+
+It is the same razor margin Entry 2 flagged for this token — "clears 4.5:1 by
+0.07" on that surface — **and that margin has already decided one thing**:
+`EmptyState`'s copy is pinned to the bare page background for exactly this
+reason, recorded there as a BINDING CONSTRAINT in the same words. This is the
+second surface pinned by the same 0.05–0.07 of headroom, and the real fix for
+both is a `textMuted` with room in it, which belongs to the Appearance arc.
+`Pill.tsx` carries this constraint in a comment at the property that enforces it.
+
+### THE FINDING WORTH GENERALISING: extracting one component from two takes the more decorated one as the truth
+
+The two pills `Pill.tsx` replaced were **not** identical, and the difference was
+invisible at the call sites. `saved.tsx`'s `FilterPill` painted `iconChipBg`;
+the wizard's `CategoryPicker` pill had **no `backgroundColor` at all**. The
+extraction in Entry 6 kept the fill — the more decorated of the two — and in
+doing so handed the wizard's pills a surface they never had.
+
+**Why nothing caught it.** `tsc` cannot see it: both versions typecheck and the
+merged one typechecks. A geometry probe cannot see it: width, height, `role` and
+`aria-pressed` were all correct, and Entry 6 measured exactly those. Source
+review reads "one component instead of two" as strictly an improvement. **The
+only thing that catches it is measuring colour on the rendered element in each
+host** — and Entry 6 could not, because both hosts are behind auth and the
+component was proven on a temporary probe mount instead.
+
+**The general rule this earns:** *when two similar components are merged, diff
+their VISUAL properties explicitly and record which version won each one.*
+Deduplication silently elects a winner per property, and the decorated version
+tends to win because it is the one that "has" something. Same failure shape as
+Entry 1's — a property that is correct in source, wrong on screen, and invisible
+to every automated check the project runs.
+
+**THE WIZARD'S RATIO IS STILL UNVERIFIED, AND OPTION A IS NOT PROOF THAT IT IS
+FIXED.** That screen is behind auth and has never rendered in any of these
+sessions. What is established: the wizard's pills no longer carry a fill they
+did not originally have. What is NOT established: their measured ratio, because
+the wizard's step content may sit on a card rather than the bare page — and on a
+card, `textMuted` is Entry 2's 4.32:1 again, fill or no fill. **On the human
+list, with the exact figure to read.**
+
+### THE PILL'S BOUNDARY HAS NEVER MET 1.4.11, AND NO EXISTING TOKEN CLOSES IT
+
+Checked because removing the fill removes a boundary cue, so the question is
+whether option A weakened one. It did not, and the reason is worth having:
+
+| Boundary cue | Against the page | 1.4.11 floor |
+| --- | --- | --- |
+| The fill that was removed (`iconChipBg` 0.04) | **1.12:1** | 3:1 |
+| The border that remains (`cardBorder` 0.08) | **1.26:1** | 3:1 |
+| Strongest available token (`borderStrong` 0.20) | **1.90:1** | 3:1 |
+
+**The removed fill was the WEAKER of two already-failing cues** — 1.12:1, barely
+distinguishable from the page — so option A took away almost nothing. The gap is
+pre-existing, unchanged in kind by this arc, and **not closable with any border
+token the palette currently has**: even the strongest reaches 1.90:1.
+
+Whether 1.4.11 binds here is arguable — an unselected pill is a labelled control
+whose label passes 4.5:1, and the selected state is unmistakable — but the
+honest statement is that a user scanning the row for "what is tappable" is
+relying on a 1.26:1 edge. **Recorded as an open finding for a ruling, not
+attributed to this change and not fixed inside it.**
+
+### A measurement artifact worth recording
+
+The composite walker reported the selected pill label at **1:1** — a false
+failure. Its gradient is an **SVG child**, not a CSS `background`, so the walker
+found no opaque background on the element, fell through to the page, and
+compared `#14213D` against `#14213D`. The real numbers above were obtained by
+reading the three `<stop stop-color>` values out of the rendered SVG
+(`#ff5f4e`, `#ff8c38`, `#ffca3a` — confirmed present, not assumed from the
+palette) and computing navy against each. **Any future contrast pass over a
+gradient control in this app hits the same artifact.**
+
+## What this entry does NOT establish
+
+- **ONE EVENT, ONE CATEGORY. That is the ceiling on everything above.** The
+  Sahuarita origin has exactly one published event in range at 50 mi (the
+  `Sabino Canyon Night Hike` fixture, `OUTDOORS`), so the row never held more
+  than **two** pills and only ever one that came from the feed. Consequences,
+  each unverified rather than assumed:
+  - **Wrapping has never been seen.** `flex-wrap: wrap` is confirmed as a
+    computed style, but one pill cannot wrap. The whole reason for choosing wrap
+    over a horizontal scroller — how 13 pills behave in a 520pt column and how
+    many rows they cost the header — **is untested at every viewport.**
+  - **The two- and three-plus headline variants never rendered.** Only
+    `Nothing tagged Curbside right now` was produced. `Nothing tagged X or Y
+    right now` and `Nothing matches those filters right now` are unexercised.
+  - **OR across two topical categories was never exercised.** The OR path ran
+    with `[curbside, outdoors]` where only one side matched. Two categories that
+    each match different events — the case the semantics exist for — did not run.
+  - Closing these needs a second seeded event with a different category; see the
+    tracker item alongside the existing overflow fixture.
+- **Two known gaps this arc SHIPS WITH, by ruling, recorded in the tracker:**
+  an event with **zero categories** vanishes whenever any pill is active and can
+  never match one (categories are optional at publish — `create/event.tsx:1053`
+  requires only title and address; the fix is upstream in the wizard), and pill
+  **counts are omitted entirely** rather than labelled, which is why the
+  sum-exceeds-visible problem does not arise on this surface. Search keeps its
+  count sublines, where a count is the reason to tap a suggestion.
+- **No screenshots. Sixth arc running.** The Browser pane was not displayed, so
+  nothing composited. Visual feel of the wrapped row is on the human list.
+- **Nothing about native.** Expo web only. `aria-pressed` still has no native
+  mapping (Entry 6), so on iOS/Android a pill's selected state is carried by the
+  gradient and label alone.
+- **Nothing about light mode**, unreachable for the same structural reason as
+  Entries 1–6. `lightPalette.textMuted` `#7a849e` is a **3.43:1** token-level
+  failure Entry 2 already logged, and the pill label and filter status line both
+  inherit it. Computed, **never rendered**. Owner: the Appearance arc.
+- **The filtered-empty state was reached only via the zero-count Curbside pill**,
+  not via the ordinary path of a feed changing underneath an active filter.
+  Same state, same code, different route in.
+- **`Pill.tsx` CHANGED IN THIS ARC AND TWO OF ITS THREE HOSTS WERE NOT
+  RE-RENDERED.** The fill removal was measured on Explore only. Saved's All/Going
+  pair and the wizard's category grid are behind auth, so the effect there —
+  both the ratio and whether an unfilled pill still reads as a control in a
+  wrapped grid of twelve — is **unverified**. This is the same gap that let the
+  original regression through in Entry 6, and it is being recorded rather than
+  assumed away a second time. Reviewer pass owed, with the numbers to read.
+
+**Baseline:** checked against the running Expo web dev server at
+`localhost:8081` on 2026-08-25, against `main` @ `2fedf54` plus this arc's
+working tree (2 new files; `(tabs)/index.tsx`, `components/ExploreSearch.tsx`
+and `components/Pill.tsx` modified). Driven **signed out**, at the persisted
+Sahuarita origin. The radius
+was widened 25 → 50 to bring the single fixture event into range and **restored
+to 25 afterwards** — `sparked.origin.v1` reads `radius: 25`, verified after the
+fact, so the browser profile ends where it started. `npx tsc --noEmit` exits 0.
+`npx expo lint` reports **64 problems (59 errors, 5 warnings)**, the same total
+recorded in Entry 6, and **none of them are in `lib/eventFilters.ts`,
+`components/InterestPills.tsx`, `(tabs)/index.tsx` or
+`components/ExploreSearch.tsx`**. Console: **no errors and no rnw deprecation
+warnings**, the independent check that no `accessibility*` spelling was
+introduced. **No database row was read or written by this arc**, and no source
+file was edited to produce a measurement.

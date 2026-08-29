@@ -82,7 +82,14 @@ export default function Pill({ label, selected, onPress, style }: PillProps) {
           minWidth: TARGET,
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: selected ? undefined : theme.colors.iconChipBg,
+          // NO FILL WHEN UNSELECTED, AND THIS IS A BINDING CONSTRAINT — see
+          // docs/ACCESSIBILITY.md Entry 7. Painting `iconChipBg` here put the
+          // label on a composited #1D2A45 and measured 4.32:1, a live 1.4.3
+          // failure; on the bare page background the same token measures
+          // 4.55:1. THAT CLEARS THE FLOOR BY 0.05. Any fill behind this label,
+          // any darkening of the page beneath it, or any move of the label off
+          // `textMuted` re-breaks it, and the breakage is invisible to the
+          // typechecker and to a geometry probe.
           borderWidth: selected ? 0 : 1,
           borderColor: theme.colors.cardBorder,
         },
@@ -98,8 +105,10 @@ export default function Pill({ label, selected, onPress, style }: PillProps) {
           fontFamily: theme.fonts.bodySemiBold,
           fontWeight: '800',
           fontSize: theme.fontSizes.caption,
-          // navy on the gradient; textMuted (4.57:1 on the page background) on
-          // the unselected chip fill.
+          // Selected: navy on the spark gradient — 5.32:1 against its darkest
+          // stop, 10.47:1 against its lightest. Unselected: textMuted on the
+          // BARE page background at 4.55:1, which is the constraint recorded
+          // above and clears 4.5:1 by 0.05.
           color: selected ? brand.navy : theme.colors.textMuted,
         }}
       >

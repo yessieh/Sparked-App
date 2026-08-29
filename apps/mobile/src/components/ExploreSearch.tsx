@@ -82,6 +82,12 @@ import {
 } from 'react-native';
 
 import { useCategories } from '../lib/categories';
+import {
+  FREE_FILTER,
+  matchesFilter,
+  type FilterKind,
+  type SearchFilter,
+} from '../lib/eventFilters';
 import { hasEnded } from '../lib/eventTime';
 import type { Place } from '../lib/origin';
 import { highlightParts, matchLabels, overflowCap } from '../lib/searchMatch';
@@ -105,33 +111,16 @@ const OVERFLOW_THRESHOLD = 3;
 const LABEL_ID = 'sparked-explore-search-label';
 const PANEL_ID = 'sparked-explore-search';
 
-type FilterKind = 'category' | 'price';
-
-interface SearchFilter {
-  /** Category id (`pop-ups`) or the price pseudo-id (`free`). */
-  id: string;
-  /** What the user SEES and what the matcher matches against — the table's
-   *  `label`, not its id. "Pop-Ups", never "pop-ups". */
-  label: string;
-  kind: FilterKind;
-}
-
-/** The one non-category filter. Free is a price test, not a taxonomy row, so it
- *  is declared here rather than faked into the categories list. */
-const FREE_FILTER: SearchFilter = { id: 'free', label: 'Free', kind: 'price' };
-
+// `SearchFilter`, `FREE_FILTER` and `matchesFilter` MOVED to lib/eventFilters.ts
+// when the header pills landed. Both surfaces filter events, and two copies of
+// one predicate drift silently — both keep compiling and both keep returning
+// events. The panel is not the owner of that rule, so it imports it like
+// everyone else. KIND_LABEL stays here: it is this panel's presentation of a
+// filter, not part of what a filter means.
 const KIND_LABEL: Record<FilterKind, string> = {
   category: 'Category',
   price: 'Price',
 };
-
-/** The single definition of what each filter MEANS, so a filter's count and its
- *  results can never disagree — both call this. */
-function matchesFilter(filter: SearchFilter, event: FeedEvent): boolean {
-  return filter.kind === 'price'
-    ? event.entry_fee_cents === 0
-    : (event.categories ?? []).includes(filter.id);
-}
 
 const titleContains = (event: FeedEvent, q: string) =>
   event.title.toLowerCase().includes(q);
@@ -286,6 +275,17 @@ export interface ExploreSearchProps {
    *  ENDED-filtered by (tabs)/index.tsx. Read-only here: this component never
    *  writes it and never changes how the feed itself filters. */
   events: FeedEvent[];
+  /**
+   * Every filter's count over the UNFILTERED feed, built once by the feed and
+   * passed down (lib/eventFilters.ts `buildFilterCounts`).
+   *
+   * Passed rather than computed here so the header pill row and this panel read
+   * ONE pass. This used to be `events.filter(...).length` inline per row per
+   * render, and the pill row needed the same numbers — two surfaces each doing
+   * it their own way is ~26 array passes per render for a number that does not
+   * change until the feed does.
+   */
+  counts: Map<string, number>;
   radius: number;
   place: Place | null;
   onClose: () => void;
@@ -297,6 +297,7 @@ export interface ExploreSearchProps {
 
 export default function ExploreSearch({
   events,
+  counts,
   radius,
   place,
   onClose,
@@ -765,7 +766,7 @@ export default function ExploreSearch({
                         key={`${m.item.kind}-${m.item.id}`}
                         filter={m.item}
                         query={query}
-                        count={events.filter((e) => matchesFilter(m.item, e)).length}
+                        count={counts.get(m.item.id) ?? 0}
                         radius={radius}
                         onApply={() => apply(m.item)}
                       />

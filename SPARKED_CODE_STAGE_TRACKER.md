@@ -43,6 +43,46 @@ and verified in Cursor/Claude Code.
 
 ---
 
+## EXPLORE FILTERING — gaps shipped knowingly with the pill row (2b-ii, 2026-08-25)
+
+> Three items. The first two are RECORDED, NOT FIXED, by ruling — the arc ships
+> with them and says so. The third is a verification gap, not a product one.
+
+- [ ] **An event with ZERO categories disappears whenever any pill is active,
+      and can never match one.** Categories are optional at publish: the wizard's
+      `missing` list (`create/event.tsx:1053`) requires only a title and an
+      address, so such events are creatable today. Under OR-filtering an event
+      with no tags matches no pill by definition.
+      **THE FIX IS UPSTREAM — require at least one category at publish — and it
+      is a WIZARD arc, not a filtering one.** Deliberately NOT patched at the
+      filter: a fallback, a guess, or a "no category" pseudo-pill would insert
+      unmatched events into a filtered view, which contradicts what the filter
+      tells the user it is doing. A filter that quietly includes things it says
+      it excludes is worse than one that hides an untagged event.
+      Note the blast radius is small today and grows silently: every untagged
+      event already published stays invisible under any filter until someone
+      edits it.
+- [x] **Pill counts OMITTED rather than labelled — decided, not deferred.** An
+      event with three categories increments three counts, so pill counts sum to
+      more than the visible card count and read as a broken partition. Two ways
+      out; this is the one taken, for three reasons: the existence rule already
+      does the count's job (a pill only appears when it has at least one event,
+      so there is no "is this worth tapping?" left to answer), 13 pills carrying
+      numbers wrap to more header rows, and `Pill.tsx` has no count slot — adding
+      one changes the component Saved and the wizard also render.
+      **Search KEEPS its `N within X mi` sublines**, where the count is the whole
+      reason to tap a suggestion for a filter that may have zero.
+- [ ] **The pill row has never been seen with more than two pills.** The
+      Sahuarita origin has one published event in range (the `Sabino Canyon
+      Night Hike` overflow fixture, `OUTDOORS`), so wrapping behaviour, the
+      two-label and three-plus filtered-empty headlines, and OR across two
+      TOPICAL categories are all unexercised — see docs/ACCESSIBILITY.md Entry 7.
+      **Closing this needs a second seeded event with a different category**,
+      which is the same fixture work the overflow band's both-populated divider
+      case already wants. Do them together: one extra row inside the radius,
+      tagged something other than Outdoors, with a title sharing a substring
+      with the fixture, closes both at once.
+
 ## INTERESTS & BLOCKS
 
 - [ ] **Persist interests/blocks** to real storage (currently app-state only).
