@@ -72,16 +72,92 @@ and verified in Cursor/Claude Code.
       one changes the component Saved and the wizard also render.
       **Search KEEPS its `N within X mi` sublines**, where the count is the whole
       reason to tap a suggestion for a filter that may have zero.
-- [ ] **The pill row has never been seen with more than two pills.** The
-      Sahuarita origin has one published event in range (the `Sabino Canyon
-      Night Hike` overflow fixture, `OUTDOORS`), so wrapping behaviour, the
-      two-label and three-plus filtered-empty headlines, and OR across two
-      TOPICAL categories are all unexercised — see docs/ACCESSIBILITY.md Entry 7.
-      **Closing this needs a second seeded event with a different category**,
-      which is the same fixture work the overflow band's both-populated divider
-      case already wants. Do them together: one extra row inside the radius,
-      tagged something other than Outdoors, with a title sharing a substring
-      with the fixture, closes both at once.
+- [x] **The pill row with more than two pills — CLOSED by a reviewer device pass
+      after a reseed, 2026-08-25.** Wrapping renders correctly at two rows, and
+      OR across multiple topical categories works: Pop-Ups + Outdoors + Family
+      active, header `Showing 2 of 6`, both rendered cards carrying those tags.
+      Also closed in the same pass: `Pill.tsx`'s fill removal on Saved and the
+      Create wizard — unselected pills read as tappable, layout unchanged, the
+      4+ category warning still fires, selected pills still gradient.
+- [ ] **STILL OPEN after that pass, and each for its own reason** — full detail
+      in docs/ACCESSIBILITY.md Entry 7:
+      - **A populated Curbside pill, and auto-join landing on one.** The auto-join
+        MECHANISM is verified (it fired, Curbside rendered leftmost, the
+        `curbsideDecided` negative case held) — but only via the zero-count
+        exception, with no Curbside event in radius. `event 0003` is the only
+        Curbside row and was **excluded from the reseed statement because it
+        fires `app.consume_curbside_credit` and needs its own gated update**; it
+        has ended, so no Curbside pill can appear on its own merits. **The
+        reseed's shape, not a defect.**
+      - **The two- and three-plus filtered-empty headlines.** Needs a filtered
+        set that empties with two or more pills lit.
+      - **The wizard pill's measured contrast ratio** — promoted to its own task
+        immediately below, because it is two minutes of work and it is currently
+        the only thing standing between "we fixed 4.32:1" and "we fixed 4.32:1
+        on one of the two screens that had it."
+
+- [ ] **MEASURE THE WIZARD PILL'S CONTRAST — two minutes, next time that screen
+      is driven for ANY reason.** Not worth a trip on its own; worth doing the
+      moment someone is already there.
+      **WHY IT MATTERS.** Ruling A removed the pill's own `iconChipBg` fill,
+      which fixed the label from 4.32:1 to 4.55:1 **on Explore, where the pill
+      sits on the bare page background**. It fixed the surface the pill SUPPLIES.
+      It did nothing to the surface UNDERNEATH. If the wizard's category step
+      renders its content on a card (`cardBg`), the label there composites
+      against that card and `textMuted` is Entry 2's **4.32:1 all over again** —
+      the same failure, on a screen we believe is fixed. The device pass on
+      2026-08-25 confirmed the wizard pills LOOK right and behave right; nobody
+      read a number.
+      **EXACT METHOD.** Run the app (`npm run web --prefix apps/mobile`, or the
+      `sparked-web` launch config), sign in, go to **`/create` → paid tier →
+      the category step**. Open the browser devtools console on that page and
+      paste this — it composites to the first opaque ancestor, which is the only
+      way to get a true surface for a translucent token:
+
+      ```js
+      (() => {
+        const parse=(c)=>{const m=c.match(/[\d.]+/g).map(Number);return{r:m[0],g:m[1],b:m[2],a:m.length>3?m[3]:1};};
+        const over=(f,b)=>({r:f.r*f.a+b.r*(1-f.a),g:f.g*f.a+b.g*(1-f.a),b:f.b*f.a+b.b*(1-f.a),a:1});
+        const lum=(c)=>{const f=(v)=>{v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4);};return 0.2126*f(c.r)+0.7152*f(c.g)+0.0722*f(c.b);};
+        const ratio=(a,b)=>{const L1=lum(a),L2=lum(b);return Math.round(((Math.max(L1,L2)+0.05)/(Math.min(L1,L2)+0.05))*100)/100;};
+        const surfaceOf=(el)=>{let st=[],n=el;while(n&&n!==document.documentElement){const bg=parse(getComputedStyle(n).backgroundColor);if(bg.a>0)st.push(bg);if(bg.a===1)break;n=n.parentElement;}st.reverse();let acc=st.length?st[0]:{r:255,g:255,b:255,a:1};for(let i=1;i<st.length;i++)acc=over(st[i],acc);return acc;};
+        // An UNSELECTED pill — one whose aria-pressed is "false".
+        const pill=[...document.querySelectorAll('button[aria-pressed="false"]')].pop();
+        if(!pill) return 'no unselected pill on screen — deselect one first';
+        const leaf=[...pill.querySelectorAll('*')].find(n=>n.children.length===0&&n.textContent.trim());
+        const surf=surfaceOf(pill.parentElement);
+        return {
+          label: leaf.textContent,
+          surface: `rgb(${Math.round(surf.r)},${Math.round(surf.g)},${Math.round(surf.b)})`,
+          RATIO: ratio(over(parse(getComputedStyle(leaf).color), surf), surf),
+        };
+      })()
+      ```
+
+      **HOW TO READ IT.** `surface` `rgb(20,33,61)` = `#14213D`, the bare page →
+      expect **4.55:1**, matching Explore, and the wizard is genuinely fixed.
+      Any lighter surface (e.g. `rgb(29,42,69)` = `#1D2A45`) → expect **~4.32:1**
+      and the wizard still carries the failure; that is then a `Pill.tsx` or
+      wizard-surface ruling, with the same three-screen blast radius that made
+      ruling A a stop-and-ask. Record the number in docs/ACCESSIBILITY.md
+      Entry 7 either way — a pass is as worth recording as a fail, because the
+      open item is the ABSENCE of a number, not a suspected defect.
+
+- [ ] **POLISH, DEFERRED UNTIL AFTER ARC C — cap the pill row at two rows, then
+      scroll the block horizontally.** DECIDED 2026-08-25, deliberately not
+      built. Beyond two rows the block scrolls as a unit: pills flow
+      top-to-bottom then left-to-right, with a **clickable arrow affordance for
+      desktop**, where there is no drag gesture — the discoverability problem
+      that ruled out a plain hidden-scrollbar scroller in the first place.
+      **This is a DIFFERENT LAYOUT, not a modification of `flexWrap`**, which is
+      why it is a separate piece of work rather than a tweak: two-dimensional
+      column-major flow plus a scroll container plus an arrow control replaces
+      the wrap entirely.
+      **Sizing the problem honestly:** 13 categories is the ceiling, pills appear
+      only for categories that HAVE events, and the observed state today is two
+      rows. So the worst case is three rows and the current case is already at
+      the proposed cap — this buys headroom for a denser feed, not relief from a
+      present defect. That is exactly why it sits behind Arc C.
 
 ## INTERESTS & BLOCKS
 

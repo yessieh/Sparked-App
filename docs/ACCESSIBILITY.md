@@ -1807,23 +1807,40 @@ gradient control in this app hits the same artifact.**
 
 ## What this entry does NOT establish
 
-- **ONE EVENT, ONE CATEGORY. That is the ceiling on everything above.** The
-  Sahuarita origin has exactly one published event in range at 50 mi (the
-  `Sabino Canyon Night Hike` fixture, `OUTDOORS`), so the row never held more
-  than **two** pills and only ever one that came from the feed. Consequences,
-  each unverified rather than assumed:
-  - **Wrapping has never been seen.** `flex-wrap: wrap` is confirmed as a
-    computed style, but one pill cannot wrap. The whole reason for choosing wrap
-    over a horizontal scroller — how 13 pills behave in a 520pt column and how
-    many rows they cost the header — **is untested at every viewport.**
-  - **The two- and three-plus headline variants never rendered.** Only
-    `Nothing tagged Curbside right now` was produced. `Nothing tagged X or Y
-    right now` and `Nothing matches those filters right now` are unexercised.
-  - **OR across two topical categories was never exercised.** The OR path ran
-    with `[curbside, outdoors]` where only one side matched. Two categories that
-    each match different events — the case the semantics exist for — did not run.
-  - Closing these needs a second seeded event with a different category; see the
-    tracker item alongside the existing overflow fixture.
+- **ONE EVENT, ONE CATEGORY was the build session's ceiling** — the Sahuarita
+  origin had exactly one published event in range at 50 mi (the `Sabino Canyon
+  Night Hike` fixture, `OUTDOORS`), so the row never held more than **two** pills
+  and only ever one that came from the feed. **A REVIEWER DEVICE PASS AFTER A
+  RESEED CLOSED TWO OF THE THREE CONSEQUENCES:**
+  - **WRAPPING: CLOSED.** Observed rendering correctly at **two rows**. The whole
+    reason wrap was chosen over a horizontal scroller has now been *seen* rather
+    than argued from `flex-wrap: wrap` being a computed style.
+  - **OR ACROSS MULTIPLE TOPICAL CATEGORIES: CLOSED.** Pop-Ups + Outdoors +
+    Family active, header reading `Showing 2 of 6`, and the two rendered cards
+    carrying those tags. The OR path has now run with more than one matching
+    side — previously it had only run as `[curbside, outdoors]` with one side
+    matching, which does not exercise the semantics the operator exists for.
+  - **The two- and three-plus filtered-empty headlines: STILL UNRENDERED.** Only
+    `Nothing tagged Curbside right now` has ever been produced. `Nothing tagged X
+    or Y right now` and `Nothing matches those filters right now` need a filtered
+    set that empties with two or more pills lit, which the reseed does not
+    produce.
+- **THE CURBSIDE PILL AND ITS AUTO-JOIN — READ THE DISTINCTION, IT IS NOT ONE
+  CLAIM BUT TWO.**
+  - **The auto-join MECHANISM is verified**, end to end, in the table above:
+    tapping Outdoors added Curbside, it rendered leftmost, `aria-pressed` went
+    `true`, and `curbsideDecided` held on the negative case. That happened via
+    the **zero-count exception** — Curbside had no events in radius, so the pill
+    existed *only* because auto-join had selected it. That is the mechanism
+    working, and it is also the exception working.
+  - **Auto-join with a POPULATED Curbside pill is NOT verified**, and cannot be
+    at present. `event 0003` is the only Curbside row and it was **excluded from
+    the reseed statement** because it fires `app.consume_curbside_credit` and
+    needs its own gated update; it has since ended, so no Curbside pill can
+    appear on its own merits. **This is the reseed's shape, not a defect** — and
+    not a gap in the feature. What remains unseen is the ordinary case where a
+    user sees a Curbside pill *before* touching anything and the auto-join lands
+    on a pill that was already there.
 - **Two known gaps this arc SHIPS WITH, by ruling, recorded in the tracker:**
   an event with **zero categories** vanishes whenever any pill is active and can
   never match one (categories are optional at publish — `create/event.tsx:1053`
@@ -1832,7 +1849,9 @@ gradient control in this app hits the same artifact.**
   sum-exceeds-visible problem does not arise on this surface. Search keeps its
   count sublines, where a count is the reason to tap a suggestion.
 - **No screenshots. Sixth arc running.** The Browser pane was not displayed, so
-  nothing composited. Visual feel of the wrapped row is on the human list.
+  nothing composited. Visual feel of the wrapped row went to the human list and
+  **came back passing** — see the device pass above; it is the reason wrapping
+  is no longer in the unverified column.
 - **Nothing about native.** Expo web only. `aria-pressed` still has no native
   mapping (Entry 6), so on iOS/Android a pill's selected state is carried by the
   gradient and label alone.
@@ -1843,13 +1862,23 @@ gradient control in this app hits the same artifact.**
 - **The filtered-empty state was reached only via the zero-count Curbside pill**,
   not via the ordinary path of a feed changing underneath an active filter.
   Same state, same code, different route in.
-- **`Pill.tsx` CHANGED IN THIS ARC AND TWO OF ITS THREE HOSTS WERE NOT
-  RE-RENDERED.** The fill removal was measured on Explore only. Saved's All/Going
-  pair and the wizard's category grid are behind auth, so the effect there —
-  both the ratio and whether an unfilled pill still reads as a control in a
-  wrapped grid of twelve — is **unverified**. This is the same gap that let the
-  original regression through in Entry 6, and it is being recorded rather than
-  assumed away a second time. Reviewer pass owed, with the numbers to read.
+- **`Pill.tsx`'s OTHER TWO HOSTS: CLOSED by the reviewer device pass.** The fill
+  removal was measured on Explore only during the build, because Saved and the
+  wizard are behind auth — the same gap that let the original regression through
+  in Entry 6. Both have now been checked under a signed-in session and **verified
+  correct after ruling A**: unselected pills read as tappable, layout unchanged
+  at the 44 target, the wizard's 4+ category warning still fires, and selected
+  pills still carry the gradient.
+  **What that pass does NOT settle is the wizard's measured RATIO.** It was a
+  visual and behavioural check; nobody read `getComputedStyle` off a wizard pill.
+  If that screen's step content sits on a card rather than the bare page,
+  `textMuted` there is Entry 2's **4.32:1** again — fill or no fill — because
+  removing the fill fixed the surface the pill SUPPLIES, not the surface
+  underneath it. **Carried into Arc C as a two-minute task with the exact
+  console snippet and how to read its output** (SPARKED_CODE_STAGE_TRACKER.md,
+  "MEASURE THE WIZARD PILL'S CONTRAST"), rather than left here as a note —
+  the open item is the ABSENCE of a number, so a pass is as worth recording as
+  a fail.
 
 **Baseline:** checked against the running Expo web dev server at
 `localhost:8081` on 2026-08-25, against `main` @ `2fedf54` plus this arc's
