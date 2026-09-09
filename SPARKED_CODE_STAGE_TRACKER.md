@@ -1463,6 +1463,33 @@ migration lands between, the NAME is the anchor, not the number.
 
 ## STANDING PROCEDURES (not TODOs — how this project operates)
 
+- [ ] **THE 2026-09-02 PRE-ARC BASELINE HAS TWO EXPORT DEFECTS. Left as-is by
+      ruling; recorded here instead.** `fd7be58` committed
+      `supabase/audits/baselines/2026-09-02-pre-curbside-history.md`, and the
+      0030 post-arc diff surfaced two flaws in it. **Neither is a privilege
+      change**, and both were mistaken for one until traced:
+      1. **A truncated row.** Line 104,
+         `| public | workspaces | column | id | authenticated |` — the line ends
+         there, with no `privilege_type`. It is the ONLY incomplete row in that
+         file's section 1 (the post-arc file has none), so it reads in a diff as
+         `authenticated` losing SELECT on `workspaces.id`. It did not.
+      2. **Section 7 appears TWICE.** Once at line 464 prefixed with a TAB
+         (`\t## Section 7 — Schema`, so it does not register as a heading) and
+         again cleanly at 487. A section-aware diff attributes the tab-prefixed
+         copy's 20 rows to section 6, which then reads as 20 role-inheritance
+         rows vanishing.
+      **CAUSE: the two-pass assembly recorded in `fd7be58`'s own commit
+      message.** Section 7 was missing from the first capture, was re-run
+      separately, and was pasted in twice — once in the wrong place.
+      **NOT AMENDED, DELIBERATELY.** A baseline is a record of what the database
+      said at a moment. Silently rewriting one is the same class of mistake as
+      editing an applied migration: the file would then describe a capture that
+      never happened. The remedy if it ever matters is a NEW dated export that
+      supersedes it, never an edit in place.
+      **What this costs:** that file is usable as a diff reference for sections
+      1-5 and 8, and is unreliable for sections 6 and 7 and for the one
+      `workspaces.id` row. Any future diff against it must know that.
+
 - [x] **Migrations apply FROM FILES via the CLI — never pasted.** The repo's
       `supabase/migrations/` is the source of truth; the remote's
       `schema_migrations` history must always match it.

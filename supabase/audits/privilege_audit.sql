@@ -23,7 +23,7 @@
 -- -----------------------------------------------------------------------------
 -- THIS FILE'S OWN DEFECT HISTORY — READ BEFORE SIMPLIFYING ANY QUERY BELOW
 -- -----------------------------------------------------------------------------
--- Three defects in this audit have been caught by RUNNING it, never by reading
+-- Four defects in this audit have been caught by RUNNING it, never by reading
 -- it. Every one of them produced a result that looked clean and complete:
 --
 --   1. SCOPING (2026-08-05, first run). The function query was scoped to
@@ -46,14 +46,58 @@
 --      first paged re-export of section 1 returned 200 rows containing two
 --      duplicates, against a true 215.
 --
--- WHAT THIS HISTORY IS FOR. Each defect made the audit report LESS than the
--- truth while looking like a complete, passing run — the exact failure mode
--- this audit exists to catch elsewhere. The verbosity below IS the fix. A
--- future reader who finds these queries over-specified — the long exclusion
--- lists, the ORDER BY that names every selected column, the paging
--- instructions, the count(*) companions — is looking at three recorded
--- incidents, not at ceremony. Simplify none of them without first reproducing
--- the run that proves the simpler form returns the same rows.
+--   4. MULTI-LINE POLICY EXPRESSIONS EXPORTED AS THEIR FIRST LINE ONLY
+--      (2026-09-02, migration 0030). **THE FIRST DEFECT HERE THAT MADE THE GATE
+--      REPORT A FALSE NEGATIVE RATHER THAN AN INCOMPLETE RESULT**, and the
+--      reason it outranks the arc that found it.
+--
+--      Section 8 rendered `using_expr` raw. `pg_get_expr` PRETTY-PRINTS: a
+--      policy whose expression contains a subquery comes back across several
+--      lines, and a markdown export captures the first line only. 0030 added a
+--      guard to both branches 2 and 3 of `event_categories_select_public`; that
+--      policy's row measured **114 characters in the pre-arc AND post-arc
+--      baselines alike**, both cut at `(EXISTS ( SELECT 1`, so the diff
+--      reported it UNCHANGED THROUGH A CHANGE THAT HAD DEMONSTRABLY LANDED.
+--      `events_select_public` was visible in the same diff only because its
+--      expression happens to be single-line (748 -> 880 chars).
+--
+--      The change was real and was proven by other means — a live
+--      `pg_get_expr` read in the arc's QA suite, plus two behavioural
+--      assertions that can only pass if the guard is present in branches 2 and
+--      3. **None of that proof came from this file.**
+--
+--      SCOPE OF THE DAMAGE, STATED PLAINLY: every baseline in
+--      supabase/audits/baselines/ taken before 2026-09-02 carries this hole,
+--      so the 0022 and 0029 policy work was diffed by an audit that could not
+--      see a multi-line policy change either. Those baselines are records and
+--      are left as they are; they simply do not establish what a reader would
+--      assume they establish about section 8.
+--
+--      THE FIX, below in section 8: collapse every run of whitespace in
+--      `using_expr` and `with_check_expr` to a single space so the whole
+--      expression lands on one row, AND emit an md5 of each collapsed
+--      expression as its own column. The collapsed text is what a human reads;
+--      **the hash is what a diff cannot miss**, and unlike the text it survives
+--      a column-width truncation, which is the one export failure the collapse
+--      alone does not close.
+--
+--      CONSEQUENCE FOR DIFFS ACROSS THE CHANGE: section 8's shape is different
+--      from 2026-09-02 onward, so a post-arc export in the new format cannot be
+--      diffed against a pre-2026-09-02 baseline for that section. Both ends of
+--      a diff must be taken with the same version of this file.
+--
+-- WHAT THIS HISTORY IS FOR. Defects 1-3 each made the audit report LESS than
+-- the truth while looking like a complete, passing run. Defect 4 is worse in
+-- kind: it made the audit report something FALSE — an unchanged policy that had
+-- changed — which no amount of care in reading the output could have caught,
+-- because the output was internally consistent and identical at both ends. All
+-- four are the exact failure mode this audit exists to catch elsewhere. The
+-- verbosity below IS the fix. A future reader who finds these queries
+-- over-specified — the long exclusion lists, the ORDER BY that names every
+-- selected column, the paging instructions, the count(*) companions, the
+-- normalise-and-hash in section 8 — is looking at four recorded incidents, not
+-- at ceremony. Simplify none of them without first reproducing the run that
+-- proves the simpler form returns the same rows.
 -- -----------------------------------------------------------------------------
 --
 -- -----------------------------------------------------------------------------
@@ -331,6 +375,23 @@ order by 1, 2;
 --     the SAME THING for PUBLIC: Postgres grants EXECUTE to PUBLIC by default,
 --     and granting to a named role materialises the ACL without removing it.
 --     Explicit grants do NOT imply the default was revoked.
+--
+-- CHECKED 2026-09-02 AGAINST DEFECT 4 — THIS SECTION DOES NOT SHARE IT, AND THE
+-- ASYMMETRY WITH SECTION 8 IS DELIBERATE RATHER THAN AN OVERSIGHT.
+-- Defect 4 is specific to `pg_get_expr`, which PRETTY-PRINTS reconstructed SQL
+-- across lines. Nothing in this section reconstructs SQL:
+--   * `config` is `array_to_string(p.proconfig, ', ')` — proconfig holds GUC
+--     settings (`search_path=public, app`), single-line by construction; a
+--     newline in one is not producible through DDL this project issues.
+--   * `execute_grants` is a string_agg of role names and privilege types.
+--   * `args` is `pg_get_function_identity_arguments`, comma-separated on one
+--     line even for long signatures — verified against
+--     `app.curbside_expired(p_tier_id text, p_starts_at timestamp with time
+--     zone, p_ends_at timestamp with time zone)`, which exported whole.
+-- Normalising them anyway was considered and REJECTED: it would change this
+-- section's output format for no demonstrated defect, and every such change
+-- costs a diff generation — a post-arc export in a new format cannot be
+-- compared to a baseline taken in the old one. Do not add it speculatively.
 -- =============================================================================
 select
   n.nspname as schema,
@@ -485,6 +546,30 @@ order by 1, 2, 3;
 -- Read the full USING expression, not the grid's truncated preview — click the
 -- cell to expand. The 2026-08-05 run nearly misread events_select_public
 -- because the OR branches were cut off mid-expression.
+--
+-- -----------------------------------------------------------------------------
+-- NORMALISED AND HASHED SINCE 2026-09-02 — DEFECT 4 IN THE HEADER. DO NOT
+-- "SIMPLIFY" THIS BACK TO A BARE pg_get_expr.
+--
+-- `pg_get_expr` pretty-prints, so any policy holding a subquery comes back
+-- multi-line and a markdown export keeps only its FIRST LINE. That is not a
+-- cosmetic loss: `event_categories_select_public` exported as 114 identical
+-- characters on both sides of the 0030 diff — `(EXISTS ( SELECT 1` — and the
+-- gate reported an unchanged policy through a change that had landed.
+--
+-- TWO COLUMNS PER EXPRESSION, AND THEY DO DIFFERENT JOBS:
+--   * the collapsed TEXT is what a human reads and what makes a delta legible;
+--   * the MD5 is what a diff cannot miss. It is one fixed-width token, so it
+--     survives the column-width truncation that would still eat a long
+--     collapsed expression — which is the failure the collapse alone does not
+--     close. If two baselines disagree on nothing but a hash, the expression
+--     changed and the text column is lying to you.
+--
+-- `[[:space:]]+` rather than `\s+`: POSIX class, no dependence on
+-- standard_conforming_strings. NULL is deliberately NOT coalesced — a policy
+-- with no WITH CHECK must keep reading as `null` in both its columns rather
+-- than as the md5 of an empty string, which would look like a real value.
+-- -----------------------------------------------------------------------------
 -- =============================================================================
 select
   n.nspname as schema,
@@ -494,8 +579,14 @@ select
     when 'w' then 'UPDATE' when 'd' then 'DELETE' when '*' then 'ALL' end as command,
   coalesce((select string_agg(case when r = 0 then 'PUBLIC' else pg_get_userbyid(r) end, ', ')
             from unnest(p.polroles) as r), 'PUBLIC') as roles,
-  pg_get_expr(p.polqual, p.polrelid) as using_expr,
-  pg_get_expr(p.polwithcheck, p.polrelid) as with_check_expr
+  btrim(regexp_replace(pg_get_expr(p.polqual, p.polrelid),
+                       '[[:space:]]+', ' ', 'g')) as using_expr,
+  md5(btrim(regexp_replace(pg_get_expr(p.polqual, p.polrelid),
+                           '[[:space:]]+', ' ', 'g'))) as using_md5,
+  btrim(regexp_replace(pg_get_expr(p.polwithcheck, p.polrelid),
+                       '[[:space:]]+', ' ', 'g')) as with_check_expr,
+  md5(btrim(regexp_replace(pg_get_expr(p.polwithcheck, p.polrelid),
+                           '[[:space:]]+', ' ', 'g'))) as with_check_md5
 from pg_policy p
 join pg_class c on c.oid = p.polrelid
 join pg_namespace n on n.oid = c.relnamespace
