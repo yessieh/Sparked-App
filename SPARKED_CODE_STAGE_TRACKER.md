@@ -497,6 +497,67 @@ migration lands between, the NAME is the anchor, not the number.
 > The intent above is met **against the anon key**. It is NOT met against a
 > signed-in caller — see the deferred item at the bottom of this section, which is
 > the honest remainder and is tracked rather than closed.
+>
+> **AMENDED 2026-09-02 — 0029 HAD A SIDE EFFECT NOBODY TESTED. Anon can no
+> longer read `public.event_categories` AT ALL.** Found by the 0030 suite, which
+> is the first thing ever to read that table as anon. Details in the item
+> immediately below; it is a 0029 defect, not a 0030 one, and it does not
+> qualify the anonymity claim above — it is collateral, in the opposite
+> direction from a leak.
+
+- [ ] **ANON CANNOT READ `public.event_categories` — 42501, pre-existing since
+      0029, UNFIXED.** Its own arc; do not fold it into anything.
+
+      **The mechanism.** `event_categories_select_public` is a policy on
+      `event_categories` whose body is
+      `exists (select 1 from public.events e where …)`. 0021's exemption —
+      "an RLS policy expression is evaluated internally and can reference any
+      column regardless of what the caller may read" — covers a policy
+      referencing columns of **the table the policy is on**. This one reads a
+      **different table**, and a cross-table subquery inside a policy is an
+      ordinary read, privilege-checked against the caller. Branch 1 passes
+      `e.workspace_id` to `app.is_member`, and 0029 revoked exactly that column
+      from anon. Every anon read of the table therefore raises
+      `42501 permission denied for table events`.
+
+      **Confirmed by discriminating query, not inferred.** As `anon`:
+      `select 1 from public.events e where app.is_member(e.workspace_id, array['owner'])`
+      → **42501**. The control,
+      `select 1 from public.events e where app.curbside_expired(e.tier_id, e.starts_at, e.ends_at)`
+      → **success**. So it is `workspace_id`, and 0030's guard is clean —
+      `tier_id`, `starts_at` and `ends_at` are all in anon's 0011 grant list.
+      A third piece of evidence points the same way: assertion 1a of the 0030
+      suite reads `public.events` as anon **through the new guard** and passes,
+      which is why "function arguments are privilege-checked differently" is
+      ruled out rather than merely doubted.
+
+      **Why it was never caught.** `qa-0028-0029` never touches
+      `event_categories` (zero hits), and no app path reads it as anon:
+      `saved.tsx` returns early on `if (!userId)`, `workspace.tsx` resolves its
+      workspace through `memberships` under `using (user_id = auth.uid())` so
+      anon gets none and the read never fires, and the organizer profile goes
+      through a `SECURITY DEFINER` RPC that builds its categories internally.
+
+      **NO APP PATH IS NOT UNREACHABLE.** The table is exposed through
+      PostgREST, so an anon request to it fails today, and it breaks the moment
+      any signed-out surface wants category chips — which the Explore feed's
+      cards already show, sourced from the RPC rather than the table only by
+      accident of how that read was written.
+
+      **THE FIX SHAPE — and the wrong fix, named so it is not proposed again.**
+      **Re-granting `workspace_id` to anon is explicitly wrong: it undoes the
+      entire arc above.** The right shape follows `app.has_attendance`: a
+      `SECURITY DEFINER` helper taking the **event id** and performing the
+      cross-table visibility check as owner, so the caller never reads an
+      ungranted column. Note `app.is_member` is *already* definer — the leak is
+      that its ARGUMENT is evaluated by the caller, which is the same
+      "definer body, invoker argument" seam this arc should now expect to find
+      elsewhere.
+
+      **Needs its own pre/post privilege audit and its own suite**, per the
+      0020→0021 lesson quoted at the bottom of this section: several read paths
+      changed at once, one checked nothing, and the storefront went down for
+      anon.
 
 - [x] **The gap.** `events.workspace_id` carried an anon SELECT grant, so
       `/rest/v1/events?select=workspace_id,curbside_anonymous` resolved an anonymous
