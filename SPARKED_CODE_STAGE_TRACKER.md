@@ -1385,6 +1385,33 @@ migration lands between, the NAME is the anchor, not the number.
 > down with line numbers rather than rediscovered. **Line numbers are as of
 > 2026-08-19 and will drift — the quoted text is the anchor.**
 
+- [ ] **ADD A "CORRECTIONS TO APPLIED MIGRATIONS" SECTION TO SPARKED_STATE.**
+      Proposed 2026-09-02, **scheduled after Arc C** — recorded now, not built.
+      **THE PROBLEM.** Applied migrations are immutable, comments included
+      (CLAUDE.md). So when a comment in one turns out to be wrong, the correction
+      has to live somewhere else — and it has landed somewhere different each
+      time. **Three instances already, and the third is what turned this from an
+      annoyance into a pattern:**
+      | file | line | says | true |
+      | --- | --- | --- | --- |
+      | `20260815000028_read_paths_to_definer.sql` | ~216 | the ENDED expression lives in FOUR places | **FIVE** — `me.tsx:576`'s client-built `graceISO` is the fifth |
+      | `20260902000030_curbside_history_does_not_survive.sql` | 87 | "Arc C Part 2 — the date bounds" | date bounds are **PART 1** |
+      | `20260902000030_curbside_history_does_not_survive.sql` | 233 | "changes in Arc C Part 2" | changes in **PART 1** |
+      0028's correction went into 0030's header; 0030's went into SPARKED_STATE
+      and this tracker. **One place to check beats hoping the correction sits in
+      whichever doc you happened to open** — and a reader of an applied migration
+      currently has no way to know a correction exists at all.
+      **THE SHAPE:** one section in SPARKED_STATE, one line per instance, four
+      columns — file, line, what it says, what is true. Nothing more; it is an
+      index, not an explanation. The explanation stays where it already is.
+      **NOT a licence to edit migrations**, and the section should say so in its
+      own header: it exists precisely because they cannot be edited.
+      **Watch for:** line numbers drift if a migration is ever reformatted — it
+      cannot be, so they are stable here, which is the one place in these docs
+      where a line number is a safe anchor. Note `0030` line 2, "Migration 1 of 2
+      in Arc C", is CORRECT (landing order, not part number) and must not be
+      listed, or the section starts teaching that the whole header is suspect.
+
 - [ ] **`SPARKED_STATE.md:867` — "PROVEN SCREENS (Design-verified, ready for
       Claude Code handoff)".** The handoff completed 29 migrations ago. The table
       is still useful as a record of what was visually proven; the heading is
