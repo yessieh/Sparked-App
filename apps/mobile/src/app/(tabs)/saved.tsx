@@ -154,14 +154,22 @@ export default function Saved() {
     // it has ENDED and this user has a save or RSVP on it. Filtering here would
     // simply re-close the exception the policy exists to open.
     //
-    // AMENDED 2026-08-25, NOT YET BUILT — Arc C. That rule is now PAID TIERS
-    // ONLY. An ended CURBSIDE post must leave every surface including this
-    // one's Past section: a yard sale posted from a home address, under the
-    // "Local host" mask 0028/0029 closed at the API layer, leaves a persistent
-    // trace of that neighbour's activity if it sits in a stranger's Saved
-    // forever. Same leak, displaced in time rather than surface.
+    // AMENDED 2026-08-25, BUILT 2026-09-02 in migration 0030. That rule is now
+    // PAID TIERS ONLY. An ended CURBSIDE post leaves every surface including
+    // this one's Past section: a yard sale posted from a home address, under
+    // the "Local host" mask 0028/0029 closed at the API layer, leaves a
+    // persistent trace of that neighbour's activity if it sits in a stranger's
+    // Saved forever. Same leak, displaced in time rather than surface.
     //
-    // WHEN IT LANDS IT LANDS IN THE POLICY, NOT HERE. The comment above is
+    // NOTHING IN THIS FILE CHANGED TO ACHIEVE THAT, WHICH IS THE POINT. 0030
+    // added the guard to branches 2 and 3 of `events_select_public`, so the
+    // policy now refuses the row before this query ever sees it. Verified at
+    // the surface on 2026-09-02, signed in: an ended Curbside event with a live
+    // `rsvps` row belonging to the caller is gone from Past here, gone from the
+    // Explore feed, and its direct link does not render — while the rsvps row
+    // itself still exists. Only visibility changed.
+    //
+    // IT LANDED IN THE POLICY, NOT HERE. The comment above is
     // still the operative instruction for this file: RLS decides admission and
     // a client filter cannot narrow a policy that already handed the row over.
     // Adding a `tier_id !== 'curbside'` guard at this call site would hide the

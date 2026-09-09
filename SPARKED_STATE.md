@@ -914,7 +914,7 @@ ledger — and the FK's `on delete set null` is exactly what preserves it when t
 event rows vanish. Consequence accepted and stated: this is the one path where
 an attendee's history row does disappear, because the event row itself is gone.
 
-#### Curbside history does not survive — full anonymity through time (LOCKED 2026-08-25, AMENDS the attendee-history rule above; **UNBUILT — Arc C**)
+#### Curbside history does not survive — full anonymity through time (LOCKED 2026-08-25, AMENDS the attendee-history rule above; **BUILT 2026-09-02, migration 0030 — verified in the database AND at the surface**)
 
 **An ended Curbside event is removed from public reach ENTIRELY at end: the feed,
 search, the detail page BY DIRECT LINK, and the attendee's Saved → Past. The host
@@ -955,21 +955,47 @@ while leaving it open in a saved row is closing one door in a two-door room.
   through a definer — so the host side is a retention requirement, not a
   permission change.
 
-**NOT IMPLEMENTED. This is Arc C's**, alongside the date bounds. Both are
-server-side visibility changes and **both go through the same privilege gate**:
-pre-arc `supabase/audits/privilege_audit.sql` baseline → build → `qa-NNNN`
-behavioural suite → post-arc audit → diff → commit. Touching
-`events_select_public` and `event_detail` means a migration file is written, so
-the gate applies **in full** — the SQL-free N/A carve-out does not reach this.
+**BUILT 2026-09-02 — migration 0030**
+(`20260902000030_curbside_history_does_not_survive.sql`), applied to dev,
+QA suite 45/45, post-arc audit diffed against the pre-arc baseline with every
+delta explained. The full privilege gate ran, as required: a migration file was
+written, so the SQL-free N/A carve-out did not reach this.
 
-Client surfaces that will need to follow the server, listed so none is missed
-when the arc runs: `(tabs)/saved.tsx` (the Past section and its clock-skew
-forcing), `(tabs)/index.tsx` (feed), `components/ExploreSearch.tsx` (both tiers
-AND the widened overflow read, which is a second call at a wider radius and will
-otherwise re-admit exactly what the feed excluded), and `(tabs)/event/[id].tsx`
-(the direct-link path). **The server is the enforcement layer in every case** —
-no client filter can narrow a policy that already handed the row over, and the
-Saved screen's own comment at `saved.tsx:152` says so.
+**Five objects, eight call sites, one definition.** `app.curbside_expired`
+carries the rule and is called from branches 2 and 3 of both
+`events_select_public` and `event_categories_select_public`, and from the three
+definer read paths (`app.events_within_radius`, `app.event_detail`,
+`app.organizer_profile`). **Branch 1 of both policies is untouched** — it is the
+member branch and the only thing preserving the host's Workspace retention.
+
+**No client file changed.** The list below was written as "surfaces that will
+need to follow the server" and the answer turned out to be none of them: the
+policy refuses the row before any client query sees it, and the three definers
+carry the same guard. That is the enforcement rule holding, not an oversight.
+`(tabs)/saved.tsx` (Past section), `(tabs)/index.tsx` (feed),
+`components/ExploreSearch.tsx` (both tiers AND the widened overflow read, which
+is a second call at a wider radius and would otherwise re-admit exactly what the
+feed excluded), `(tabs)/event/[id].tsx` (direct link) — all correct as written.
+
+**VERIFIED AT THE SURFACE, NOT ONLY IN THE DATABASE (2026-09-02, signed in).**
+The database checks prove the policy refuses the row; they cannot prove the app
+behaves. Driven end to end on `event 0003`:
+
+- its `curbside_quota_ledger` row was present before the update, so
+  `consume_curbside_credit`'s idempotency guard short-circuited both UPDATEs and
+  **no quota was consumed** — the production-safety property the 0030 QA suite's
+  header documents, confirmed by driving it rather than by reading the function;
+- made live → **found in the Explore feed** at Sahuarita → marked **Going** →
+  **confirmed present in Saved**;
+- shifted to ended → **gone from Saved → Past, gone from the Explore feed, and
+  the direct link does not render.**
+
+**The `rsvps` row still exists.** Only visibility changed, which is exactly the
+design: the attendee's record of having gone is not deleted, it is no longer
+readable — and `app.has_attendance` still returns true for that caller while
+branches 2 and 3 refuse the row anyway.
+
+`event 0003` is **left in the ended state**, which is where it started.
 
 ### 9. Reputation and history — if it is ever built (ROADMAP, not MVP)
 

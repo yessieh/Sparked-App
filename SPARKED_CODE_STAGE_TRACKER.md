@@ -997,23 +997,42 @@ migration lands between, the NAME is the anchor, not the number.
       regardless of countdown math (server decides admission, client decides
       section, and the two clocks can disagree). Deleted-ended rows render inert;
       archived rows keep their tap. Full table in AD 8.
-      **AMENDED 2026-08-25 — PAID TIERS ONLY. Curbside is carved out and the
-      carve-out is UNBUILT (Arc C):** an ended Curbside post leaves the feed,
-      search, the detail page by direct link AND the attendee's Saved → Past,
-      with the host retaining it in Workspace. What ships above still describes
-      what 0022 APPLIED and is accurate as history — but for `curbside` rows the
-      third branch must come to REFUSE what it was built to admit. Reasoning and
-      the client surfaces that follow the server are in AD 8, "Curbside history
-      does not survive."
-- [ ] **Curbside history does not survive — UNBUILT (Arc C).** Ships with the
-      date bounds; both are server-side visibility changes over
-      `events_select_public` / `event_detail` and **share one privilege gate**.
-      A migration file is written, so the per-arc audit applies IN FULL — the
-      SQL-free N/A carve-out does not reach it. Note the trigger is TIME (the
-      event ending), not a host action, which is a new class of visibility
-      change here. Watch `ExploreSearch.tsx`'s widened overflow read: it is a
-      second RPC call at a larger radius and will re-admit anything the feed
-      excludes unless the server refuses it there too.
+      **AMENDED 2026-08-25 — PAID TIERS ONLY. Curbside is carved out, and the
+      carve-out is BUILT (migration 0030, 2026-09-02):** an ended Curbside post
+      leaves the feed, search, the detail page by direct link AND the attendee's
+      Saved → Past, with the host retaining it in Workspace. What ships above
+      still describes what 0022 APPLIED and is accurate as history — but for
+      `curbside` rows the third branch now REFUSES what it was built to admit.
+      Reasoning in AD 8, "Curbside history does not survive."
+- [x] **Curbside history does not survive — DONE (migration 0030, 2026-09-02).**
+      Five objects, eight call sites, one definition (`app.curbside_expired`);
+      branch 1 of both policies untouched, which is what preserves the host's
+      Workspace retention. The full privilege gate ran — pre-arc baseline
+      (`fd7be58`) → build → suite → post-arc → diff, every delta explained.
+      **QA suite 45/45** (`scripts/qa-0030-curbside-history.sql`), built on
+      qa-0028-0029's equivalence harness; half of it is negative controls,
+      because "hide ended Curbside" is trivially satisfied by hiding everything.
+      **Grant delta: one new function and its two grants.** No `public.*` wrapper
+      touched, no signature changed, therefore no `notify pgrst`.
+      **NO CLIENT FILE CHANGED**, and that is the enforcement rule holding: the
+      policy refuses the row before any client query sees it, and the three
+      definers carry the same guard — including `ExploreSearch.tsx`'s widened
+      overflow read, the second RPC call at a larger radius that would otherwise
+      have re-admitted exactly what the feed excluded.
+      **VERIFIED AT THE SURFACE 2026-09-02, signed in, not only in the
+      database:** `event 0003`'s ledger row was present before the update so
+      `consume_curbside_credit`'s idempotency guard short-circuited both UPDATEs
+      and no quota was consumed; made live → found in Explore → marked Going →
+      confirmed in Saved; shifted to ended → gone from Saved → Past, gone from
+      the feed, direct link does not render. **The `rsvps` row still exists** —
+      only visibility changed, as designed. `event 0003` is left ENDED, where it
+      started.
+      Note the trigger is TIME (the event ending), not a host action — a new
+      class of visibility change in this schema, and the reason the surface pass
+      above mattered more than usual.
+      **Arc C Part 2 (date bounds) is still open** and no longer shares a
+      migration with this: it drops and recreates a function, so its ACL
+      question is live rather than theoretical.
 - [x] **Behavioral suite — DONE, 27 assertions** (`scripts/qa-0019-delete-archive.sql`).
       Covers delete/archive/un-archive across every read path, ledger immunity to
       both host verbs AND to a hard delete, non-member authorization, and the
