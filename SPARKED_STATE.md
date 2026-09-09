@@ -997,6 +997,20 @@ branches 2 and 3 refuse the row anyway.
 
 `event 0003` is **left in the ended state**, which is where it started.
 
+**ARC C's PART NUMBERS, CORRECTED 2026-09-02.** The **date bounds are PART 1**
+and **Curbside history (migration 0030) is PART 2**. Part 2 was BUILT FIRST, by
+ruling: predicate-only work across five objects is lower risk than a
+drop-and-recreate that resets an ACL, so the risky signature change happens once,
+last, carrying an already-correct predicate. **Landing order and part number
+disagree on purpose**, which is how they came to be written the wrong way round.
+
+**0030's header contains the inverted labels at lines 87 and 233 and cannot be
+corrected** — the migration is applied, and CLAUDE.md's immutability rule covers
+comments as well as code (the same reason 0028's stale "four places" count was
+corrected in 0030's header rather than in 0028). Its line 2, "Migration 1 of 2
+in Arc C", is accurate: that is landing order. **This paragraph is the current
+statement**; 0031 must not inherit the error.
+
 ### 9. Reputation and history — if it is ever built (ROADMAP, not MVP)
 
 No reputation system exists and none is planned for MVP. Recording the shape now

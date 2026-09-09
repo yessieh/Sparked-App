@@ -81,14 +81,23 @@ and verified in Cursor/Claude Code.
       4+ category warning still fires, selected pills still gradient.
 - [ ] **STILL OPEN after that pass, and each for its own reason** — full detail
       in docs/ACCESSIBILITY.md Entry 7:
-      - **A populated Curbside pill, and auto-join landing on one.** The auto-join
-        MECHANISM is verified (it fired, Curbside rendered leftmost, the
-        `curbsideDecided` negative case held) — but only via the zero-count
-        exception, with no Curbside event in radius. `event 0003` is the only
-        Curbside row and was **excluded from the reseed statement because it
-        fires `app.consume_curbside_credit` and needs its own gated update**; it
-        has ended, so no Curbside pill can appear on its own merits. **The
-        reseed's shape, not a defect.**
+      - **A populated Curbside pill, and auto-join landing on one. STILL
+        UNVERIFIED, BUT NO LONGER BLOCKED — the stated cause was wrong.** The
+        auto-join MECHANISM is verified (it fired, Curbside rendered leftmost,
+        the `curbsideDecided` negative case held), but only via the zero-count
+        exception, with no Curbside event in radius.
+        **CORRECTED 2026-09-02:** this item previously said `event 0003` was the
+        only Curbside row and that no Curbside pill could appear on its own
+        merits. **Both are false.** The database holds FIVE Curbside events
+        across five distinct posters, and one of them —
+        `2b643bef-8f81-4dc8-9024-ed7733a3051e` "Testing event" — is LIVE and
+        **3.5 mi from Sahuarita**, so a populated Curbside pill renders on the
+        Explore header today. See the fixture inventory in STANDING PROCEDURES.
+        What remains owed is only the DRIVING: tap a topical pill while that
+        Curbside pill is already lit from its own events, and confirm auto-join
+        lands on a pill that was already there rather than conjuring one through
+        the zero-count exception. That is a session at the app, not a fixture
+        problem.
       - **The two- and three-plus filtered-empty headlines.** Needs a filtered
         set that empties with two or more pills lit.
       - **The wizard pill's measured contrast ratio** — promoted to its own task
@@ -1030,9 +1039,20 @@ migration lands between, the NAME is the anchor, not the number.
       Note the trigger is TIME (the event ending), not a host action — a new
       class of visibility change in this schema, and the reason the surface pass
       above mattered more than usual.
-      **Arc C Part 2 (date bounds) is still open** and no longer shares a
+      **Arc C PART 1 (date bounds) is still open** and no longer shares a
       migration with this: it drops and recreates a function, so its ACL
       question is live rather than theoretical.
+      **NAMING, CORRECTED 2026-09-02 — READ THIS BEFORE WRITING 0031's HEADER.**
+      The date bounds are **PART 1**; Curbside history (this item, migration
+      0030) is **PART 2**, and it was sequenced FIRST because predicate-only
+      work is lower risk than a drop-and-recreate. Landing order and part number
+      therefore disagree on purpose, which is exactly why the labels got
+      inverted in the first place.
+      **0030's own header carries the inverted labels at lines 87 and 233
+      ("Arc C Part 2 — the date bounds") and CANNOT BE FIXED**: it is applied,
+      and CLAUDE.md's immutability rule covers comments. Its line 2, "Migration
+      1 of 2 in Arc C", is accurate — that is landing order, not part number.
+      **This note is the current one.** Do not let 0031 inherit the error.
 - [x] **Behavioral suite — DONE, 27 assertions** (`scripts/qa-0019-delete-archive.sql`).
       Covers delete/archive/un-archive across every read path, ledger immunity to
       both host verbs AND to a hard delete, non-member authorization, and the
@@ -1481,6 +1501,39 @@ migration lands between, the NAME is the anchor, not the number.
 ---
 
 ## STANDING PROCEDURES (not TODOs — how this project operates)
+
+- [x] **CURBSIDE FIXTURES — THE QUOTA QUESTION IS CLOSED. No new ledger write is
+      needed, now or in any future arc.** Recorded 2026-09-02 so nobody
+      re-derives it, because two separate arcs have now spent effort on the
+      belief that a second Curbside fixture costs a credit.
+      **It never did.** The database already holds **five Curbside events across
+      five distinct posters**, each with its own honest ledger row and each
+      poster at 1 credit used. Earlier multi-account testing produced them. The
+      quota is per POSTER, so five posters is five legitimate free posts — no
+      exhaustion, nothing to clear, nothing to fake.
+      Current state:
+      - `2b643bef-8f81-4dc8-9024-ed7733a3051e` **"Testing event" — LIVE**
+        (+2 days), `curbside_anonymous = TRUE`, **3.5 mi** from Sahuarita,
+        poster Tester Testington. **The live ANONYMOUS-Curbside fixture**: it
+        renders "Local host" and the amber lane stripe on a real card, which is
+        the 0009 mask and the lane rule visible on one row at once.
+      - `33333333-0003-…0003` **"Neighborhood Yard Sale — Quail Creek" — ENDED**,
+        named (not anonymous), 4.1 mi. **The Curbside-HISTORY fixture**, left
+        ended where it started after 0030's behavioural pass.
+      - **Three spares**, each with its own poster and ledger row.
+      **THE MECHANISM, WHICH IS THE PART THAT MAKES THIS REUSABLE: shifting an
+      existing Curbside event's DATES consumes no credit.** Its ledger row
+      already exists, so `consume_curbside_credit`'s idempotency guard
+      (`if exists (select 1 from curbside_quota_ledger where event_id = new.id)
+      then return null`) short-circuits the UPDATE before the quota check.
+      **Proven by driving it during 0030's behavioural pass, not by reading the
+      function** — the same guard, same evidence, that proves a real RSVP on a
+      real Curbside post does not raise `curbside_quota_exhausted`.
+      **So the way to get any Curbside state a test needs is to move an existing
+      fixture's dates**, never to insert a new post or touch the ledger. The
+      ledger deletion in `scripts/qa-0030-curbside-history.sql` predates this
+      finding and is only there because that suite builds throwaway rows inside
+      a rolled-back transaction; it is not a pattern to copy.
 
 - [ ] **THE 2026-09-02 PRE-ARC BASELINE HAS TWO EXPORT DEFECTS. Left as-is by
       ruling; recorded here instead.** `fd7be58` committed
