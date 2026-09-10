@@ -1385,6 +1385,36 @@ migration lands between, the NAME is the anchor, not the number.
 > down with line numbers rather than rediscovered. **Line numbers are as of
 > 2026-08-19 and will drift — the quoted text is the anchor.**
 
+- [ ] **EXTRACT `app.event_end_instant(starts_at, ends_at) returns timestamptz`
+      — AND LAND IT BEFORE A SEVENTH OCCURRENCE, NOT AFTER.** Proposed
+      2026-09-09 while writing 0031.
+      **THE COUNT IS THE ARGUMENT.** `coalesce(ends_at, starts_at + interval '3
+      hours')` — the 3-hour grace for a missing end time — now appears in SIX
+      places: `events_select_public` and `event_categories_select_public`
+      (0022), `app.event_detail` (0028), `app.organizer_profile` (0023),
+      `app.curbside_expired` (0030), and 0031's new date floor. Plus two client
+      copies (`eventCountdown`, and `me.tsx:576`'s `graceISO`). 0028's header
+      already warned that a change to the grace window "has to land in all four
+      at once, or a row will read ENDED in one and not another"; it is six now,
+      and the warning has not become less true.
+      **WHY 0031 INLINED IT ANYWAY:** the extraction only pays if
+      `app.curbside_expired` also calls it, and replacing that function was
+      outside Arc C Part 1's fence. Inlining was the in-fence choice and it is
+      recorded as such in 0031's header rather than hidden.
+      **SHAPE:** `language sql / immutable / security invoker`, one expression.
+      IMMUTABLE, unlike `curbside_expired` — it takes no `now()`, it only
+      resolves the end instant, which is what makes it reusable by a predicate
+      comparing against a PARAMETER (0031's floor) as well as one comparing
+      against now() (`curbside_expired`). That difference is exactly why
+      `curbside_expired` could not carry 0031's bound.
+      **GRANT SURFACE when it lands:** one new function, `revoke all from
+      public` plus `grant execute to anon, authenticated` — policies call it, so
+      the CALLER needs EXECUTE, same as `app.is_member` and
+      `app.has_attendance`.
+      **It replaces objects in five migrations' worth of definitions**, so it is
+      its own arc with its own pre/post audit, and the equivalence harness from
+      qa-0028-0029 is the right template: the returned set must not move.
+
 - [ ] **ADD A "CORRECTIONS TO APPLIED MIGRATIONS" SECTION TO SPARKED_STATE.**
       Proposed 2026-09-02, **scheduled after Arc C** — recorded now, not built.
       **THE PROBLEM.** Applied migrations are immutable, comments included
