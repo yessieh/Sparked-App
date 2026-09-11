@@ -288,6 +288,21 @@ export interface ExploreSearchProps {
   counts: Map<string, number>;
   radius: number;
   place: Place | null;
+  /**
+   * The feed's date window, passed down so the widened read asks the SAME
+   * question the feed asked.
+   *
+   * NOT OPTIONAL, and the reason is the shape of this component: the overflow
+   * read is a SECOND call to `events_within_radius` at a larger radius. Left on
+   * the 3-argument form it would be unbounded in time while the feed is
+   * bounded, so search would surface events the feed had already excluded —
+   * search contradicting the feed on the same screen, from the same data.
+   *
+   * Exactly the class of thing the Curbside guard had to be taught about this
+   * same read in 0030: a second call at a wider radius re-admits whatever the
+   * feed excluded unless it is told not to.
+   */
+  dateWindow: { from: string; to: string };
   onClose: () => void;
   /** Supplied by the feed so search results carry the same save/going wiring
    *  and the same gating as feed cards, without this component knowing
@@ -300,6 +315,7 @@ export default function ExploreSearch({
   counts,
   radius,
   place,
+  dateWindow,
   onClose,
   renderEvent,
 }: ExploreSearchProps) {
@@ -385,7 +401,12 @@ export default function ExploreSearch({
   // already thick enough that widening would be noise.
   const overflowNeeded =
     query.length > 0 && !!place && !applied && titleMatches.length < OVERFLOW_THRESHOLD;
-  const overflowKey = `${lowerQuery}|${radius}`;
+  // THE WINDOW IS PART OF THE KEY. The cached result is tagged with the query
+  // it answers, and since 0031 the window is part of that question — without
+  // these two the panel would reuse an overflow result fetched under a
+  // different date range for the same query and radius, and serve a stale
+  // answer that looks fresh.
+  const overflowKey = `${lowerQuery}|${radius}|${dateWindow.from}|${dateWindow.to}`;
   const overflowCurrent =
     overflowNeeded && overflowState.key === overflowKey ? overflowState : null;
   const overflow = overflowCurrent?.rows ?? [];
@@ -404,6 +425,12 @@ export default function ExploreSearch({
         origin_lat: place.lat,
         origin_lng: place.lng,
         radius_miles: cap,
+        // THE SAME WINDOW THE FEED ASKED FOR. Without these two the widened
+        // read would be unbounded in time while the feed is bounded, and search
+        // would surface events the feed had already excluded — search
+        // contradicting the feed on one screen, from one dataset.
+        window_from: dateWindow.from,
+        window_to: dateWindow.to,
       })
       .then(({ data, error }) => {
         if (cancelled) return;
@@ -448,6 +475,9 @@ export default function ExploreSearch({
     // with identical coordinates does not refetch. `overflowState.key` is read
     // as a guard rather than a trigger — including the whole object would
     // re-run the effect with the result it just stored.
+    // `dateWindow` is already folded into `overflowKey`, which IS in this list,
+    // so a window change re-runs through the key rather than through a second
+    // dependency that could disagree with it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [overflowNeeded, overflowKey, lowerQuery, place?.lat, place?.lng, radius, cap]);
 

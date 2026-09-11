@@ -8,11 +8,25 @@
 // Refetch on pull-to-refresh + screen focus only (no polling; architecture
 // lock #4) — focus refetch keeps rsvp_count and saved state current after
 // actions elsewhere.
-// ENDED EVENTS ARE FILTERED OUT HERE, client-side, at fetch time — see `load`.
-// events_within_radius has no date predicate and deliberately does not gain
-// one: a new argument means a signature change, which forces a DROP and resets
-// the wrapper's ACL. That is a grant-surface change, and it belongs to the
-// date-range arc, which needs server-side bounds for its own reasons.
+// ENDED EVENTS ARE FILTERED OUT BY THE SERVER, NOT HERE — CHANGED 2026-09-10.
+//
+// This file used to carry a client-side `hasEnded` filter over the RPC
+// response, and a comment saying events_within_radius "has no date predicate
+// and deliberately does not gain one" because a new argument forces a DROP that
+// resets the wrapper's ACL. Migration 0031 gained the predicate; the drop was
+// avoided by CREATING THE 5-ARGUMENT FORM ALONGSIDE the 3-argument one rather
+// than replacing it, so no ACL was ever reset.
+//
+// The client filter is gone because the server's floor replaced it: the window
+// this screen sends starts at `now`, so anything already over is excluded
+// before it reaches us. `hasEnded` itself is untouched and still drives the
+// countdown chip and the Saved / Workspace Past splits — only the feed's filter
+// CALL went.
+//
+// THE COST, STATED: a stale PostgREST schema cache or a failed migration now
+// SHOWS ended events rather than hiding them. That is why 0031 ends with
+// `notify pgrst, 'reload schema'`, and why that line is load-bearing rather
+// than hygiene.
 
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
@@ -34,7 +48,6 @@ import { useAuth } from '../../lib/auth';
 import { useEngagement } from '../../lib/engagement';
 import { useCategories } from '../../lib/categories';
 import { buildFilterCounts, matchesFilter, type SearchFilter } from '../../lib/eventFilters';
-import { hasEnded } from '../../lib/eventTime';
 import { MAX_RADIUS, useOrigin } from '../../lib/origin';
 import { supabase } from '../../lib/supabase';
 import { brand, tracking, trackingEm, useTheme } from '../../theme';
@@ -56,6 +69,62 @@ const widenTargetFor = (radius: number) => Math.min(radius * 2, MAX_RADIUS);
 /** The free community lane. Auto-joins a user's first topical selection — see
  *  `togglePill`. Its `sort_order` of 0 already puts it leftmost in the row. */
 const CURBSIDE = 'curbside';
+
+/**
+ * The date window the feed asks for, as INSTANTS.
+ *
+ * ==========================================================================
+ * THE DEFAULT FLOOR IS `now`, NOT MIDNIGHT, AND THAT IS LOAD-BEARING.
+ *
+ * Read this before changing it. The feed's ENDED filter used to live in
+ * `load` and is gone; the server's floor replaced it. So THIS VALUE now
+ * decides whether a rule this screen has always had survives:
+ *
+ *   "an event that ended at 11am is out by 4pm, so nobody scrolls past this
+ *    morning to reach tonight"
+ *
+ * A floor of local midnight today would return every event that finished
+ * earlier today — the server admits them, nothing downstream removes them,
+ * and this morning's finished events reappear on the feed at 4pm. That
+ * regression would arrive as a side effect of a change that looks unrelated
+ * to it, which is why the rule is restated here rather than only in a doc.
+ *
+ * SO THE DEFAULT IS NOT A DATE RANGE AT ALL. It is "from now through the end
+ * of tomorrow". An explicitly PICKED start date is different and means local
+ * midnight of that date — someone asking for a past Saturday means the whole
+ * Saturday, not Saturday-from-this-hour. That asymmetry is deliberate: the
+ * default answers "what is on from now", a chosen range answers "what is on
+ * during these days".
+ * ==========================================================================
+ *
+ * THE CEILING is the start of the day after tomorrow MINUS ONE MILLISECOND.
+ * The server predicate is `starts_at <= window_to`, so passing the start of
+ * day+2 would admit an event beginning at exactly 00:00:00.000 on day+2 — a
+ * day-after-tomorrow event inside a "today and tomorrow" window. Subtracting a
+ * millisecond makes the interval effectively half-open, [from, to), which is
+ * what "through tomorrow" means.
+ *
+ * Known and accepted: `timestamptz` is microsecond-precision and JS `Date` is
+ * millisecond, so an event starting in the final 999µs of tomorrow falls
+ * outside. Not worth code.
+ *
+ * BOTH BOUNDS ARE LOCAL. `new Date()` and the date arithmetic below resolve in
+ * the device's timezone, and `toISOString()` converts to the instant that
+ * actually is. This is the reason 0031 takes `timestamptz` and not `date`: a
+ * `date` argument resolves at midnight in the SESSION timezone, which for
+ * PostgREST is UTC, and an Arizona user asking for "today" would silently get
+ * 5pm yesterday to 5pm today.
+ */
+function defaultWindow(): { from: string; to: string } {
+  const now = new Date();
+  const dayAfterTomorrow = new Date(now);
+  dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 2);
+  dayAfterTomorrow.setHours(0, 0, 0, 0);
+  return {
+    from: now.toISOString(),
+    to: new Date(dayAfterTomorrow.getTime() - 1).toISOString(),
+  };
+}
 
 /**
  * How the filtered-empty state names what the user picked.
@@ -119,6 +188,31 @@ export default function Explore() {
    */
   const [curbsideDecided, setCurbsideDecided] = useState(false);
   const categories = useCategories();
+
+  /**
+   * The date window, SESSION-ONLY — plain useState, exactly like the pills
+   * above and for the same measured reason: this screen never unmounts on a
+   * trip to an event and back (docs/ACCESSIBILITY.md Entry 7 proved it by node
+   * identity), so the window survives that and resets when the app is killed.
+   *
+   * NOT persisted to lib/origin.tsx, deliberately, and the contrast with radius
+   * is the argument: how far someone will travel is a stable preference, so it
+   * persists. A date range is a QUERY. A stored "last week" would silently
+   * answer a question nobody asked on the next launch.
+   *
+   * SAME NATIVE CAVEAT AS THE PILLS: backgrounding does not clear JS state, so
+   * "resets each session" means a real termination, not a return from the
+   * app switcher.
+   *
+   * Computed once at mount. It is not re-derived on every render — a window
+   * whose floor crept forward under a paused thumb would refetch the feed for
+   * no reason the user can see.
+   */
+  // NO SETTER YET, deliberately — the picker UI is a later arc and this commit
+  // is fenced out of it. Destructured without one rather than carrying a dead
+  // `setDateWindow`: an unused setter reads as an oversight, and the next
+  // person would either delete it or wire it somewhere it does not belong.
+  const [dateWindow] = useState(defaultWindow);
   // PERSISTED, reversing the 1b ruling that lived here.
   //
   // That comment argued radius must be session-only because "a stored 100mi
@@ -226,51 +320,59 @@ export default function Explore() {
    *  come back and surprise them on the next tap. */
   const clearFilters = useCallback(() => setSelected([]), []);
 
-  const load = useCallback(async (origin: { lat: number; lng: number }, miles: number) => {
-    const { data, error: rpcError } = await supabase.rpc('events_within_radius', {
-      origin_lat: origin.lat,
-      origin_lng: origin.lng,
-      radius_miles: miles,
-    });
-    if (rpcError) {
-      setError(rpcError.message);
-    } else {
-      setError(null);
-      // ONE instant for the whole response. hasEnded defaults `now` to a fresh
-      // Date per call, so without this a long response would be judged against
-      // as many slightly different clocks as it has rows, and a card sitting on
-      // the boundary could survive or not depending on its index.
-      const now = new Date();
-      // THE ENDED FILTER. `hasEnded` is the shared verdict — the same util the
-      // countdown chip renders from, so the feed and the card can never
-      // disagree about whether something is over. It carries the 3-hour grace
-      // for a missing ends_at; this file states no time constant of its own.
-      //
-      // The floor is `now`, not midnight: an event that ended at 11am is out by
-      // 4pm, so nobody scrolls past this morning to reach tonight. An event in
-      // PROGRESS stays — eventCountdown reads that as LIVE, never ENDED, and a
-      // live event is the most useful thing a discovery feed can show.
-      //
-      // Filtered HERE, once, where the response is handled — not derived at
-      // render. EventStub ticks every 60s to keep countdowns current, and that
-      // tick must never remove a card: an event vanishing under a thumb
-      // mid-scroll is worse than one that briefly reads ENDED until the next
-      // refresh. This runs on every fetch path (focus, pull-to-refresh, widen)
-      // because they all route through `load`.
-      //
-      // Mapped rather than cast: the RPC returns tier_id, FeedEvent deliberately
-      // has no such field, and `lane` is derived from it here. A blanket cast
-      // would have compiled while leaving every stripe undefined.
-      setEvents(
-        (data ?? [])
-          .filter((r: FeedEvent) => !hasEnded(r.starts_at, r.ends_at, now))
-          .map((r: FeedEvent & { tier_id?: string | null }) => ({
+  const load = useCallback(
+    async (
+      origin: { lat: number; lng: number },
+      miles: number,
+      window: { from: string; to: string },
+    ) => {
+      // FIVE ARGUMENTS since 0031. The 3-argument form still exists and still
+      // works — 0031 created this one alongside rather than replacing it, which
+      // is why nothing broke in the gap between that migration and this commit.
+      // Nothing should call the 3-argument form after this; dropping it is its
+      // own migration, once that is confirmed.
+      const { data, error: rpcError } = await supabase.rpc('events_within_radius', {
+        origin_lat: origin.lat,
+        origin_lng: origin.lng,
+        radius_miles: miles,
+        window_from: window.from,
+        window_to: window.to,
+      });
+      if (rpcError) {
+        setError(rpcError.message);
+      } else {
+        setError(null);
+        // THE CLIENT ENDED FILTER IS GONE — the server owns the floor now.
+        //
+        // What stood here filtered `hasEnded` over the response, and its
+        // comment explained that the floor was `now` rather than midnight so
+        // that "an event that ended at 11am is out by 4pm". That rule is not
+        // retired; it MOVED. It now lives in `defaultWindow()` at the top of
+        // this file, which is the value that enforces it, and it is spelled out
+        // there because the next person to change the default is the person who
+        // could undo it without noticing.
+        //
+        // `hasEnded` itself is untouched — the countdown chip and the Saved and
+        // Workspace Past splits still call it. Only this filter went.
+        //
+        // The single-`now` care that used to be here went with it: the server
+        // evaluates its predicate against one transaction clock, so the whole
+        // response is judged against a single instant by construction rather
+        // than by us remembering to pass one.
+        //
+        // Mapped rather than cast: the RPC returns tier_id, FeedEvent
+        // deliberately has no such field, and `lane` is derived from it here. A
+        // blanket cast would have compiled while leaving every stripe undefined.
+        setEvents(
+          (data ?? []).map((r: FeedEvent & { tier_id?: string | null }) => ({
             ...r,
             lane: laneFor(r.tier_id),
           })),
-      );
-    }
-  }, []);
+        );
+      }
+    },
+    [],
+  );
 
   // Focus = initial mount + every return to this tab (covers RSVP counts and
   // saved state changed elsewhere). Never a poll.
@@ -283,12 +385,16 @@ export default function Explore() {
   // seed and then re-read against the real value — a visible swap and a wasted
   // round trip. Until then `events` stays null, which is already the
   // EmptyState pending phase, so the existing spinner covers the gap.
+  // `dateWindow` joins the dependency list for the same reason `place` and
+  // `radius` are in it: a change to any of the three is a different question
+  // for the feed, and all three refetch through this one path rather than
+  // growing a second.
   useFocusEffect(
     useCallback(() => {
       if (!loaded || !place) return;
-      load(place, radius);
+      load(place, radius, dateWindow);
       refresh();
-    }, [load, refresh, loaded, place, radius]),
+    }, [load, refresh, loaded, place, radius, dateWindow]),
   );
 
   // Clears to null FIRST, the same move onWiden makes below and for the same
@@ -303,9 +409,9 @@ export default function Explore() {
     if (!place) return;
     setRefreshing(true);
     setEvents(null);
-    await Promise.all([load(place, radius), refresh()]);
+    await Promise.all([load(place, radius, dateWindow), refresh()]);
     setRefreshing(false);
-  }, [load, refresh, place, radius]);
+  }, [load, refresh, place, radius, dateWindow]);
 
   // Clearing `events` first puts the shared live region back into its pending
   // phase, so the message that eventually lands is a CHANGE to the region
@@ -582,6 +688,7 @@ export default function Explore() {
           counts={counts}
           radius={radius}
           place={place}
+          dateWindow={dateWindow}
           onClose={() => setSearchOpen(false)}
           renderEvent={renderSearchEvent}
         />
