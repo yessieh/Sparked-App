@@ -489,6 +489,42 @@ and verified in Cursor/Claude Code.
       this is the tracked job to close it. Wants whoever built those two arcs
       rather than a reconstruction from the diffs — the log records INTENT and
       the reasoning behind each ruling, which the SQL does not carry.
+- [ ] **PRE-LAUNCH AUDIT: two functions still carry `PUBLIC:EXECUTE` —
+      `app.is_member` and `public.event_detail`.** Surfaced 2026-09-17 by the
+      0032 post-arc diff, which removed the THIRD such grant (the 3-arg feed
+      wrapper) and left these two visible as the only `PUBLIC:EXECUTE` entries
+      in Section 4. Pre-existing, identical across every baseline since
+      2026-08-10, and not in any arc's delta — which is exactly why they need a
+      tracked item: nothing about the per-arc gate will ever surface a grant
+      that never changes. Layer 3 of the CLAUDE.md scheme is where they belong.
+      **THE LINEAGE IS THE SAME SHAPE 0032 JUST REMOVED.** Both were created
+      before 0025 (2026-08-10) made revoke-from-public house practice, and every
+      `CREATE OR REPLACE` since has preserved what was minted then:
+        * `app.is_member(uuid, text[])` — created 0001 with an explicit grant to
+          anon + authenticated and no revoke, so the implicit PUBLIC stayed.
+          Called from RLS policies, so the CALLER (anon/authenticated) genuinely
+          needs EXECUTE; PUBLIC adds nothing they lack.
+        * `public.event_detail(uuid, double precision, double precision)` —
+          created 0007, then **DROPPED AND RECREATED by 0023** (`drop function
+          if exists` + `create function`, 2026-08-02), which reset the ACL,
+          re-minted PUBLIC, and re-granted anon + authenticated without a
+          revoke. 0028 converted it to an invoker wrapper via `CREATE OR
+          REPLACE` and preserved it. Its definer body `app.event_detail` was
+          created by 0028 WITH the revoke and is clean — so the wrapper is
+          looser than the body it fronts, the exact asymmetry 7012350 recorded
+          for the feed pair.
+      **WHAT PUBLIC BUYS THAT anon + authenticated DO NOT:** every role in the
+      cluster, including any created later, executes both. Small today; the
+      class is the point, not the exploit. Four privilege incidents in this
+      build traced to a grant written once and never re-read.
+      **THE FIX IS TWO REVOKES, NOT A DROP.** `revoke execute on function ...
+      from public` on each; anon + authenticated keep their explicit grants and
+      nothing observable changes — which is also why a behavioral test cannot
+      verify it (PUBLIC includes anon, so the signed-out paths work either way).
+      Only the catalog can, per qa-0031's 1c/1f pattern. Its own migration, its
+      own pre/post audit: expected delta is two `execute_grants` cells changed,
+      zero rows added or removed, sections 1/2/3/5/6/7/8 identical — 0027's
+      shape. **Not bundled into another arc**, so the diff answers one question.
 
 **Numbering:** 0026 and 0027 are the expected next file numbers. If another
 migration lands between, the NAME is the anchor, not the number.
