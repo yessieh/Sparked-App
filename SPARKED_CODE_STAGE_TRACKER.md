@@ -1039,9 +1039,11 @@ migration lands between, the NAME is the anchor, not the number.
       Note the trigger is TIME (the event ending), not a host action — a new
       class of visibility change in this schema, and the reason the surface pass
       above mattered more than usual.
-      **Arc C PART 1 (date bounds) is still open** and no longer shares a
-      migration with this: it drops and recreates a function, so its ACL
-      question is live rather than theoretical.
+      **Arc C PART 1 (date bounds) landed as 0031 on 2026-09-09** and did NOT
+      drop-and-recreate: counting the call sites found two still sending three
+      arguments, so the 5-argument pair was created ALONGSIDE and the ACL
+      question was deferred rather than faced. The client moved in 017c9c5 and
+      **0032 (next item) did the drop** — the ACL consequence is recorded there.
       **NAMING, CORRECTED 2026-09-02 — READ THIS BEFORE WRITING 0031's HEADER.**
       The date bounds are **PART 1**; Curbside history (this item, migration
       0030) is **PART 2**, and it was sequenced FIRST because predicate-only
@@ -1053,6 +1055,50 @@ migration lands between, the NAME is the anchor, not the number.
       and CLAUDE.md's immutability rule covers comments. Its line 2, "Migration
       1 of 2 in Arc C", is accurate — that is landing order, not part number.
       **This note is the current one.** Do not let 0031 inherit the error.
+- [x] **3-argument feed RPC dropped — DONE (migration 0032, 2026-09-16). Arc C
+      closing step.** `public.events_within_radius(3)` and
+      `app.events_within_radius(3)` are gone; the 5-argument pair from 0031 is
+      the only form. Drop-only — nothing created, nothing granted, no body
+      changed, nothing ported: 0031 PART C had already made the 3-arg definer a
+      delegation to the 5-arg with ±infinity, so this removed a wrapper around
+      a wrapper.
+      **WHY IT WAITED.** 0031 kept the pair alive because both client call
+      sites still sent three arguments and the client change was sequenced
+      after the migration. 017c9c5 (2026-09-11) moved both to five. A census by
+      ARGUMENT SET on 2026-09-16 — not by name, because PostgREST routes on the
+      exact set of names in the body — found zero PostgREST callers sending
+      three, zero views/policies/bodies depending on either object, and zero
+      mentions in design-reference/ (171 files). The only 3-arg calls left were
+      15 in the historical QA suites (qa-0019, 0028-0029, 0030, 0031); each now
+      carries a banner naming 0032 and stating those calls are retired, not
+      broken.
+      **DROP ORDER IS A CONVENTION WE HOLD, NOT ONE THE ENGINE HOLDS.** Wrapper
+      first, then definer — the reverse of 0031's create order. There is no
+      pg_depend edge between them: the bodies are `as $$ ... $$`, not
+      `BEGIN ATOMIC`, and Postgres records no dependency from a string-bodied
+      function to what it calls. So nothing could block the drop (no CASCADE),
+      and nothing enforced the order — Postgres would have dropped the definer
+      first and left a callable public wrapper failing at call time. 0032's
+      header says so, for whoever reorders it innocently.
+      **GRANT SURFACE — ONE REMOVED `PUBLIC:EXECUTE`, DELIBERATE.** The 3-arg
+      public wrapper carried PUBLIC:EXECUTE since 0005 minted it implicitly and
+      never revoked it; 0009/0020/0028 were CREATE OR REPLACE and preserved it.
+      It was the ONLY PUBLIC execute on any `events_within_radius` (0031 revoked
+      PUBLIC from both 5-arg functions at creation). It went with its object.
+      Net: PUBLIC loses its last execute on the feed RPC; anon and authenticated
+      lose nothing. The post-arc diff shows it as a removed grant — hardening,
+      exactly as 0031's commit message said it would be.
+      **Post-arc delta vs `2026-09-15-pre-drop-3arg.md`, confirmed 2026-09-17
+      (`2026-09-17-post-drop-3arg.md`, normalized and sorted per section):**
+      Section 4 42 → 40 data rows, the two 3-arg functions and nothing else;
+      Sections 1–3 and 5–8 identical. Suite 23/23; PostgREST returns 404
+      PGRST202 on the 3-name call with a hint naming the 5-arg signature.
+      **Suite:** `scripts/qa-0032-drop-3arg.sql` — Section 1 absence via
+      pg_proc counts and to_regprocedure (never has_function_privilege on a
+      dropped signature, which raises and takes the grid down), Section 2 the
+      survivors' exact grantee set vs the baseline, Section 3 both roles through
+      the 5-arg path plus 42883 asserted on both 3-arg forms, Section 4 the
+      PostgREST 404 PGRST202 probe that proves the notify took.
 - [x] **Behavioral suite — DONE, 27 assertions** (`scripts/qa-0019-delete-archive.sql`).
       Covers delete/archive/un-archive across every read path, ledger immunity to
       both host verbs AND to a hard delete, non-member authorization, and the

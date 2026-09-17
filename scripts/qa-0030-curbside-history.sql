@@ -1,3 +1,14 @@
+-- ⚠️ PARTLY RETIRED BY 0032 (2026-09-16). This suite was written against the
+-- 3-ARGUMENT events_within_radius pair, which migration 0032 dropped once
+-- nothing shipped against it. Affected: Section 1's 1d and 1g
+-- (has_function_privilege on the 3-arg signatures — these raise 42883 and take
+-- the whole Section 1 grid with them), and Section 3's feed reads at lines
+-- 490, 687, 714. Those are RETIRED, not broken: they error because the schema
+-- moved on, not because the suite was wrong. Every other assertion is still
+-- historically accurate for the state it was written against. The Curbside
+-- guard 0030 added is unchanged — 0031 carried it into the 5-argument body and
+-- 0032 removed only the delegating wrappers around it.
+--
 -- ============================================================================
 -- BEHAVIORAL SUITE — Curbside history does not survive (migration 0030).
 --

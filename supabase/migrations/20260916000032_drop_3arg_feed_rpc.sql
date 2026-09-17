@@ -1,0 +1,121 @@
+-- ============================================================================
+-- 0032 — Drop the 3-argument events_within_radius pair. Arc C, closing step.
+--
+-- WHAT THIS DOES: removes two functions and nothing else.
+--     public.events_within_radius(double precision, double precision, double precision)
+--     app.events_within_radius(double precision, double precision, double precision)
+-- No object is created, no grant is issued, no body is changed, and the
+-- 5-argument pair from 0031 is not touched in any way.
+--
+-- ---------------------------------------------------------------------------
+-- WHY THIS IS ITS OWN MIGRATION AND NOT PART OF 0031.
+--
+-- 0031 was scoped as a drop-and-recreate and did not do it, because counting
+-- the call sites found two — (tabs)/index.tsx and components/ExploreSearch.tsx
+-- — both sending exactly three arguments, with the client change sequenced
+-- AFTER the migration. A drop would have taken the signed-out feed and search
+-- down for the whole gap between two commits. So 0031 created the 5-argument
+-- pair ALONGSIDE, made the 3-argument app definer a delegation to it, and said
+-- in its header: "A later migration drops it, deliberately, once nothing points
+-- at it." This is that migration.
+--
+-- The client moved in 017c9c5 (2026-09-11). Both call sites now send
+-- origin_lat, origin_lng, radius_miles, window_from, window_to. Since then the
+-- 3-argument pair has had no caller, and a function with no caller is a
+-- privilege surface with no purpose.
+--
+-- ---------------------------------------------------------------------------
+-- CALL-SITE CENSUS, 2026-09-16 — BY ARGUMENT SET, NOT BY NAME.
+--
+-- PostgREST resolves an RPC by the exact set of argument NAMES in the body. A
+-- call sending origin_lat, origin_lng, radius_miles and nothing else resolves
+-- to the 3-argument wrapper today and returns 404 PGRST202 after this. So the
+-- question is not "does anything mention the function" but "does anything send
+-- three names". The whole tree was searched: apps/mobile/src, scripts/, every
+-- migration, docs/, the root markdown files, and design-reference/ (171 files,
+-- with ignore rules bypassed — zero mentions).
+--
+--   PostgREST call sites (the ones that can 404):           2, both send FIVE.
+--     apps/mobile/src/app/(tabs)/index.tsx:334
+--     apps/mobile/src/components/ExploreSearch.tsx:424
+--   Direct SQL 3-argument calls:              15, all in historical QA suites
+--     scripts/qa-0019-delete-archive.sql, qa-0028-0029-curbside-anonymity.sql,
+--     qa-0030-curbside-history.sql, qa-0031-date-bounds.sql. Not PostgREST,
+--     not shipping; each now carries a banner naming this migration and
+--     stating that those calls are retired, not broken.
+--   Views, policies, or other function bodies depending on it:            0.
+--     Every migration reference is a create-or-replace of the function
+--     itself, a grant on it, or a comment.
+--
+-- ---------------------------------------------------------------------------
+-- DROP ORDER — WRAPPER FIRST, AND WHY THE ENGINE WILL NOT HOLD THAT LINE FOR US.
+--
+-- The chain is public(3) -> app(3) -> app(5). 0028:183 has the public wrapper
+-- calling `app.events_within_radius(origin_lat, origin_lng, radius_miles)`;
+-- 0031 PART C has the app definer delegating to the 5-argument form with
+-- -infinity / infinity. So the wrapper depends on the definer, and the caller
+-- goes before the callee: the exact reverse of 0031's A -> B -> C create order.
+--
+-- ⚠️ THERE IS NO pg_depend EDGE BETWEEN THEM. Both bodies are `as $$ ... $$`
+-- string bodies, not SQL-standard `BEGIN ATOMIC` bodies, and Postgres records
+-- no dependency from a string-bodied function to the functions it calls. Two
+-- consequences, both worth knowing:
+--   1. Nothing can block this drop. No CASCADE is needed and none is used.
+--   2. Nothing ENFORCES the order. Postgres would happily drop app(3) first and
+--      leave public(3) in the catalog — callable, granted, and failing at call
+--      time with "function app.events_within_radius(...) does not exist".
+-- Wrapper-first is therefore a correctness convention we hold, not one the
+-- engine holds for us. Inside this migration's single transaction no caller
+-- can observe the intermediate state either way; the order matters the day
+-- someone runs these statements one at a time, or reorders them because
+-- "the definer is the real one". Do not reorder them.
+--
+-- ---------------------------------------------------------------------------
+-- GRANT SURFACE — NOTHING ADDED, EIGHT ACL ENTRIES REMOVED WITH THEIR OBJECTS,
+-- AND ONE OF THEM IS THE POINT.
+--
+-- From the pre-arc baseline (2026-09-15-pre-drop-3arg.md, Section 4):
+--   public.events_within_radius(3)  PUBLIC:EXECUTE, postgres, anon, authenticated
+--   app.events_within_radius(3)     postgres, anon, authenticated
+-- All eight disappear with the two objects. The 5-argument pair keeps exactly
+-- what 0031 granted: postgres, anon, authenticated on each — no PUBLIC.
+--
+-- ⚠️ THE POST-ARC DIFF WILL SHOW A REMOVED `PUBLIC:EXECUTE`. THAT IS DELIBERATE.
+-- The 3-argument public wrapper has carried PUBLIC:EXECUTE since 0005 minted it
+-- implicitly on CREATE FUNCTION and never revoked it; 0009, 0020 and 0028 were
+-- each CREATE OR REPLACE on the same signature and preserved it. It was the
+-- ONLY PUBLIC execute on any events_within_radius — 0031 revoked PUBLIC from
+-- both 5-argument functions at creation. Dropping the wrapper removes the last
+-- one. That is hardening, and it is the reason 0031's commit message already
+-- said: "dropping the 3-argument pair later removes that grant as a side
+-- effect. Hardening, not a regression." Read the diff with that in hand, or a
+-- removed PUBLIC grant looks like an incident.
+--
+-- Net effect on what any role can do: PUBLIC loses its only execute on the feed
+-- RPC. anon and authenticated lose nothing — they keep the 5-argument pair,
+-- which is the only form the client sends.
+--
+-- ---------------------------------------------------------------------------
+-- NOTHING IS PORTED. 0031 PART C already replaced the 3-argument app definer's
+-- body with a delegation to the 5-argument one, so this drops a wrapper around
+-- a wrapper. No filter, no Curbside guard, no lifecycle predicate lives in
+-- either object being removed; all of it is in app.events_within_radius(5).
+--
+-- No IF EXISTS, deliberately. If either object is already gone, that is a state
+-- to fail loudly on, not to skip past: it means the database and the migration
+-- history disagree, and a silent no-op would hide exactly that.
+--
+-- ENDS WITH `notify pgrst, 'reload schema'`, and it is LOAD-BEARING: PostgREST
+-- caches function signatures. Without the reload it keeps advertising a
+-- 3-argument events_within_radius that no longer exists — a call would pass
+-- PostgREST's routing and then fail in Postgres, with an error that looks like
+-- a database fault rather than a stale cache.
+-- ============================================================================
+
+-- Wrapper first: the caller before the callee. See DROP ORDER above.
+drop function public.events_within_radius(double precision, double precision, double precision);
+
+-- Then the definer it called.
+drop function app.events_within_radius(double precision, double precision, double precision);
+
+notify pgrst, 'reload schema';

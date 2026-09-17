@@ -1,3 +1,14 @@
+-- ⚠️ PARTLY RETIRED BY 0032 (2026-09-16). This suite was written against the
+-- 3-ARGUMENT events_within_radius pair, which migration 0032 dropped once
+-- nothing shipped against it. Affected: Section 1's 1h and 1j
+-- (has_function_privilege on the 3-arg signatures — these raise 42883 and take
+-- the whole Section 1 grid with them), and Section 3's A1 (line 298) plus the
+-- equivalence reads at 384, 466, 470. Those are RETIRED, not broken: they
+-- error because the schema moved on, not because the suite was wrong. Every
+-- other assertion is still historically accurate for the state it was written
+-- against. The 0028 conversion it verified — invoker wrapper over a definer
+-- body — is unchanged and now lives only in the 5-argument pair.
+--
 -- ============================================================================
 -- BEHAVIORAL SUITE — the Curbside anonymity arc (migrations 0028 + 0029).
 --

@@ -1,3 +1,26 @@
+-- ⚠️ PARTLY RETIRED BY 0032 (2026-09-16). 0031 kept the 3-ARGUMENT
+-- events_within_radius pair alive so the client could catch up; migration 0032
+-- dropped it once the client had. This suite's controls on that pair are now
+-- RETIRED, not broken — they error because the schema moved on, not because
+-- the suite was wrong. Every other assertion is still historically accurate
+-- for the state it was written against.
+--
+-- Affected, by section:
+--   Section 1: 1g, 1h, 1i — has_function_privilege on the 3-arg signatures
+--     raises 42883 and takes the whole Section 1 VALUES grid with it.
+--   Section 3: 3k, 3l (lines 453–469), 3o (502), and 3p by implication.
+--     ⚠️ 3k AND 3l ARE THE 3-vs-5 EQUIVALENCE CHECKS, AND THEY ARE RETIRED BY
+--     DEFINITION, NOT FAILING. They proved that the 3-argument form and the
+--     unbounded 5-argument form returned the SAME SET. The thing they compare
+--     no longer exists, so there is no equivalence left to hold or break. A
+--     reader seeing 42883 at 3k will be tempted to conclude the equivalence
+--     broke; it did not — one side of it was removed on purpose, in 0032, with
+--     nothing ported because 0031 PART C had already made it a delegation.
+--     The DO block aborts at 3k, so 3a–3j's PASS rows are not shown either;
+--     they still hold — qa-0032 re-proves the 5-argument path for both roles.
+--   Section 4: the second curl (the 3-name call) must now return 404
+--     PGRST202. That is the new pass condition; qa-0032 Section 4 states it.
+--
 -- ============================================================================
 -- BEHAVIORAL SUITE — date range bounds on the Explore feed (migration 0031).
 --

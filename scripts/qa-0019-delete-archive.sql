@@ -1,3 +1,13 @@
+-- ⚠️ PARTLY RETIRED BY 0032 (2026-09-16). This suite calls the 3-ARGUMENT
+-- public.events_within_radius — the helper at line 205 and assertions a2, b2
+-- and the un-archive check at 277, 303, 317. Migration 0032 dropped that
+-- form once nothing shipped against it. Those calls are RETIRED, not broken:
+-- they raise 42883 because the schema moved on, not because the suite was
+-- wrong. Every other assertion here is still historically accurate for the
+-- state it was written against. To re-run the feed checks today, add
+-- `, '-infinity'::timestamptz, 'infinity'::timestamptz` to each call — that is
+-- the exact set the 3-argument form delegated to after 0031.
+--
 -- ============================================================================
 -- BEHAVIORAL SUITE — soft delete + archive (migration 0019, read-path filters
 -- repaired by 0020, attendee-history exception added by 0022).
