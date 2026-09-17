@@ -152,9 +152,18 @@ and verified in Cursor/Claude Code.
       Entry 7 either way — a pass is as worth recording as a fail, because the
       open item is the ABSENCE of a number, not a suspected defect.
 
-- [ ] **POLISH, DEFERRED UNTIL AFTER ARC C — cap the pill row at two rows, then
-      scroll the block horizontally.** DECIDED 2026-08-25, deliberately not
-      built. Beyond two rows the block scrolls as a unit: pills flow
+- [ ] **POLISH, GATED BEHIND THE EXPLORE ARC COMPLETING (i.e. after the map) —
+      cap the pill row at two rows, then scroll the block horizontally.**
+      DECIDED 2026-08-25, deliberately not built.
+      **RE-ANCHORED 2026-09-17.** This read "DEFERRED UNTIL AFTER ARC C"; Arc C
+      closed with 0032 on 2026-09-16, so that gate LAPSED and the item was
+      floating with no anchor — which is how a deferred item quietly becomes an
+      overdue one. The new gate follows from the item's own reasoning below:
+      it buys headroom for a denser feed, not relief from a present defect, so
+      it belongs after the surface it decorates is finished, and the Explore
+      arc's last step is the map. If the observed state ever reaches THREE rows
+      before then, the reasoning changes and so should the gate.
+      Beyond two rows the block scrolls as a unit: pills flow
       top-to-bottom then left-to-right, with a **clickable arrow affordance for
       desktop**, where there is no drag gesture — the discoverability problem
       that ruled out a plain hidden-scrollbar scroller in the first place.
@@ -166,7 +175,55 @@ and verified in Cursor/Claude Code.
       only for categories that HAVE events, and the observed state today is two
       rows. So the worst case is three rows and the current case is already at
       the proposed cap — this buys headroom for a denser feed, not relief from a
-      present defect. That is exactly why it sits behind Arc C.
+      present defect. That is exactly why it sits behind the rest of the arc.
+
+> **Arc D — the date window — shipped 2026-09-17.** Three items below: the
+> shipped entry, a verification gap that shares a cause with a blocker for the
+> next arc, and a question that was parked and is now answered.
+
+- [x] **Explore date range picker — DONE 2026-09-17, `f204f32`.** UI only;
+      `components/DateControl.tsx`, `(tabs)/index.tsx`; no SQL, no migration,
+      `pickers.tsx` and `ExploreSearch.tsx` untouched. Rulings in SPARKED_STATE
+      "EXPLORE DATE WINDOW (LOCKED 2026-09-17)"; measurements in
+      `docs/ACCESSIBILITY.md` Entry 8. The detail lives there, not here.
+- [ ] **TWO THINGS WITH ONE CAUSE: Arc D's verification gap, and the blocker it
+      exposed for Arc E.**
+      **THE GAP.** Explore's empty-state cells B and D, the non-empty status
+      strings (`Showing 5 · Oct 2–6`, `Showing 2 of 5 · …`), and the 390 fold
+      number were driven against an in-page `window.fetch` stub returning the
+      11 real past rows re-dated forward — NOT against the database. Cells A
+      and C are the only ones Arc D produced from live data. The component ran
+      unmodified and the stub was removed by reload, but a stub is a stub. Full
+      disclosure in Entry 8's "What this entry does NOT establish".
+      **THE CAUSE, WHICH IS THE BLOCKER: THE DEV DATABASE HAS NO FUTURE
+      EVENTS.** The RPC was probed directly on 2026-09-17 through the page's
+      own anon headers: **11 rows in the past 120 days, 0 rows in the next 200
+      days, both at 100 mi.** Every seeded fixture has aged out. So the live
+      Explore feed is EMPTY for anyone testing today, under the default window
+      and under any pickable one — past dates are unselectable by ruling.
+      **CONSEQUENCE FOR ARC E, STATED PLAINLY:** Timeline orders by `starts_at
+      ASC` and today has nothing to order. **A future-dated fixture reseed is a
+      PREREQUISITE for Arc E, not a nice-to-have** — a surface whose whole
+      point is ordering cannot be verified against an empty set, and "it
+      compiles" is not a verification of a sort.
+      **THE CHEAP PATH IS RE-DATING, NOT INSERTING.** See CURBSIDE FIXTURES
+      under STANDING PROCEDURES: shifting an existing event's DATES consumes no
+      credit, because `consume_curbside_credit`'s idempotency guard
+      short-circuits the UPDATE. Move existing fixtures forward; do not insert
+      new posts or touch the ledger. That procedure is the authority — this
+      item points at it and does not restate it.
+- [x] **The header-budget question at 390 wide — CLOSED, ANSWERED, NOT
+      PARKED.** Arc D's brief parked "does DateControl push the first card
+      below the fold at 390w" because no seeded event could populate a card.
+      With the stub rows above, cards existed and it was measured at 390×844:
+      **DateControl is 44px tall on ONE line; the first card lands at top 514 /
+      bottom 613 — 231px above the fold — with a 7-pill row above it.** The
+      stub does not filter by radius, so its pill row is WIDER than the live
+      feed would give at 25 mi; the number is conservative in the safe
+      direction. **The same-line fallback is dead on its own measurement:**
+      `Sahuarita, AZ · within 25 mi · Now through Tomorrow` wraps at 390 and
+      recovers nothing. Own-line stays. A device pass owns the FEEL; the
+      geometry is settled.
 
 ## INTERESTS & BLOCKS
 
@@ -210,6 +267,38 @@ and verified in Cursor/Claude Code.
       `DateField`s in the wizard's When/Where step: Start bumps End when it
       passes it, End takes `min=Start` so earlier days render disabled. Closes
       the control that failed 3× in Design.
+- [ ] **`FieldShell`'s EYEBROW IS A LIVE 1.4.3 FAILURE — ITS OWN ARC, WITH
+      `defaultOpen` BUNDLED IN.** Found 2026-09-17 while Arc D consumed
+      `DateField` on Explore.
+      **THE NUMBER: 2.74:1.** The `FROM` / `THROUGH` eyebrow — `textFaint` at
+      **9px** — measured on the chip surface (`iconChipBg` over a card). 9px is
+      not large text, so the bar is **4.5:1**, not 3:1. It fails by nearly half.
+      Measured off the painted element and composited to the first opaque
+      ancestor; the figure and method are in `docs/ACCESSIBILITY.md` Entry 8 —
+      read it there, do not re-derive it.
+      **BLAST RADIUS: THREE SCREENS.** The shell lives in
+      `components/pickers.tsx`, so it renders on the new Explore date panel,
+      the paid wizard's When/Where step, and Curbside. **Measured on Explore
+      only; COMPUTED, not measured, on the other two** — both are behind auth.
+      What is OWED is those two remaining measurements, not a re-measure of
+      Explore; if either sits on a different surface the number moves.
+      **SAME SHAPE AS `Pill.tsx` RULING A**, and the same rule applies: a
+      shared component with a three-screen blast radius is a stop-and-ask and
+      its own arc, never a patch inside another arc's scope. The remedy
+      candidates — lift the eyebrow to `textMuted` or `text`, or make it
+      decorative and rely on the `aria-label` the shell already carries
+      (`From, Sep 17, 2026`) — each change what the wizard and Curbside look
+      like, and that is the ruling to make, not the fix to slip in.
+      **BUNDLE `defaultOpen` INTO THE SAME ARC.** Consuming `DateField` as-is
+      costs Explore a second tap: the segment opens the panel, then the shell
+      must be tapped to open the grid. A `defaultOpen` prop on `DateField`
+      removes it. Same file, same arc — shipping the contrast fix alone means
+      opening `pickers.tsx` twice, and Entry 5's three ruled-not-fixed target
+      failures (chevrons 24×26, day cells 77×30, AM/PM 37×21) are in the same
+      file and can be decided in the same pass.
+      **THIS ITEM EXISTS BECAUSE THE FENCE HELD.** Arc D's brief said: if
+      `pickers.tsx` needs a change, stop and report instead of editing it. The
+      build measured, reported, and did not edit. That is the item, not a gap.
 - [ ] **Real image uploads** — cover, gallery, vendor logos (Supabase Storage).
       **Designs `event_photos` here, against real storage** (SCHEMA_PLAN §6.1,
       deliberately deferred at the 0013 site-map/vendors session): `kind` in

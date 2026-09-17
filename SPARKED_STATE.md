@@ -306,6 +306,82 @@ Nothing is gated at any width; the full desktop batch still runs once at the end
   the rows still render and the RSVP chip falls back to the public
   `events.rsvp_count`; only the save chip is lost.
 
+### EXPLORE DATE WINDOW (LOCKED 2026-09-17)
+
+Shipped in `f204f32` (Arc D, UI only — `components/DateControl.tsx` under
+`LocationControl` in the Explore header, "Now through Tomorrow", both ends
+editable). The rulings it locked, recorded here as decisions rather than in
+OPEN WORK, which is a sequence list. Evidence in `docs/ACCESSIBILITY.md`
+Entry 8.
+
+- **The default is not a date range. It is "from `now` through the end of
+  tomorrow."** The floor is the current instant, never local midnight, because
+  the server's window replaced the client's ENDED filter (017c9c5) and a
+  midnight floor would return everything that finished earlier today — the
+  "an event that ended at 11am is out by 4pm" rule, re-entering through a
+  change that looks unrelated to it. `defaultWindow()` in `(tabs)/index.tsx`
+  carries the full argument.
+- **A picked start of TODAY keeps the `now` floor. A picked start of any later
+  day means local midnight of that day.** This RETIRED the earlier clause "a
+  picked start date always means local midnight — someone asking for a past
+  Saturday means the whole Saturday". The two rules collided precisely on
+  today: midnight on a picked "today" resurrects this morning's ended events,
+  the exact regression the default exists to prevent, through the front door.
+- **`min` is today on both fields. Past dates are unselectable on Explore.**
+  Not a precaution — the past-Saturday case that justified the retired clause
+  no longer exists BECAUSE of this, and the conditional floor was otherwise
+  keeping alive a rule nothing in the app could exercise. Explore is a
+  discovery surface; past events are reachable through Saved → Past and
+  Workspace → Past.
+- **The end bound is local midnight of the day AFTER the picked end, minus one
+  millisecond** — the same half-open `[from, to)` `defaultWindow()` uses,
+  because the server predicate is `starts_at <= window_to` and the start of
+  the next day would admit an event at exactly 00:00:00.000 outside the range.
+  Both bounds resolve in the DEVICE timezone and go over the wire as instants
+  (`toISOString()`), which is why 0031 takes `timestamptz` and not `date`.
+- **Session-only. Not persisted to `lib/origin.tsx`.** A radius is a
+  PREFERENCE (how far someone will travel is stable, so it persists); a date
+  range is a QUERY, and a stored "last week" would silently answer a question
+  nobody asked on the next launch. Same native caveat as the pills:
+  backgrounding does not clear JS state, so "resets each session" means a real
+  termination.
+- **Reset recomputes `defaultWindow()` FRESH**, so the floor is `now` at reset
+  time rather than the mount-time value. This does not conflict with "computed
+  once at mount", which forbids re-deriving on every RENDER (a floor creeping
+  forward under a paused thumb would refetch for no visible reason); a reset
+  is an explicit user action. The header `Reset` segment is the only reset on
+  the screen and renders only when a window is picked.
+- **NO PRESETS** (Today / This weekend / Next 7 days). If presets ever ship
+  they DERIVE from `SavedBucket` in `lib/eventTime.ts`, never from fresh date
+  definitions in the header — two definitions of "weekend" in one app is how a
+  section header and the chip inside it end up disagreeing.
+- **The picker never learns the 3-hour grace exists.** It emits bounds; the
+  server owns that predicate. Client copies stay at exactly two
+  (`lib/eventTime.ts`, `me.tsx:576`); this arc added zero.
+- **The empty state went from two cells to FOUR on ONE element** (Entry 7's
+  same-node constraint, extended): A no pills / default window (unchanged,
+  offers the widen); B pills / default (unchanged, `Clear filters`); C no
+  pills / picked window — `Nothing on Sep 20–22`, `Reset dates`; D pills AND
+  picked window — `Nothing on Oct 5 matches your filters`, ONE button `Show
+  everything nearby` that clears pills and dates in a single tap, because the
+  user cannot know which constraint emptied the feed and making them guess
+  hands them an action that may not help. **C and D suppress the radius
+  widen** — Entry 7's ruling (a widen cannot fix a filter) extended to a second
+  cause, not re-derived.
+- **The filter-status live region's children are gated on pills OR a picked
+  window**, not pills alone — the node was already unconditional (Entry 7) but
+  a window change under no pills was a silent feed change. "of m" appears only
+  when pills are lit; with none, n = m and "Showing 5 of 5" reads as a broken
+  partition.
+- **Layout: DateControl on its own line under LocationControl.** Measured at
+  390×844: 44px tall, one line, first card at top 514 / bottom 613 — 231px
+  above the fold with a 7-pill row above it. The same-line fallback is dead on
+  that measurement: the combined sentence wraps at 390 and recovers nothing.
+- **Consumed `DateField` as-is**, which costs a second tap (segment opens the
+  panel, the shell opens the grid) and inherits `FieldShell`'s eyebrow at
+  2.74:1 — both are `pickers.tsx` work, tracked as one arc in the tracker, and
+  neither was patched here by the scope fence.
+
 ---
 
 ## CREATE EVENT — CURBSIDE + SHARED FORM PATTERNS (LOCKED 2026-07-15)
@@ -1009,7 +1085,11 @@ corrected** — the migration is applied, and CLAUDE.md's immutability rule cove
 comments as well as code (the same reason 0028's stale "four places" count was
 corrected in 0030's header rather than in 0028). Its line 2, "Migration 1 of 2
 in Arc C", is accurate: that is landing order. **This paragraph is the current
-statement**; 0031 must not inherit the error.
+statement.** 0031 did NOT inherit the error, checked against its file after it
+shipped (2026-09-09): its header line 2 reads "Arc C PART 1", and lines 4–11
+restate this correction in full, naming 0030's lines 87 and 233 as the wrong
+labels and line 2 as the accurate one. The two headers now disagree on purpose,
+and 0031's is the one that is right.
 
 ### 9. Reputation and history — if it is ever built (ROADMAP, not MVP)
 
@@ -1854,6 +1934,130 @@ section 4 (the 0028 definers), the `config` cell on the two existing `public`
 rows moving `search_path=public, extensions` → `public, app`, and section 1
 losing exactly one row (`events | workspace_id | anon | SELECT`, 20 → 19 anon
 column grants on `events`, total 115 → 114). Anything else is a finding.
+0030 Curbside history does not survive (**APPLIED 2026-09-02**; committed
+`0924890` 2026-09-08). **Arc C PART 2, landed FIRST** — see the corrected part
+numbers under Architecture Decision 8. Implements the 2026-08-25 ruling: an
+ended CURBSIDE event leaves public reach entirely — feed, search, detail by
+direct link, and the attendee's Saved → Past — while the host keeps it in
+Workspace. Amends 0022's attendee-history rule for Curbside ONLY; paid tiers
+untouched. ONE new function, `app.curbside_expired(text, timestamptz,
+timestamptz)` — `tier_id = 'curbside' AND coalesce(ends_at, starts_at +
+interval '3 hours') < now()`, STABLE, SECURITY INVOKER, `search_path = public,
+app` — the single definition of the rule, called at EIGHT sites across FIVE
+objects: `events_select_public` and `event_categories_select_public`
+(drop + create, guard on branches 2 and 3, **branch 1 deliberately untouched**
+— it is what preserves the host's own ended posts in Workspace);
+`app.events_within_radius(3)` (one added predicate, which also covers Explore
+search's widened overflow read); `app.event_detail` (guard on the two
+non-member branches — the "by direct link" closure); `app.organizer_profile`
+(guard in the `visible` CTE, beside but distinct from 0009's
+`not curbside_anonymous`). All three functions `create or replace` on
+byte-identical signatures, so every ACL preserved. **Grant surface: one
+addition** — the new function's implicit PUBLIC EXECUTE revoked, EXECUTE
+granted to `anon, authenticated` (REQUIRED: a policy expression calling a
+function needs the caller to hold EXECUTE, 0001's `is_member` / 0022's
+`has_attendance` shape). No `notify pgrst` — no signature changed. Its header
+also corrects 0028's stale "four places" count for the ENDED expression to
+FIVE (`me.tsx:576`'s `graceISO` is the fifth) and introduces the helper so
+this migration takes SQL occurrences to 5 rather than 12. Post-arc diff against
+`supabase/audits/baselines/2026-09-02-pre-curbside-history.md` (`fd7be58`):
+Section 4 40 → 41 (`app.curbside_expired`), Section 8 `events_select_public`
+748 → 880 chars (the two guard calls); the Section 1 and 6 deltas are defects
+in the PRE-ARC export, not privilege changes (tracker, STANDING PROCEDURES).
+Post-arc `2026-09-02-post-curbside-history.md`. **Suite 45/45**,
+`scripts/qa-0030-curbside-history.sql`, half of it negative controls.
+**⚠️ ITS HEADER CARRIES THE INVERTED ARC C PART LABELS AT LINES 87 AND 233**
+("Arc C Part 2 — the date bounds") **AND CANNOT BE CORRECTED** — the migration
+is applied, and CLAUDE.md's immutability rule covers comments as well as code.
+Line 2, "Migration 1 of 2 in Arc C", is accurate: landing order. The
+correction lives in the Architecture Decision 8 paragraph and in the tracker's
+corrections-index item ("ADD A 'CORRECTIONS TO APPLIED MIGRATIONS' SECTION",
+DOC RECONCILIATION), which lists both lines.
+0031 date range bounds on the Explore feed (**APPLIED 2026-09-09**; committed
+`6ae8374` 2026-09-10). **Arc C PART 1, landed SECOND**; its header line 2 says
+so and lines 4–11 restate the correction against 0030. Two `timestamptz`
+bounds so Explore answers "what is on between these two instants". **The
+predicate is an INTERVAL OVERLAP, not a start comparison:**
+`coalesce(ends_at, starts_at + interval '3 hours') >= p_from AND starts_at <=
+p_to` — `starts_at >= p_from` would drop a multi-day event still running, the
+one row a live feed most wants; both halves inclusive. `timestamptz` NOT
+`date`: a `date` resolves at midnight in the SESSION timezone, UTC under
+PostgREST, so an Arizona "today" would run 5pm yesterday to 5pm today; the
+client owns the conversion. **NO 3-ARGUMENT FUNCTION WAS DROPPED, a departure
+from the arc as scoped**: the brief specified drop-and-recreate, and neither it
+nor the recon COUNTED THE CALL SITES — there were two (`(tabs)/index.tsx`,
+`components/ExploreSearch.tsx`), both sending three arguments, with the client
+change sequenced after the migration, so a drop would have taken the signed-out
+feed and search down between two commits (the 0020 → 0021 shape). So the
+5-argument pair was **created ALONGSIDE, deliberately**: PART A
+`app.events_within_radius(…, p_from, p_to)` transcribed from 0030 PART D with
+the two bounds added; PART B `public.events_within_radius(origin_lat,
+origin_lng, radius_miles, window_from, window_to)` as the INVOKER wrapper
+(names load-bearing for PostgREST; `window_*` not `starts_*`, which would
+imply the broken predicate); PART C the 3-argument app definer becomes a
+DELEGATION to the 5-argument one with `-infinity` / `infinity` — the identity
+element for this predicate, not a default — so one body serves both and the
+Curbside guard cannot drift. No DEFAULTS on the 5-arg form, by 0018's
+precedent: a client that forgets a bound gets PGRST202, not an unbounded feed
+that includes ended events. **Grant surface: two new objects, four grants** —
+`revoke all from public` then `grant execute to anon, authenticated` on each
+5-argument function (anon REQUIRED; the wrapper is INVOKER). The 3-argument
+pair's ACL preserved by `create or replace`, no defensive re-grant written so
+the diff could answer whether it survived. Ends with `notify pgrst, 'reload
+schema'`, LOAD-BEARING: once the client's ENDED filter came out, a stale cache
+SHOWS ended events. Post-arc diff against
+`supabase/audits/baselines/2026-09-09-pre-date-bounds.md` (`b9f5dfa`):
+Section 4 41 → 43, the two new functions, `postgres, anon, authenticated` and
+no PUBLIC on each; the 3-argument pair neither removed nor changed (the old
+public wrapper keeps its 0005 `PUBLIC:EXECUTE`, the new one does not —
+deliberate); Sections 1/2/3/5/6/7/8 identical, Section 8 meaningfully unchanged
+for the first time under the fixed audit. Post-arc
+`2026-09-09-post-date-bounds.md`. **Suite** `scripts/qa-0031-date-bounds.sql`:
+Section 1 11/11, Section 3 16/16, 3k/3l the 3-arg and unbounded 5-arg forms
+returning the SAME SET (19 rows, zero symmetric difference), 3m 19 unbounded
+narrowing to 5 windowed, Section 4 both signatures resolving over PostgREST.
+Tracked, not built: `app.event_end_instant(starts_at, ends_at)` — 0031's
+inlined grace is the SIXTH SQL occurrence, and the extraction only pays if
+`curbside_expired` calls it too, which the fence forbade. Client moved to five
+arguments in `017c9c5` (2026-09-11), which also removed `(tabs)/index.tsx`'s
+client `hasEnded` filter.
+0032 drop the 3-argument `events_within_radius` pair (**APPLIED 2026-09-16**;
+committed `f8b72ad` 2026-09-17). **Arc C's closing step. Drops two functions
+and creates nothing:** `public.events_within_radius(double precision ×3)` then
+`app.events_within_radius(double precision ×3)` — wrapper first, caller before
+callee, the reverse of 0031's create order. **The engine does not hold that
+order**: both bodies are `as $$ … $$` string bodies, so there is no `pg_depend`
+edge; nothing could block the drop (no CASCADE) and nothing enforces the
+sequence, which matters the day someone runs the two statements separately.
+No `IF EXISTS`, deliberately — an already-missing object means history and
+database disagree, and that should fail loudly. **Call-site census BY ARGUMENT
+SET, not by name**, because PostgREST resolves an RPC by the exact set of
+argument names in the body, so the question is "does anything send three
+names": PostgREST call sites 2, both sending FIVE (`(tabs)/index.tsx`,
+`components/ExploreSearch.tsx` — re-verified for this entry at :441 and :424);
+direct SQL 3-argument calls 15, all in the historical suites qa-0019,
+qa-0028-0029, qa-0030 and qa-0031, each now carrying a banner naming 0032 and
+stating those calls are retired, not broken (banners re-verified present);
+views, policies or bodies depending on either object, 0. Nothing ported —
+0031 PART C had already made the 3-arg definer a delegation, so this removes a
+wrapper around a wrapper; every filter lives in the 5-argument body. **Grant
+surface: nothing added, eight ACL entries removed with their objects, one of
+them the point** — `public.events_within_radius(3)`'s `PUBLIC:EXECUTE`, minted
+implicitly by 0005 and preserved through 0009/0020/0028's `create or replace`,
+was the ONLY PUBLIC execute on any `events_within_radius`; 0031 had revoked
+PUBLIC from both 5-arg functions at creation. PUBLIC loses its last execute on
+the feed RPC; anon and authenticated lose nothing. Read the diff with that in
+hand or the removed grant looks like an incident. Ends with `notify pgrst,
+'reload schema'`, LOAD-BEARING: without it PostgREST keeps advertising a
+signature that no longer exists. Post-arc diff against
+`supabase/audits/baselines/2026-09-15-pre-drop-3arg.md`, confirmed 2026-09-17
+(`2026-09-17-post-drop-3arg.md`): Section 4 42 → 40 data rows, the two
+functions and nothing else; Sections 1–3 and 5–8 identical. **Suite 23/23**,
+`scripts/qa-0032-drop-3arg.sql` — absence via `pg_proc` counts and
+`to_regprocedure` (never `has_function_privilege` on a dropped signature,
+which raises and takes the grid down), survivors' exact grantee set vs the
+baseline, both roles through the 5-arg path plus 42883 on both 3-arg forms,
+and the PostgREST 404 PGRST202 probe that proves the notify took.
 
 **Auth backend configured (2026-07-09, dashboard only — no app code):**
 email confirmations ON; Google OAuth provider ENABLED (GCP web client,
@@ -1957,8 +2161,32 @@ cold-start empty state at 2 while it was already in flight.*
       control — one control, two callers, in that order. Privacy boundary: the
       location lock, AMENDED 2026-08-21 (typed vs sensed). Tracker carries the
       2a remainder and 2b.
-   4. **Date picker** on Explore.
-   5. **Timeline** view.
+   4. ~~Date picker~~ **✅ DONE 2026-09-17, `f204f32`** — Arc D, UI only,
+      `components/DateControl.tsx` on its own line under LocationControl.
+      Rulings locked, detail in **NAVIGATION & ENGAGEMENT SURFACES → EXPLORE
+      DATE WINDOW (LOCKED 2026-09-17)**: `min` is today, past dates are
+      unselectable on Explore; a picked start of TODAY keeps the `now` floor,
+      which RETIRED the "a picked start always means local midnight" clause
+      because the two rules collided precisely on today and midnight would
+      resurrect this morning's ended events; session-only, not persisted — a
+      radius is a preference, a date range is a query; NO presets, and if they
+      ever ship they DERIVE from `SavedBucket` in `lib/eventTime.ts`, never
+      from fresh definitions in the header; the empty state went from two
+      cells to four, C and D suppress the radius widen (Entry 7's ruling
+      extended to a second cause) and D clears pills and dates in one tap.
+      `docs/ACCESSIBILITY.md` Entry 8. Two things it could not verify from
+      live data and one prerequisite it surfaced are in the tracker under
+      EXPLORE FILTERING.
+   5. **Timeline** view — **NEXT.** Two things already agreed and owed when it
+      ships: (a) a user-chosen sort is not algorithmic re-ranking, but Timeline
+      is the FIRST surface in the app that orders by anything other than
+      distance, and that fact gets recorded here, in this document, when it
+      lands; (b) its verification PREREQUISITE — the dev database holds NO
+      future-dated events (probed 2026-09-17: 0 rows in the next 200 days at
+      100 mi), and a surface that orders by `starts_at ASC` cannot be verified
+      against an empty set. A future-dated fixture reseed comes first; the
+      cheap path is re-dating existing fixtures, per the tracker's CURBSIDE
+      FIXTURES procedure.
    6. **Map — ITS OWN ARC.** Needs a mapping dependency and a provider decision;
       does not ride along with the rest.
 2. **Interests persistence** — the "Interests & blocks" screen is a "Coming
@@ -2031,7 +2259,7 @@ real paths.
 | `apps/mobile/src/components/` | `EventStub`, `EventDetailView`, `SiteMap`, `MarkdownText`, `pickers`, `SparkedLogo` |
 | `apps/mobile/src/lib/` | `auth`, `supabase`, `engagement`, `workspace`, `geocode`, `eventTime`, `moderation` |
 | `apps/mobile/src/theme/` | `colors.ts` (the `Palette` token system), `categoryColors.ts` (lane resolver), `spacing`, `typography` |
-| `supabase/migrations/` | `0001`–`0029`, applied in order |
+| `supabase/migrations/` | `0001`–`0032`, applied in order |
 | `supabase/audits/` | `privilege_audit.sql` + dated `baselines/` |
 | `scripts/` | `qa-*.sql` behavioral suites, one per arc |
 | `docs/` | `SCHEMA_PLAN.md`, `BUILD_PLAN.md`, `ACCESSIBILITY.md` |
