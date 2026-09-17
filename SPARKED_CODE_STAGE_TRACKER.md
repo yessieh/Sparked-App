@@ -1789,6 +1789,7 @@ migration lands between, the NAME is the anchor, not the number.
       **What this costs:** that file is usable as a diff reference for sections
       1-5 and 8, and is unreliable for sections 6 and 7 and for the one
       `workspaces.id` row. Any future diff against it must know that.
+      **Baseline comparison procedure and the data-row counting convention now live in `supabase/audits/baselines/README.md`** (added 2026-09-17); this item stays the record of the defect itself.
 
 - [x] **Migrations apply FROM FILES via the CLI — never pasted.** The repo's
       `supabase/migrations/` is the source of truth; the remote's
