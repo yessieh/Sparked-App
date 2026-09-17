@@ -38,6 +38,7 @@ import {
 } from 'react-native';
 
 import { GradientButton, SecondaryButton } from '../../components/AuthControls';
+import DateControl, { formatWindowLabel } from '../../components/DateControl';
 import EmptyState from '../../components/EmptyState';
 import EventStub, { type FeedEvent } from '../../components/EventStub';
 import ExploreSearch, { SearchTrigger } from '../../components/ExploreSearch';
@@ -90,11 +91,27 @@ const CURBSIDE = 'curbside';
  * to it, which is why the rule is restated here rather than only in a doc.
  *
  * SO THE DEFAULT IS NOT A DATE RANGE AT ALL. It is "from now through the end
- * of tomorrow". An explicitly PICKED start date is different and means local
- * midnight of that date — someone asking for a past Saturday means the whole
- * Saturday, not Saturday-from-this-hour. That asymmetry is deliberate: the
- * default answers "what is on from now", a chosen range answers "what is on
- * during these days".
+ * of tomorrow". An explicitly PICKED start date means local midnight of that
+ * date — EXCEPT today, which keeps the `now` floor. That exception is where a
+ * ruling was retired, and the retirement is on the record here:
+ *
+ * The clause that stood here said a picked start date ALWAYS meant local
+ * midnight, and justified it with "someone asking for a past Saturday means
+ * the whole Saturday, not Saturday-from-this-hour". The two rules collided
+ * precisely on today: a midnight floor on a picked "today" resurrects this
+ * morning's ended events, which is the exact regression the `now` default
+ * above was written to prevent — re-entered through the front door rather than
+ * the side. So today keeps `now` even when it is chosen deliberately.
+ *
+ * And the past-Saturday case that justified the original clause NO LONGER
+ * EXISTS. Past dates were made unselectable in the picker (`min` is today on
+ * both fields, components/DateControl.tsx), and that was done BECAUSE the
+ * conditional floor otherwise kept alive a rule nothing in the app would ever
+ * exercise. Explore is a discovery surface; past events are reachable through
+ * Saved and Workspace, which have their own Past splits for exactly that.
+ * What remains of the asymmetry: the default answers "what is on from now", a
+ * chosen range answers "what is on during these days" — from now if those
+ * days start today, from midnight if they start later.
  * ==========================================================================
  *
  * THE CEILING is the start of the day after tomorrow MINUS ONE MILLISECOND.
@@ -138,6 +155,63 @@ function describeSelection(labels: string[]): string {
   if (labels.length === 1) return `Nothing tagged ${labels[0]} right now`;
   if (labels.length === 2) return `Nothing tagged ${labels[0]} or ${labels[1]} right now`;
   return 'Nothing matches those filters right now';
+}
+
+/** How the empty state names a PICKED window. `windowLabel` is the short range
+ *  ("Sep 20–22") from formatWindowLabel; `pillsLit` adds the filter clause. */
+function describeWindow(windowLabel: string, pillsLit: boolean): string {
+  return pillsLit
+    ? `Nothing on ${windowLabel} matches your filters`
+    : `Nothing on ${windowLabel}`;
+}
+
+/**
+ * The empty state's headline and body across its FOUR cells, so the JSX below
+ * is one element with props rather than a ternary four deep.
+ *
+ *   A. no pills, default window — the genuine empty; widen is offered elsewhere.
+ *   B. pills, default window    — the filter emptied it; the remedy is a clear.
+ *   C. no pills, picked window  — the dates emptied it; the remedy is a reset.
+ *   D. pills AND picked window  — either could have; one tap removes both.
+ *
+ * The status line's "of m" and the pill headlines keep their existing
+ * conditions; only C and D are new.
+ */
+function emptyCopy(o: {
+  filteredEmpty: boolean;
+  pillsLit: boolean;
+  windowNarrow: boolean;
+  windowLabel: string;
+  selectedLabels: string[];
+  radius: number;
+  canWiden: boolean;
+}): { headline: string; body: string } {
+  if (o.windowNarrow) {
+    return {
+      headline: describeWindow(o.windowLabel, o.pillsLit),
+      body: o.pillsLit
+        ? `Everything else within ${o.radius} mi is still here — both the dates and the filters are narrowing this.`
+        : `Everything else within ${o.radius} mi is still here — the dates are what's narrowing this.`,
+    };
+  }
+  if (o.filteredEmpty) {
+    return {
+      headline: describeSelection(o.selectedLabels),
+      body: `Everything else within ${o.radius} mi is still here — clearing your filters brings it back.`,
+    };
+  }
+  return {
+    headline: 'Nothing nearby right now',
+    // The second sentence is dropped at MAX_RADIUS: there is no further
+    // control behind it, and an instruction with nothing to act on is a dead
+    // end. The condition used to be "has already widened once"; with a
+    // persisted, user-set radius that test stopped meaning anything (anyone
+    // sitting at 50 would have lost the sentence permanently), so it now
+    // tracks whether widening is still POSSIBLE.
+    body: o.canWiden
+      ? "Sparked only shows what's actually within your radius — no filler from other cities. Try looking a little further out."
+      : "Sparked only shows what's actually within your radius — no filler from other cities.",
+  };
 }
 
 export default function Explore() {
@@ -208,11 +282,14 @@ export default function Explore() {
    * whose floor crept forward under a paused thumb would refetch the feed for
    * no reason the user can see.
    */
-  // NO SETTER YET, deliberately — the picker UI is a later arc and this commit
-  // is fenced out of it. Destructured without one rather than carrying a dead
-  // `setDateWindow`: an unused setter reads as an oversight, and the next
-  // person would either delete it or wire it somewhere it does not belong.
-  const [dateWindow] = useState(defaultWindow);
+  // TWO PIECES OF STATE THAT MUST MOVE TOGETHER. `dateWindow` is the bounds the
+  // RPC receives; `windowIsDefault` is whether they came from defaultWindow()
+  // or from the picker. Both are written ONLY inside onWindowChange and
+  // onWindowReset below, and nowhere else, so they cannot drift apart — a
+  // window that reads as default while carrying picked bounds would show the
+  // wrong empty state and hide the Reset segment.
+  const [dateWindow, setDateWindow] = useState(defaultWindow);
+  const [windowIsDefault, setWindowIsDefault] = useState(true);
   // PERSISTED, reversing the 1b ruling that lived here.
   //
   // That comment argued radius must be session-only because "a stored 100mi
@@ -292,6 +369,36 @@ export default function Explore() {
    */
   const filteredEmpty =
     events !== null && events.length > 0 && (visibleEvents?.length ?? 0) === 0;
+
+  const pillsLit = selected.length > 0;
+  const windowNarrow = !windowIsDefault;
+  /** The short range the status line and the empty state name — "Sep 20–22". */
+  const windowLabel = useMemo(() => formatWindowLabel(dateWindow), [dateWindow]);
+
+  /**
+   * The filter-status line. "of ${m}" appears ONLY when pills are lit: `events`
+   * is the server response, already windowed, and `visibleEvents` is that
+   * filtered by pills. With no pills n === m and "Showing 4 of 4" reads as a
+   * broken partition.
+   */
+  const statusVisible = (pillsLit || windowNarrow) && visibleEvents !== null;
+  const statusText = (() => {
+    if (!visibleEvents) return '';
+    const n = visibleEvents.length;
+    const m = events?.length ?? 0;
+    const pills = selectedLabels.join(', ');
+    if (pillsLit && windowNarrow) {
+      return n === 0
+        ? `No events on ${windowLabel} match ${pills}`
+        : `Showing ${n} of ${m} · ${pills} · ${windowLabel}`;
+    }
+    if (pillsLit) {
+      return n === 0 ? `No events match ${pills}` : `Showing ${n} of ${m} · ${pills}`;
+    }
+    return n === 0 ? `No events on ${windowLabel}` : `Showing ${n} · ${windowLabel}`;
+  })();
+
+  const empty = emptyCopy({ filteredEmpty, pillsLit, windowNarrow, windowLabel, selectedLabels, radius, canWiden });
 
   const togglePill = useCallback(
     (id: string) => {
@@ -421,6 +528,38 @@ export default function Explore() {
     setRadius(widenTargetFor(radius));
   }, [radius, setRadius]);
 
+  // THE setEvents(null) IS LOAD-BEARING — the third instance of the move
+  // onRefresh and onWiden make above, for the reason both state: the live
+  // region only announces content that changes AFTER it is already in the tree
+  // (docs/ACCESSIBILITY.md Entry 2). Without it a window change goes cards →
+  // cards, and a feed that empties under the new window announces nothing.
+  //
+  // NO NEW EFFECT. `dateWindow` is already in useFocusEffect's dependency list
+  // and in onRefresh's; setting it here refetches through that one path.
+  const onWindowChange = useCallback((next: { from: string; to: string }) => {
+    setEvents(null);
+    setDateWindow(next);
+    setWindowIsDefault(false);
+  }, []);
+
+  // Recomputes defaultWindow() FRESH rather than restoring the mount-time
+  // value, so the floor is `now` at reset time. This does not conflict with the
+  // "computed once at mount" note on the state: that forbids re-deriving on
+  // every RENDER, which would refetch under a paused thumb. A reset is an
+  // explicit user action, and one fresh derivation per tap is what it means.
+  const onWindowReset = useCallback(() => {
+    setEvents(null);
+    setDateWindow(defaultWindow());
+    setWindowIsDefault(true);
+  }, []);
+
+  /** Cell D's one action: releases the pills AND the window in a single tap.
+   *  Same `curbsideDecided` rule as clearFilters — the opinion outlives it. */
+  const showEverythingNearby = useCallback(() => {
+    setSelected([]);
+    onWindowReset();
+  }, [onWindowReset]);
+
   // Progressive gating: anonymous engagement taps invite an account; the
   // auth screen is a modal, so dismissing/finishing lands right back here.
   const gated = useCallback(
@@ -498,6 +637,12 @@ export default function Explore() {
             halves are controls now, and the component owns the live region
             that announces a change to either. */}
         <LocationControl />
+        <DateControl
+          value={dateWindow}
+          isDefault={windowIsDefault}
+          onChange={onWindowChange}
+          onReset={onWindowReset}
+        />
       </View>
 
       {/* ===== FILTER STATUS — THE LIVE REGION FOR PILL CHANGES ==============
@@ -512,13 +657,19 @@ export default function Explore() {
           The row itself is gated on load (below), so a region inside it would
           be conditional for a second reason. Hence: here, one level up, in a
           header that always renders. Only the children swap; the absence is
-          styled with padding rather than unmounted. ===== */}
+          styled with padding rather than unmounted.
+
+          THE CHILDREN ARE GATED ON PILLS OR A PICKED WINDOW, not pills alone.
+          The node was already unconditional (Entry 7's ruling, untouched), but
+          its children rendered only for pills, so a window change was a SILENT
+          feed change. Sixth instance of the Entry 5 shape, and the one where
+          the node was right and the gate on its children was the defect. ===== */}
       <View
         role="status"
         aria-live="polite"
-        style={{ paddingBottom: selected.length > 0 ? 2 : 0 }}
+        style={{ paddingBottom: statusVisible ? 2 : 0 }}
       >
-        {selected.length > 0 && visibleEvents ? (
+        {statusVisible ? (
           <Text
             style={{
               fontFamily: theme.fonts.bodyMedium,
@@ -526,9 +677,7 @@ export default function Explore() {
               color: theme.colors.textMuted, // 4.57:1 on the page background
             }}
           >
-            {visibleEvents.length === 0
-              ? `No events match ${selectedLabels.join(', ')}`
-              : `Showing ${visibleEvents.length} of ${events?.length ?? 0} · ${selectedLabels.join(', ')}`}
+            {statusText}
           </Text>
         ) : null}
       </View>
@@ -600,38 +749,40 @@ export default function Explore() {
               </Text>
             </View>
           ) : (
-            // ONE EmptyState ELEMENT, TWO BRANCHES — not two elements. Swapping
-            // in a different component for filtered-empty would swap the live
-            // region node with it, and a region that arrives already holding
-            // its text announces nothing (Entry 2). Same element, same
-            // position, only props change, so the node survives the branch.
+            // ONE EmptyState ELEMENT, FOUR CELLS — not four elements. Swapping
+            // in a different component for any cell would swap the live region
+            // node with it, and a region that arrives already holding its text
+            // announces nothing (Entry 2). Same element, same position, only
+            // props change, so the node survives every branch. The copy is
+            // composed in emptyCopy() above; the cells are named there.
             //
             // WIDENING IS NOT OFFERED WHEN A FILTER IS WHAT EMPTIED THE FEED.
             // That was the whole hazard here: "Widen to 50 miles" as the remedy
             // for a Music filter is an action that cannot work, and a user who
             // takes it ends up further from what they wanted with more distance
             // between them and it.
+            //
+            // THE SAME RULING, EXTENDED TO A SECOND CAUSE, NOT RE-DERIVED: a
+            // picked date window is another thing that can empty the feed
+            // without distance being the reason, so cells C and D suppress the
+            // widen too. D offers ONE button that clears pills and dates
+            // together, because in D both remedies would work and the user has
+            // no way to know which constraint is responsible — making them
+            // guess hands them an action that may not help, the same failure
+            // as offering a widen that cannot.
             <EmptyState
               pending={events === null}
-              headline={
-                filteredEmpty ? describeSelection(selectedLabels) : 'Nothing nearby right now'
-              }
-              // The non-filtered second sentence is dropped at MAX_RADIUS:
-              // there is no further control behind it, and an instruction with
-              // nothing to act on is a dead end. The condition used to be "has
-              // already widened once"; with a persisted, user-set radius that
-              // test stopped meaning anything (anyone sitting at 50 would have
-              // lost the sentence permanently), so it now tracks whether
-              // widening is still POSSIBLE.
-              body={
-                filteredEmpty
-                  ? `Everything else within ${radius} mi is still here — clearing your filters brings it back.`
-                  : canWiden
-                    ? "Sparked only shows what's actually within your radius — no filler from other cities. Try looking a little further out."
-                    : "Sparked only shows what's actually within your radius — no filler from other cities."
-              }
+              headline={empty.headline}
+              body={empty.body}
             >
-              {filteredEmpty ? (
+              {windowNarrow ? (
+                <GradientButton
+                  onPress={pillsLit ? showEverythingNearby : onWindowReset}
+                  style={{ minHeight: 44, alignSelf: 'stretch', maxWidth: 300 }}
+                >
+                  {pillsLit ? 'Show everything nearby' : 'Reset dates'}
+                </GradientButton>
+              ) : filteredEmpty ? (
                 <GradientButton
                   onPress={clearFilters}
                   style={{ minHeight: 44, alignSelf: 'stretch', maxWidth: 300 }}

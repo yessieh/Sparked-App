@@ -1895,3 +1895,283 @@ recorded in Entry 6, and **none of them are in `lib/eventFilters.ts`,
 warnings**, the independent check that no `accessibility*` spelling was
 introduced. **No database row was read or written by this arc**, and no source
 file was edited to produce a measurement.
+
+---
+
+# Entry 8 — 2026-09-17 — Explore header date range picker (Arc D)
+
+**The arc:** a "Now through Tomorrow" control under LocationControl, both ends
+editable, session-only, emitting instants to the 5-argument feed RPC that
+already existed (0031). New: `components/DateControl.tsx`. Modified:
+`(tabs)/index.tsx`. **No SQL, no schema, no migration, no RPC change** — the
+privilege-audit gate is N/A under CLAUDE.md's carve-out, stated rather than
+omitted, and the grant surface is provably untouched: nothing under `supabase/`
+was written, no `GRANT` / `REVOKE` / `CREATE` / `ALTER` was executed, and the
+RPC is called with the same five arguments both call sites already sent
+(017c9c5). `components/pickers.tsx` and `components/ExploreSearch.tsx` were
+**not edited** — the first by fence, the second because it needed nothing (see
+below).
+
+## THE HEADLINE: the sixth instance of the live-region shape, and the one where the node was right and the gate on its children was the defect
+
+Entry 5's rule is *unconditional node, children swap*. Entry 7 found its
+premise — a node must exist to change — and moved the filter announcement into
+the always-rendered header. **This arc found the next layer down: the node was
+unconditional, but its CHILDREN were gated on `selected.length > 0`.** A window
+change under no pills went cards → cards with the region's children `null`
+throughout, so a feed that emptied under the new window announced nothing at
+all. The region existed; it was simply never asked to say anything.
+
+The fix is the condition, not the node: `(pillsLit || windowNarrow) &&
+visibleEvents`. The node itself is untouched — Entry 7's ruling stands. And
+`onWindowChange` / `onWindowReset` clear `events` to `null` FIRST, the third
+instance of the move `onRefresh` and `onWiden` make, so the message that lands
+is a change to a node already in the tree (Entry 2).
+
+**The corollary this adds to Entry 7's:** *after checking that the subtree is
+unconditional, check that the CONDITION on the children names every cause of
+change.* A region gated on one input is silent for every other input that
+moves the same content.
+
+### Verified by node identity across ELEVEN transitions
+
+Three region nodes were captured on load — LocationControl's (`[0]`),
+DateControl's (`[1]`), the filter-status region (`[2]`) — and compared after
+every change. `EmptyState`'s (`[3]`) was captured when it first appeared.
+
+| Transition | Date region | Status region | EmptyState | Same nodes |
+| --- | --- | --- | --- | --- |
+| Loaded, default window | `Now through Tomorrow` | *(empty)* | `Nothing nearby right now` | — captured |
+| Start → Sep 20 | `Sep 20 through Sep 20 · Reset` | `No events on Sep 20` | `Nothing on Sep 20` | **true / true** |
+| End → Sep 22 | `Sep 20 through Sep 22 · Reset` | `No events on Sep 20–22` | `Nothing on Sep 20–22` | **true / true** |
+| Start → Sep 17 (today) | `Sep 17 through Sep 22 · Reset` | `No events on Sep 17–22` | — | **true / true** |
+| Header **Reset** | `Now through Tomorrow` | *(empty)* | `Nothing nearby right now` | **true / true** |
+| Window → Oct 2–6 *(stub, 5 rows)* | `Oct 2 through Oct 6 · Reset` | `Showing 5 · Oct 2–6` | *(unmounted — cards)* | **true / true** |
+| Tap **Music** *(auto-joins Curbside)* | unchanged | `Showing 2 of 5 · Curbside, Music · Oct 2–6` | — | **true / true** |
+| End → Oct 2 | `Oct 2 through Oct 2 · Reset` | `Showing 1 of 1 · Curbside, Music · Oct 2` | — | **true / true** |
+| Start → Oct 5 *(Music lit, nothing matches)* | `Oct 5 through Oct 5 · Reset` | `No events on Oct 5 match Music` | `Nothing on Oct 5 matches your filters` | **true / true** — captured |
+| **Show everything nearby** | `Now through Tomorrow` | *(empty)* | `Nothing nearby right now` | **true / true / true** |
+| Music lit, header **Reset** *(stub row in default window)* | `Now through Tomorrow` | `No events match Music` | `Nothing tagged Music right now` | **true / true** |
+
+`[role="status"]` count on Explore: **3** with cards present (Location, Date,
+filter-status), **4** when the list is empty (`EmptyState`'s joins). One more
+than Entry 7 on both counts — the new control's region.
+
+**"of m" appears only when pills are lit**, read off the wire: `Showing 5 ·
+Oct 2–6` under no pills, `Showing 2 of 5 · …` under Music. With no pills
+`n === m` and "Showing 5 of 5" would read as a broken partition.
+
+## THE EMPTY STATE — FOUR CELLS, ONE ELEMENT, ALL FOUR DRIVEN
+
+Entry 7's *one element, two branches* constraint, taken to four. Same
+`EmptyState`, same position, props only; the copy is composed in `emptyCopy()`
+rather than a four-deep ternary. Every cell was rendered and its text read out
+of the region node:
+
+| Cell | Pills | Window | Headline | Body | Remedy offered | Widen? |
+| --- | --- | --- | --- | --- | --- | --- |
+| A | none | default | `Nothing nearby right now` | *(unchanged)* | `Widen to 50 miles` + `Post something yourself` | **yes** |
+| B | Music | default | `Nothing tagged Music right now` | `…clearing your filters brings it back.` | `Clear filters` | no |
+| **C** | none | **Sep 20–22** | **`Nothing on Sep 20–22`** | **`…the dates are what's narrowing this.`** | **`Reset dates`** | **no** |
+| **D** | Music | **Oct 5** | **`Nothing on Oct 5 matches your filters`** | **`…both the dates and the filters are narrowing this.`** | **`Show everything nearby`** | **no** |
+
+**Widening is suppressed in C and D** — Entry 7's ruling (a widen cannot fix a
+filter) extended to a second cause, not re-derived. **D offers ONE button, not
+two:** with both constraints active the user cannot tell which emptied the
+feed, and making them guess hands them an action that may not help — the same
+failure as offering a widen that cannot. One tap clears pills AND resets the
+window; verified D → A on the **same EmptyState node**, `aria-pressed="true"`
+count 0 afterwards, RPC re-sent with a fresh `now` floor.
+
+**Cell-selection note, stated as an assumption rather than buried:** the brief
+defined `filteredEmpty` for the new cells as "pills lit and nothing visible".
+For C and D that is `selected.length > 0` — pills lit — rather than the
+existing `events.length > 0 && visible.length === 0`, because a picked window
+that returns zero rows from the server has `events.length === 0`, and under the
+old definition D would collapse into C and offer `Reset dates` while a pill
+still stood in the way. A and B keep the existing definition untouched.
+
+## THE WINDOW ON THE WIRE — instants, local, half-open, and today keeps `now`
+
+Read from the request body of every `events_within_radius` call, via a fetch
+logger installed in the page, not inferred from the code:
+
+| Pick | `window_from` | `window_to` |
+| --- | --- | --- |
+| Start Sep 20 | `2026-09-20T07:00:00.000Z` — Sep 20 00:00 MST | `2026-09-21T06:59:59.999Z` — Sep 20 23:59:59.999 MST |
+| End Sep 22 | unchanged | `2026-09-23T06:59:59.999Z` |
+| **Start Sep 17 (today)** | **`2026-09-17T22:16:58.830Z`** — the click instant, NOT `07:00:00Z` | unchanged |
+| Header Reset | `2026-09-17T22:17:00.035Z` — fresh `now` at reset time, not the mount value | `2026-09-19T06:59:59.999Z` |
+
+The today row is the ruling `index.tsx`'s `defaultWindow()` comment retires on
+the record: a picked start of today keeps the `now` floor rather than local
+midnight, because midnight would resurrect this morning's ended events through
+the front door. **Past dates are unselectable** — read from the DOM, not the
+prop: with the start calendar open on September, `Sep 1` through `Sep 16`
+carry `aria-disabled="true"` and `Sep 17` is the first enabled cell. On the end
+calendar with a Sep 20 start, `Sep 19` is disabled and `Sep 20` enabled —
+`min` is the start, so the window cannot invert. A start moved past the end
+drags the end with it (Oct 5 start under an Oct 2 end → `Oct 5 through Oct 5`).
+
+## Touch targets — 2.5.5 on BOTH axes, from `getBoundingClientRect()`
+
+Entry 3's 44 × 29 is why `minWidth` is set alongside `minHeight` on every
+segment — `Now` is three characters and fails width without it.
+
+| Control | @ pane width | @ 390 |
+| --- | --- | --- |
+| `Now` / `Sep 20` / `Oct 2` segment | **44 × 44** | **44 × 44** |
+| `Tomorrow` segment | 72.8 × 44 | — |
+| `Sep 22` / `Oct 6` segment | 44 × 44 | **44 × 44** |
+| `Reset` segment | **44 × 44** | **44 × 44** |
+| Panel `Cancel` | 75.2 × 44 | — |
+| `Show everything nearby` (cell D) | 300 × 51 | — |
+| DateField shell *(pickers.tsx, as-is)* | 490 × 56 | — |
+
+Every Pressable this arc authored clears 44 on both axes. **The DateField's
+own chevrons and day cells are Entry 5's three ruled-not-fixed failures**
+(24 × 26, 77 × 30) and are consumed here unchanged — the fence on
+`pickers.tsx` was absolute for this arc, and the fix is the one Entry 5 already
+names (`minWidth` + `minHeight` + centring, NOT `hitSlop`).
+
+## Contrast — measured off the painted element, composited to the first opaque ancestor
+
+The walker composites every translucent layer from the root down. **A first
+version walked only two ancestors and reported the panel lines against white
+(1.13:1) — a false failure**, corrected before any number was recorded; noted
+because the same shortcut will look correct on a page-background element and
+only fail on a card.
+
+| Element | Painted | Surface | Ratio | Held to |
+| --- | --- | --- | --- | --- |
+| Segment value (`ignitionGold`, 14px) | `rgb(247,183,49)` | `#14213D` page | **8.95:1** | 4.5:1 |
+| `through` connective (`textMuted`, 14px) | `rgba(238,240,255,0.5)` | `#14213D` page | **4.57:1** | 4.5:1 |
+| `Reset` segment (`ignitionGold`, 14px) | `rgb(247,183,49)` | `#14213D` page | **8.95:1** | 4.5:1 |
+| **Panel `Cancel`** (`text`, 13px) | `rgb(238,240,255)` | **`rgb(29,42,69)` card** | **12.62:1** | 4.5:1 |
+| DateField value (`text`, 14px) | `rgb(238,240,255)` | `rgb(38,51,76)` chip-on-card | **11.17:1** | 4.5:1 |
+| Cell C/D headline (`text`, 15px) | `rgb(238,240,255)` | `#14213D` page | **14.11:1** | 4.5:1 |
+| Cell C/D body (`textMuted`, 12.5px) | `rgba(238,240,255,0.5)` | `#14213D` page | **4.57:1** | 4.5:1 |
+| **DateField eyebrow `FROM`** (`textFaint`, **9px**) | `rgba(238,240,255,0.35)` | `rgb(38,51,76)` | **2.74:1 FAILS** | 4.5:1 |
+
+**Every line this arc authors on the card is `colors.text` and measures the
+constraint's own figure, 12.62:1** — the number PlacePanel's comment states,
+reproduced to the hundredth on a second panel.
+
+**THE ONE FAILURE IS INHERITED AND IS NEW TO THIS FILE.** The `FROM` /
+`THROUGH` eyebrow is `FieldShell`'s in `pickers.tsx` — `textFaint` at 9px —
+and Entry 5 measured that component's targets but never this line's contrast.
+2.74:1 is `textFaint` on the chip surface; Entry 2 recorded the same token at
+2.92:1 on the bare page, so it fails everywhere it renders. **The same shell
+renders on the wizard and on Curbside, where the number is COMPUTED, not
+measured** — both are behind auth. Not fixed here: the file was fenced, three
+other screens consume it, and the remedy (lift the eyebrow to `textMuted` or
+`text`, or make it decorative and put the name in the `aria-label`, which the
+shell already carries as `From, Sep 17, 2026`) is a `pickers.tsx` change with
+its own pass. **Recorded for a ruling, attributed to Entry 5's component, not
+to this arc.**
+
+## ExploreSearch — verified, not edited
+
+The brief named this a verification target: `ExploreSearch` already took
+`dateWindow` (`:305`) and folded it into `overflowKey` (`:409`). Driven: search
+open, `hike` typed (no in-radius match, so the overflow read fires), then the
+window changed through the header control **with the panel still mounted**.
+The wire showed the overflow RPC (`radius_miles: 37.5`, the cap) re-sent with
+the new bounds, alongside the feed's own re-read at 25, and the panel kept its
+query. **No edit was needed and none was made.**
+
+| | `radius_miles` | `window_from` |
+| --- | --- | --- |
+| Before window change | 37.5 | `2026-09-17T22:20:29.677Z` |
+| After (start → Sep 20) | **37.5** | **`2026-09-20T07:00:00.000Z`** |
+| After (feed) | 25 | `2026-09-20T07:00:00.000Z` |
+
+## The header at 390 — the parked fold question, answered with stub cards
+
+The brief parked "is the first card below the fold at 390 wide" because the
+seeded events had all aged out. With the stub rows below, cards existed:
+
+| @ 390 × 844 | |
+| --- | --- |
+| LocationControl row | top 136, height 44 |
+| **DateControl row** | **top 180, height 44 — ONE line, no wrap** |
+| First card | **top 514, bottom 613** |
+| Fold | 844 — **231px of headroom**, with a 7-pill row above the card |
+| `scrollWidth` | 390 = viewport, no horizontal overflow |
+
+The own-line layout costs 44px of header. The same-line fallback (date
+segments appended to the location sentence) would recover that 44 only if the
+combined sentence still fit one line at 390, which `Sahuarita, AZ · within 25
+mi · Now through Tomorrow` would not — it would wrap and recover nothing.
+
+## What this entry does NOT establish
+
+- **CELLS B AND D, THE NON-EMPTY STATUS STRINGS, AND THE 390 FOLD NUMBER WERE
+  DRIVEN AGAINST A FETCH STUB, NOT THE DATABASE.** Every seeded event has
+  ended, and past dates are unselectable by design, so nothing in the database
+  can populate a pickable window. The RPC was probed directly (**11 rows in
+  the past 120 days, 0 rows in the next 200 days, both at 100 mi**), then
+  `window.fetch` was replaced
+  in the page with a stub returning the 11 real past rows re-dated to Oct 1–12
+  local and filtered by the requested `window_from` / `window_to`, plus one
+  synthetic `food` row inside the default window for cell B. The rows kept
+  their real shape (`categories`, `tier_id`, `distance_miles`), the component
+  ran unmodified, and the stub was removed by reload — but **A and C are the
+  only cells this arc has produced from live data**. The stub does not filter
+  by radius, so the pill row it produced (7 pills) is wider than the live feed
+  would give at 25 mi; the fold number is therefore conservative in the safe
+  direction. **No database row was written.**
+- **The `now`-floor case was verified at the instant level once.** One pick of
+  today produced one `window_from` equal to the click's `Date`. That is the
+  mechanism working; it is not a statement about clock skew or a paused tab.
+- **The `EmptyState` pending phase (spinner) was not observed** across the
+  D → A transition: the stub resolves synchronously enough that the 150ms
+  snapshot already held the resolved text. Node identity across the transition
+  was true, which is the claim that matters; that the spinner painted between
+  is Entry 2's already-established behaviour and was not re-seen here.
+- **The 390 number is a viewport emulation** (`resize_window` 390 × 844,
+  `innerWidth` confirmed 390), not a device, and a real phone's safe-area
+  insets and browser chrome shift it. The human device pass owns the feel.
+- **THIS ARC DOES NOT CLOSE THE WIZARD-PILL CONTRAST ITEM.** It remains open
+  for the reason it has always been open — **the absence of a number, not a
+  suspected failure**. Nothing here rendered the wizard, and the
+  `FieldShell` eyebrow finding above is a different element on the same
+  screen. The tracker's "MEASURE THE WIZARD PILL'S CONTRAST" item stands.
+- **No screenshots.** One rendered on the initial load check; every attempt
+  during the driven pass timed out at 5s (pane not drawing while hidden),
+  consistent with Entries 2–7. Every number above is DOM-read. Visual feel of
+  the sentence and the panel, and the animation-free open/close of the grid,
+  are on the human list.
+- **Nothing about native.** Expo web only. `aria-expanded` on the segments has
+  no native mapping in RN 0.86's `ViewAccessibility` beyond web; on iOS/Android
+  the open panel is carried by its presence alone.
+- **Nothing about light mode**, unreachable for the same structural reason as
+  Entries 1–7. The segment value inherits LocationControl's latent
+  `ignitionGold` light failure (Entry 3, 1.64:1 on `#f4f5f8`) and the
+  connective inherits `lightPalette.textMuted` (3.43:1). Computed, never
+  rendered. Owner: the Appearance arc.
+- **`DateField` was consumed as-is, and it costs a tap.** The field mounts
+  with its calendar closed, so a segment tap opens the panel and a second tap
+  on the shell opens the grid. A `defaultOpen` on `DateField` would remove
+  the second tap; it is a `pickers.tsx` change and was not made.
+- **PRESETS ARE NOT IN THIS ARC, AND THE CONSTRAINT ON THEM IS RECORDED
+  HERE:** if Today / This weekend / Next 7 days ever ship, they MUST derive
+  from `SavedBucket` in `lib/eventTime.ts`, never from fresh date definitions
+  in the header. Two definitions of "weekend" in one app is how a section
+  header and the chip inside it end up disagreeing.
+
+**Baseline:** checked against the running Expo web dev server at
+`localhost:8081` on 2026-09-17, against `main` @ `ff9ce28` plus this arc's
+working tree (`components/DateControl.tsx` new; `(tabs)/index.tsx` modified).
+Driven **signed out**, at the persisted Sahuarita origin, radius 25 throughout
+— `sparked.origin.v1` reads `radius: 25` after the pass, verified. `npx tsc
+--noEmit` exits 0. `npx eslint` on the two source files reports **1 error**,
+`react/no-unescaped-entities` at the `Couldn't load events` line, which is
+**pre-existing** — confirmed by stashing the working tree, re-running against
+`ff9ce28` (same error, line 599), and popping — so this arc adds no lint
+finding; `DateControl.tsx` is clean. Console: **no errors and no rnw
+deprecation warnings** across the whole pass. **No database row was written by
+this arc.** The RPC was READ three times outside the app's own calls, via the
+page's own anon headers, to establish that no future rows exist and to take
+the 11 past rows the stub re-dated. **No source
+file was edited to produce a measurement.**
