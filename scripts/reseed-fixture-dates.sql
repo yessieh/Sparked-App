@@ -48,7 +48,7 @@
 --
 -- `tier_id <> 'curbside'` IS LOAD-BEARING TWICE OVER, and the second reason is
 -- the one that is easy to miss:
---   1. It is what preserves `33333333-0003` — see divergence 1.
+--   1. It is what preserves `33333333-0003` — see THE ONE DIVERGENCE below.
 --   2. It is what keeps this UPDATE from tripping the two Curbside triggers
 --      that fire on UPDATE: `app.enforce_curbside_span` (0016, BEFORE INSERT OR
 --      UPDATE, `new.tier_id = 'curbside'`) and `app.consume_curbside_credit`
@@ -59,36 +59,37 @@
 --      does not lean on that: it never touches a Curbside row at all.
 --
 -- ---------------------------------------------------------------------------
--- TWO DELIBERATE DIVERGENCES FROM seed.sql. A reader comparing this file to
--- the seed will otherwise read both as bugs.
+-- THE ONE DIVERGENCE FROM seed.sql. This file and the seed agree on every
+-- offset for every row it touches — read them file against file, they are the
+-- same numbers. They differ on exactly ONE row, and a reader comparing the two
+-- will otherwise read it as a bug:
 --
---   1. `33333333-0003` (Neighborhood Yard Sale — Quail Creek) IS NOT TOUCHED.
---      seed.sql gives it now() + interval '2 days'. It is the CURBSIDE-HISTORY
---      FIXTURE: left ENDED where it started after migration 0030's behavioural
---      pass, it is the row that proves an ended Curbside post leaves the feed,
---      search, the detail page by direct link and the attendee's Saved → Past
---      (SPARKED_STATE.md, Architecture Decision 8, "Curbside history does not
---      survive"; tracker, STANDING PROCEDURES, CURBSIDE FIXTURES). Moving it
---      into the future destroys that proof. It is excluded by
---      `tier_id <> 'curbside'`, and THE EXCLUSION IS THE POINT — not an
---      accident of the predicate. It is also absent from the VALUES list, so
---      it is excluded twice; if either guard is ever loosened the other holds.
+--   `33333333-0003` (Neighborhood Yard Sale — Quail Creek) IS NOT TOUCHED.
+--   seed.sql gives it now() + interval '2 days', AND THAT IS CORRECT FOR A
+--   FRESH DATABASE: a `supabase db reset` should produce a live Curbside post
+--   at 4 mi, and the seed does. It becomes wrong only AFTER migration 0030's
+--   behavioural pass, which moved this row into the past on 2026-09-02 and
+--   left it there deliberately — it is the CURBSIDE-HISTORY FIXTURE, the row
+--   that proves an ended Curbside post leaves the feed, search, the detail
+--   page by direct link and the attendee's Saved → Past (SPARKED_STATE.md,
+--   Architecture Decision 8, "Curbside history does not survive"; tracker,
+--   STANDING PROCEDURES, CURBSIDE FIXTURES). Re-applying its seed offset would
+--   destroy that proof. That asymmetry — right for a fresh database, wrong for
+--   a proven one — is the whole reason the exclusion lives HERE and not in
+--   seed.sql: the seed describes a database nobody has tested yet; this script
+--   runs against one that carries evidence.
+--   It is excluded by `tier_id <> 'curbside'`, and THE EXCLUSION IS THE POINT,
+--   not an accident of the predicate. It is also absent from the VALUES list,
+--   so it is excluded twice; if either guard is ever loosened the other holds.
 --
---   2. `33333333-0001` (Sahuarita Farmers Market) IS SET TO now() - interval
---      '2 days' (ending now() - interval '2 days' + interval '3 hours'), NOT its
---      seed offset of +6 hours. REASON: Saved → Past and Workspace → Past are
---      previously-verified surfaces whose only non-Curbside fixtures are ENDED
---      events. Re-anchoring all nine non-Curbside rows forward would leave zero
---      ended non-Curbside events and empty two surfaces as a side effect of
---      fixing a third. One row held back in the past preserves both. It is the
---      nearest fixture (0.37 mi), which is deliberate: it costs the LIVE feed
---      nothing it needs (see the Timeline note), and a Past row that sits at
---      the top of a distance-sorted Workspace list is the easiest one to find.
---      The 3-hour end matches the grace window every ENDED test uses, so the
---      row reads ENDED to every surface without relying on `ends_at` being
---      null.
+-- WHAT USED TO BE DIVERGENCES AND IS NOW IN THE SEED, so nobody hunts for them:
+--   * `33333333-0001` at now() - 2 days (ending +3 hours from that). Folded
+--     into seed.sql on 2026-09-17 with its reason beside it — Saved → Past and
+--     Workspace → Past have no fixture without an ended non-Curbside event.
+--   * `33333333-0004` / `-0006` swapped (+5 days / +3 days). Folded into
+--     seed.sql the same day — see THE TIMELINE REQUIREMENT below.
 --
--- EVERYTHING ELSE gets its seed.sql offset re-applied verbatim, including:
+-- ROWS WORTH NAMING because their offsets look like mistakes and are not:
 --   * `33333333-0007` (Downtown Food Truck Round-Up), the LIVE-NOW fixture:
 --     now() - 1 hour → now() + 2 hours. Re-anchoring PRESERVES it as live. Its
 --     negative start is the feature; do not "fix" it.
@@ -101,40 +102,48 @@
 --     event that is also ended proves nothing about the radius filter.
 --
 -- ---------------------------------------------------------------------------
--- THE TIMELINE REQUIREMENT — why the offsets were checked and NOT changed.
+-- THE TIMELINE REQUIREMENT — why 0004 and 0006 swapped offsets.
 --
 -- Timeline's whole claim is that it orders by starts_at ASC instead of by
 -- distance. If the soonest event were also the nearest, a Timeline that
 -- silently kept distance ordering would produce correct-looking output and
 -- verify itself for the wrong reason. So the fixture set must make TIME ORDER
--- AND DISTANCE ORDER DISAGREE.
+-- AND DISTANCE ORDER DISAGREE — and disagree INSIDE the upcoming rows, not
+-- only at the live one.
 --
--- They do, measured (haversine from the Sahuarita origin 31.9576, -110.9556;
--- agrees with seed.sql's own distance comments). In-radius, published,
--- non-Curbside, after this script:
+-- AS SEEDED BEFORE 2026-09-17 they disagreed on the live row alone. The
+-- strictly-upcoming in-radius set (0002 → 0006) was MONOTONIC — farther was
+-- later at every step — so the only thing separating time order from distance
+-- order was 0007, which starts an hour ago. A Timeline that groups live events
+-- into their own band (the Saved tab's Tonight / This Weekend / Coming Up shape
+-- makes that plausible) would leave a monotonic remainder, and a
+-- distance-ordered implementation would render it correctly and pass.
+--
+-- THE SWAP: 0004 (7.48 mi) moves from +3 days to +5 days; 0006 (16.63 mi)
+-- moves from +5 days to +3 days. Each keeps its 3-hour span. The farther event
+-- is now sooner INSIDE the upcoming set. Measured (haversine from the
+-- Sahuarita origin 31.9576, -110.9556; agrees with seed.sql's own distance
+-- comments), in-radius, published, non-Curbside, after this script:
 --
 --     id     distance   starts_at        time rank   distance rank
 --     0002    1.20 mi   +1 day 3 hours       2           1
---     0004    7.48 mi   +3 days              3           2
+--     0006   16.63 mi   +3 days              3           4
 --     0005   10.75 mi   +4 days              4           3
---     0006   16.63 mi   +5 days              5           4
+--     0004    7.48 mi   +5 days              5           2
 --     0007   18.34 mi   -1 hour (LIVE)       1           5
 --
--- The nearest (0002) is not the soonest (0007); the soonest is the farthest.
--- A distance-ordered Timeline would put 0007 LAST; a correct one puts it
--- FIRST. Falsifiable. Per the Part 0 brief: they already disagree, so no
--- offset was adjusted and seed.sql's meanings are intact.
+-- Distance order: 0002, 0004, 0005, 0006, 0007.
+-- Time order:     0007, 0002, 0006, 0005, 0004.
+-- Whether or not live is grouped separately, a distance-ordered Timeline
+-- puts 0004 before 0005 before 0006; a correct one reverses all three.
+-- Falsifiable either way. The swap is in seed.sql too, with its reason
+-- beside the rows, so a fresh database has the same property.
 --
--- ⚠️ THE WEAKNESS, RECORDED SO ARC E CAN DECIDE RATHER THAN DISCOVER: the
--- disagreement rests ENTIRELY on 0007, the live row. Among the strictly
--- UPCOMING rows (0002 → 0006) farther is later, monotonically — time order and
--- distance order are identical. If Timeline hoists live events into their own
--- group (the Saved tab's Tonight / This Weekend / Coming Up shape makes that a
--- plausible design), the upcoming group would verify itself for the wrong
--- reason. The two-row fix, if Arc E wants it, is to swap 0004 and 0006's
--- offsets (7.48 mi → +5 days, 16.63 mi → +3 days) in the VALUES list below and
--- record the divergence here beside the other two. Not done in Part 0; the
--- brief's rule was "if they disagree, change nothing", and they do.
+-- NOT CLOSED BY THIS, stated rather than implied: no two in-radius events
+-- share a DAY, so WITHIN-DAY ordering is never exercised by this set. That is
+-- deliberate. It only matters if Timeline uses day headers, and that design
+-- is not decided — it belongs to Arc E's gameplan, not to a fixture script.
+-- Do not make two events share a day here to pre-empt it.
 --
 -- ---------------------------------------------------------------------------
 -- KNOWN TRAPS, before the steps that hit them:
@@ -170,6 +179,8 @@
 --    0009, 0010. NOT 0003. Every `current_starts_at` in the past (that is the
 --    condition this script exists to fix); every `new_starts_at` in the future
 --    except 0001 (about 2 days ago) and 0007 (about 1 hour ago, LIVE).
+--    `seed_offset_applied` reads 5 days on 0004 and 3 days on 0006 — the swap,
+--    not a typo.
 -- ---------------------------------------------------------------------------
 select
   e.id,
@@ -184,9 +195,9 @@ from public.events e
 join (values
   ('33333333-0001-4000-8000-000000000001'::uuid, interval '-2 days',        interval '-2 days' + interval '3 hours'),
   ('33333333-0002-4000-8000-000000000002'::uuid, interval '1 day 3 hours',  interval '1 day 6 hours'),
-  ('33333333-0004-4000-8000-000000000004'::uuid, interval '3 days',         interval '3 days 3 hours'),
+  ('33333333-0004-4000-8000-000000000004'::uuid, interval '5 days',         interval '5 days 3 hours'),
   ('33333333-0005-4000-8000-000000000005'::uuid, interval '4 days',         interval '4 days 6 hours'),
-  ('33333333-0006-4000-8000-000000000006'::uuid, interval '5 days',         interval '5 days 3 hours'),
+  ('33333333-0006-4000-8000-000000000006'::uuid, interval '3 days',         interval '3 days 3 hours'),
   ('33333333-0007-4000-8000-000000000007'::uuid, interval '-1 hour',        interval '2 hours'),
   ('33333333-0008-4000-8000-000000000008'::uuid, interval '2 days',         interval '2 days 3 hours'),
   ('33333333-0009-4000-8000-000000000009'::uuid, interval '3 days',         interval '3 days 5 hours'),
@@ -212,9 +223,9 @@ set
 from (values
   ('33333333-0001-4000-8000-000000000001'::uuid, interval '-2 days',        interval '-2 days' + interval '3 hours'),
   ('33333333-0002-4000-8000-000000000002'::uuid, interval '1 day 3 hours',  interval '1 day 6 hours'),
-  ('33333333-0004-4000-8000-000000000004'::uuid, interval '3 days',         interval '3 days 3 hours'),
+  ('33333333-0004-4000-8000-000000000004'::uuid, interval '5 days',         interval '5 days 3 hours'),
   ('33333333-0005-4000-8000-000000000005'::uuid, interval '4 days',         interval '4 days 6 hours'),
-  ('33333333-0006-4000-8000-000000000006'::uuid, interval '5 days',         interval '5 days 3 hours'),
+  ('33333333-0006-4000-8000-000000000006'::uuid, interval '3 days',         interval '3 days 3 hours'),
   ('33333333-0007-4000-8000-000000000007'::uuid, interval '-1 hour',        interval '2 hours'),
   ('33333333-0008-4000-8000-000000000008'::uuid, interval '2 days',         interval '2 days 3 hours'),
   ('33333333-0009-4000-8000-000000000009'::uuid, interval '3 days',         interval '3 days 5 hours'),
@@ -230,10 +241,19 @@ where e.id = v.id
 --
 -- 3a. Every touched row's new starts_at, plus 0003 for the negative control.
 --     EXPECT: 10 rows (every seed row; none has been soft-deleted as of
---     2026-09-17). `hours_from_now` positive for 0002, 0004–0006, 0008–0010;
---     about -48 for 0001; about -1 for 0007; and for 0003 a LARGE negative
---     number (it ended weeks ago and is untouched) with `touched_this_run` =
---     false. `updated_at` within the last minute on the nine touched rows.
+--     2026-09-17), in this order by starts_at, with `hours_from_now` about:
+--       0003  large negative (ended weeks ago, untouched — `touched_this_run`
+--             = false)
+--       0001   -48
+--       0007    -1   (LIVE)
+--       0010   +24   (draft)
+--       0002   +27
+--       0008   +48   (out of radius)
+--       0006   +72   ← the swap: 16.63 mi lands at 3 days
+--       0009   +72   (out of radius; ties 0006, order between them arbitrary)
+--       0005   +96
+--       0004  +120   ← the swap: 7.48 mi lands at 5 days
+--     `touched_this_run` true on the nine rows other than 0003.
 -- ---------------------------------------------------------------------------
 select
   e.id,

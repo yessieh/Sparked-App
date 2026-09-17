@@ -43,10 +43,14 @@ insert into public.events
   (id, workspace_id, title, description, tier_id, status, starts_at, ends_at,
    venue_name, address, location, entry_fee_cents, publish_fee_cents)
 values
-  -- ~0.4 mi — free, markets/food, this evening
+  -- ~0.4 mi — free, markets/food, ENDED two days ago (was "this evening").
+  -- Held in the past deliberately: Saved → Past and Workspace → Past have no
+  -- fixture without an ended non-Curbside event, and every other paid row here
+  -- is upcoming or live. The 3-hour span matches the grace window every ENDED
+  -- test uses, so the row reads ENDED without relying on a null ends_at.
   ('33333333-0001-4000-8000-000000000001', '22222222-2222-2222-2222-222222222222',
    'Sahuarita Farmers Market', '40+ local vendors, produce, and breakfast burritos.',
-   'standard', 'published', now() + interval '6 hours', now() + interval '9 hours',
+   'standard', 'published', now() - interval '2 days', now() - interval '2 days' + interval '3 hours',
    'Sahuarita Town Hall Plaza', '375 W Sahuarita Center Way, Sahuarita, AZ 85629',
    extensions.st_setsrid(extensions.st_makepoint(-110.9559, 31.9629), 4326)::extensions.geography,
    0, 500),
@@ -67,10 +71,15 @@ values
    extensions.st_setsrid(extensions.st_makepoint(-110.9245, 31.9047), 4326)::extensions.geography,
    0, null),
 
-  -- ~7.5 mi — free, art/community, in 3 days
+  -- ~7.5 mi — free, art/community, in 5 DAYS (was 3; swapped with 0006).
+  -- The fixture set's TIME order must disagree with its DISTANCE order inside
+  -- the upcoming rows, or a Timeline that silently kept distance ordering
+  -- renders correct-looking output and passes. Before the swap, farther was
+  -- later at every step from 0002 to 0006; now the farther event (0006) is
+  -- sooner than this nearer one.
   ('33333333-0004-4000-8000-000000000004', '22222222-2222-2222-2222-222222222222',
    'Green Valley Art Walk', 'A slow stroll past 12 studios and two live murals.',
-   'standard', 'published', now() + interval '3 days', now() + interval '3 days 3 hours',
+   'standard', 'published', now() + interval '5 days', now() + interval '5 days 3 hours',
    'Green Valley Village', '101 S La Cañada Dr, Green Valley, AZ 85614',
    extensions.st_setsrid(extensions.st_makepoint(-110.9937, 31.8543), 4326)::extensions.geography,
    0, 500),
@@ -83,10 +92,12 @@ values
    extensions.st_setsrid(extensions.st_makepoint(-111.0081, 32.1067), 4326)::extensions.geography,
    0, 500),
 
-  -- ~17 mi — $12, outdoors/family, in 5 days
+  -- ~17 mi — $12, outdoors/family, in 3 DAYS (was 5; swapped with 0004 — see
+  -- the note there). This is the far-but-soon row that makes time order
+  -- falsifiable against distance order.
   ('33333333-0006-4000-8000-000000000006', '22222222-2222-2222-2222-222222222222',
    'Madera Canyon Stargazing', 'Telescopes, rangers, and the Milky Way from 5,000 ft.',
-   'plus', 'published', now() + interval '5 days', now() + interval '5 days 3 hours',
+   'plus', 'published', now() + interval '3 days', now() + interval '3 days 3 hours',
    'Madera Canyon Amphitheater', 'Madera Canyon Rd, Amado, AZ 85645',
    extensions.st_setsrid(extensions.st_makepoint(-110.8802, 31.7256), 4326)::extensions.geography,
    1200, 1500),
