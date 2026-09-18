@@ -225,6 +225,55 @@ and verified in Cursor/Claude Code.
       recovers nothing. Own-line stays. A device pass owns the FEEL; the
       geometry is settled.
 
+> **Arc F — Explore orders by start time — shipped 2026-09-17 (`236bc09`).**
+> Rulings under WHAT SPARKED IS in SPARKED_STATE; measurements in Entry 9.
+> Two items it left behind, one an unknown and one a fixture fact.
+
+- [ ] **THE INLINE RADIUS INPUT DID NOT COMMIT UNDER SYNTHETIC INPUT — CAUSE
+      UNKNOWN, STAKES ASYMMETRIC.** During Arc F's device pass the radius
+      `TextInput` in `components/LocationControl.tsx` did not commit: a
+      synthetic `input` event plus `blur()`, and then the pane's `form_input`
+      plus a Return keypress, both left the field open with `sparked.origin.v1`
+      still reading 25. The pass worked around it by writing that key directly
+      and reloading (Entry 9 records this).
+      **MOST LIKELY A CDP HARNESS ARTIFACT.** `onBlur` is unreliable under
+      synthetic input, and the pass itself diagnosed the blank "within · mi"
+      as the still-open TextInput rather than a state bug — the region text
+      went back to `within 100 mi` the moment the stored value changed.
+      **BUT IT IS UNVERIFIED EITHER WAY, and the two outcomes are not equal.**
+      LocationControl commits the radius on `onBlur` and `onSubmitEditing` and
+      on nothing else. If blur genuinely fails to fire on some real platform,
+      a SHIPPED control silently does not commit and the user's radius change
+      is lost with no error — the silently-wrong class this project keeps
+      finding. docs/ACCESSIBILITY.md Entry 3 verified this control by hand in
+      Stage 2a, so a real failure would be a REGRESSION, not an original
+      defect.
+      **WHAT CLOSES IT, exactly:** on a real browser or device, at Explore,
+      tap the radius number, type a new value, TAP AWAY (real blur) — confirm
+      the header reads the new value and `sparked.origin.v1` holds it. Then
+      tap it again, type another value, PRESS ENTER (real submit) — confirm
+      the same. Two paths, two minutes, next time anyone is at that screen
+      for any reason. Record the result on this item either way.
+- [x] **`33333333-0009` (Phoenix First Friday) IS UNREACHABLE, BY GEOGRAPHY —
+      recorded so nobody "fixes" it.** It is 121.8 mi from the Sahuarita
+      origin and `MAX_RADIUS` is 100, so it can never render at any radius
+      the app permits. **Widening the radius is not a route to it.** That idea
+      was raised during Arc F and is dead; this line exists so it is not
+      re-raised.
+      **CONSEQUENCE FOR THE RESEED'S PASS CONDITION.**
+      `scripts/reseed-fixture-dates.sql` phase 3b expects
+      `published_non_curbside_future = 6`, and that count INCLUDES 0009. Five
+      of the six are reachable from the seeded origin. The count is not wrong
+      — it measures the database, not the feed — but it must not be read as
+      "six visible events". The script says so beside the expectation.
+      **LEFT WHERE IT IS, DELIBERATELY.** A far-away published row is a
+      plausible negative control for the radius filter, and it is doing that
+      job. Moving it to make some other check pass is the same mistake as
+      moving 0003 would have been — see the reseed script's divergence
+      section. The same-instant tie Arc F could not render (0006 + 0009 share
+      an offset, but 0009 is past the cap) was closed by moving **0005**, not
+      0009 — recorded in the reseed script header, 2026-09-18.
+
 ## INTERESTS & BLOCKS
 
 - [ ] **Persist interests/blocks** to real storage (currently app-state only).

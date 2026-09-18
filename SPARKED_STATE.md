@@ -1234,8 +1234,13 @@ Create Event's tier step (per-day model is DEAD everywhere):
   $1 gate held in reserve if spam materializes (free→$1 is an easy story; don't launch with it).
 - **Curbside category rules:** auto-tagged "Curbside" (mini form has NO category picker),
   Curbside category is FIRST in every category lineup (new-term exposure), EXCLUDED from the
-  paid Event wizard's picker. Consumer side: filterable/blockable like any category; feed stays
-  distance-pure — NO re-ranking/"balance" (would break the no-algorithm promise). Disclosed
+  paid Event wizard's picker. Consumer side: filterable/blockable like any category; the feed
+  NEVER re-ranks Curbside relative to paid rows — no tier weighting, no "balance" — because
+  that would break the no-algorithm promise; whatever the sort key is, it is the same key for
+  every tier. **AMENDED 2026-09-18 (Arc F):** this read "feed stays distance-pure — NO
+  re-ranking/'balance'". The feed is no longer distance-ordered (it orders by `starts_at`
+  since Arc F — see the amendment under WHAT SPARKED IS), so the wording was rewritten
+  tier-neutrally; the rule it states is unchanged. Disclosed
   display-collapse rule = roadmap only if overwhelm materializes.
 - **Entry fork** (start of creation): "What are you posting?" → Curbside (free mini form:
   photo/title/description/address/date, "Post it — free", no checkout) or Event (4-step wizard).

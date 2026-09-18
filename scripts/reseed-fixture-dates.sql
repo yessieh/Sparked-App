@@ -88,6 +88,8 @@
 --     Workspace → Past have no fixture without an ended non-Curbside event.
 --   * `33333333-0004` / `-0006` swapped (+5 days / +3 days). Folded into
 --     seed.sql the same day — see THE TIMELINE REQUIREMENT below.
+--   * `33333333-0005` at +3 days (was +4), 2026-09-18 — the same instant as
+--     0006. Folded into seed.sql the same day — see THE SAME-INSTANT PAIR.
 --
 -- ROWS WORTH NAMING because their offsets look like mistakes and are not:
 --   * `33333333-0007` (Downtown Food Truck Round-Up), the LIVE-NOW fixture:
@@ -127,23 +129,48 @@
 --
 --     id     distance   starts_at        time rank   distance rank
 --     0002    1.20 mi   +1 day 3 hours       2           1
---     0006   16.63 mi   +3 days              3           4
---     0005   10.75 mi   +4 days              4           3
+--     0005   10.75 mi   +3 days              3 (tie)     3
+--     0006   16.63 mi   +3 days              3 (tie)     4
 --     0004    7.48 mi   +5 days              5           2
 --     0007   18.34 mi   -1 hour (LIVE)       1           5
 --
 -- Distance order: 0002, 0004, 0005, 0006, 0007.
--- Time order:     0007, 0002, 0006, 0005, 0004.
+-- Time order:     0007, 0002, {0005, 0006}, 0004.
 -- Whether or not live is grouped separately, a distance-ordered Timeline
--- puts 0004 before 0005 before 0006; a correct one reverses all three.
--- Falsifiable either way. The swap is in seed.sql too, with its reason
--- beside the rows, so a fresh database has the same property.
+-- puts 0004 second; a correct one puts it LAST. Falsifiable either way. The
+-- swap is in seed.sql too, with its reason beside the rows, so a fresh
+-- database has the same property.
 --
--- NOT CLOSED BY THIS, stated rather than implied: no two in-radius events
--- share a DAY, so WITHIN-DAY ordering is never exercised by this set. That is
--- deliberate. It only matters if Timeline uses day headers, and that design
--- is not decided — it belongs to Arc E's gameplan, not to a fixture script.
--- Do not make two events share a day here to pre-empt it.
+-- ---------------------------------------------------------------------------
+-- THE SAME-INSTANT PAIR — why 0005 moved from +4 days to +3 days (2026-09-18).
+--
+-- Every seed offset is `now() + N days`, so +3 days puts 0005 at the
+-- IDENTICAL INSTANT as 0006 — same starts_at to the microsecond, because both
+-- are computed from the one now() this transaction holds. That single edit
+-- creates the two fixtures nothing in the set provided:
+--
+--   * A SAME-DAY PAIR, for Timeline's day grouping and within-day ordering.
+--     (The earlier "no two in-radius events share a day" note is retired by
+--     this; the pair exists now, deliberately, and Timeline's gameplan can
+--     use it.)
+--   * A SAME-INSTANT PAIR, which is the ONLY way to render Arc F's tie case.
+--     Arc F (236bc09) sorts the feed by starts_at with a stable sort and
+--     declared the RPC's `order by st_distance` LOAD-BEARING for ties — equal
+--     starts_at keeps the server's distance order — but could not render one:
+--     the only same-instant pair was 0006 + 0009, and 0009 is 121.8 mi out
+--     past the 100 mi cap (tracker, EXPLORE FILTERING, "0009 IS UNREACHABLE").
+--     Entry 9 records the tie as NOT rendered. It can be now.
+--
+-- THE ASSERTION THIS CREATES, and the expected result: 0005 is 10.75 mi and
+-- 0006 is 16.63 mi, so at an identical starts_at the NEARER ONE — 0005, San
+-- Xavier Craft Fair — MUST RENDER FIRST. That is the stable sort inheriting
+-- the server's distance order. If 0006 (Madera Canyon) leads, ties are not
+-- inheriting distance and Arc F's claim is wrong.
+--
+-- FALSIFIABILITY SURVIVES, checked: by TIME the in-radius upcoming set is
+-- 0002, {0005, 0006}, 0004; by DISTANCE it is 0002, 0004, 0005, 0006. They
+-- still disagree — 0004 goes from second by distance to last by time — so a
+-- distance-ordered Timeline still cannot pass. The change is in seed.sql too.
 --
 -- ---------------------------------------------------------------------------
 -- KNOWN TRAPS, before the steps that hit them:
@@ -179,8 +206,8 @@
 --    0009, 0010. NOT 0003. Every `current_starts_at` in the past (that is the
 --    condition this script exists to fix); every `new_starts_at` in the future
 --    except 0001 (about 2 days ago) and 0007 (about 1 hour ago, LIVE).
---    `seed_offset_applied` reads 5 days on 0004 and 3 days on 0006 — the swap,
---    not a typo.
+--    `seed_offset_applied` reads 5 days on 0004 and 3 days on BOTH 0005 and
+--    0006 — the swap and the same-instant pair, not typos.
 -- ---------------------------------------------------------------------------
 select
   e.id,
@@ -196,7 +223,7 @@ join (values
   ('33333333-0001-4000-8000-000000000001'::uuid, interval '-2 days',        interval '-2 days' + interval '3 hours'),
   ('33333333-0002-4000-8000-000000000002'::uuid, interval '1 day 3 hours',  interval '1 day 6 hours'),
   ('33333333-0004-4000-8000-000000000004'::uuid, interval '5 days',         interval '5 days 3 hours'),
-  ('33333333-0005-4000-8000-000000000005'::uuid, interval '4 days',         interval '4 days 6 hours'),
+  ('33333333-0005-4000-8000-000000000005'::uuid, interval '3 days',         interval '3 days 6 hours'),
   ('33333333-0006-4000-8000-000000000006'::uuid, interval '3 days',         interval '3 days 3 hours'),
   ('33333333-0007-4000-8000-000000000007'::uuid, interval '-1 hour',        interval '2 hours'),
   ('33333333-0008-4000-8000-000000000008'::uuid, interval '2 days',         interval '2 days 3 hours'),
@@ -224,7 +251,7 @@ from (values
   ('33333333-0001-4000-8000-000000000001'::uuid, interval '-2 days',        interval '-2 days' + interval '3 hours'),
   ('33333333-0002-4000-8000-000000000002'::uuid, interval '1 day 3 hours',  interval '1 day 6 hours'),
   ('33333333-0004-4000-8000-000000000004'::uuid, interval '5 days',         interval '5 days 3 hours'),
-  ('33333333-0005-4000-8000-000000000005'::uuid, interval '4 days',         interval '4 days 6 hours'),
+  ('33333333-0005-4000-8000-000000000005'::uuid, interval '3 days',         interval '3 days 6 hours'),
   ('33333333-0006-4000-8000-000000000006'::uuid, interval '3 days',         interval '3 days 3 hours'),
   ('33333333-0007-4000-8000-000000000007'::uuid, interval '-1 hour',        interval '2 hours'),
   ('33333333-0008-4000-8000-000000000008'::uuid, interval '2 days',         interval '2 days 3 hours'),
@@ -249,11 +276,14 @@ where e.id = v.id
 --       0010   +24   (draft)
 --       0002   +27
 --       0008   +48   (out of radius)
---       0006   +72   ← the swap: 16.63 mi lands at 3 days
---       0009   +72   (out of radius; ties 0006, order between them arbitrary)
---       0005   +96
+--       0005   +72   ┐ IDENTICAL starts_at, all three — the same-instant pair
+--       0006   +72   ┤ (0005 + 0006, both in radius) plus 0009 (out of
+--       0009   +72   ┘ radius). Order among the three here is arbitrary;
+--                      this query has no distance tiebreak. The feed's does.
 --       0004  +120   ← the swap: 7.48 mi lands at 5 days
 --     `touched_this_run` true on the nine rows other than 0003.
+--     Confirm the pair is a real tie: 0005's and 0006's `starts_at` must be
+--     EQUAL to the microsecond, not merely the same day.
 -- ---------------------------------------------------------------------------
 select
   e.id,
@@ -277,6 +307,15 @@ order by e.starts_at;
 --                                    0002, 0004, 0005, 0006, 0008, 0009.
 --                                    NOT 0007 (started an hour ago, live) and
 --                                    NOT 0010 (a draft, not published).
+--                                    ⚠️ SIX IS A DATABASE COUNT, NOT A FEED
+--                                    COUNT. 0009 is 121.8 mi out and
+--                                    MAX_RADIUS is 100, so it can never render
+--                                    at any radius the app permits; 0008 is
+--                                    29.9 mi and needs the radius above 25.
+--                                    Reachable from the seeded origin at any
+--                                    radius: FIVE. At the default 25 mi: FOUR
+--                                    (0002, 0004, 0005, 0006). Do not read
+--                                    this number as "six visible events".
 --   published_non_curbside_past    — same set, starts_at < now(). EXPECT 2:
 --                                    0001 (held back) AND 0007 (LIVE — a live
 --                                    event has a past start by construction).

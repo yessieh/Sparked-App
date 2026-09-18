@@ -84,10 +84,17 @@ values
    extensions.st_setsrid(extensions.st_makepoint(-110.9937, 31.8543), 4326)::extensions.geography,
    0, 500),
 
-  -- ~11 mi — free, markets/art, in 4 days
+  -- ~11 mi — free, markets/art, in 3 DAYS (was 4; moved 2026-09-18). Every
+  -- offset here is now() + N days, so +3 days puts this at the IDENTICAL
+  -- INSTANT as 0006 (16.6 mi). That one edit gives the set a same-day pair
+  -- (Timeline's day grouping) and a same-instant pair (Explore's tie case:
+  -- the stable sort keeps the server's distance order, so THIS row must render
+  -- before 0006 — if 0006 leads, ties are not inheriting distance). Time order
+  -- still disagrees with distance order — 0004 is second by distance and last
+  -- by time — so a distance-ordered Timeline still cannot pass.
   ('33333333-0005-4000-8000-000000000005', '22222222-2222-2222-2222-222222222222',
    'San Xavier Craft Fair', 'Tohono O''odham artisans, frybread, and desert honey.',
-   'standard', 'published', now() + interval '4 days', now() + interval '4 days 6 hours',
+   'standard', 'published', now() + interval '3 days', now() + interval '3 days 6 hours',
    'Mission San Xavier del Bac', '1950 W San Xavier Rd, Tucson, AZ 85746',
    extensions.st_setsrid(extensions.st_makepoint(-111.0081, 32.1067), 4326)::extensions.geography,
    0, 500),
