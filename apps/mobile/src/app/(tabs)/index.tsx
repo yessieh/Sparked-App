@@ -663,6 +663,10 @@ export default function Explore() {
             : item
         }
         variant={variant}
+        // Arc F moved the hyperlocal promise from a sort claim to a FILTER
+        // claim, and "every card states its own distance" carries a third of
+        // it; timeline was the one view where no card did.
+        showDistance
         saved={savedIds.has(item.id)}
         going={goingIds.has(item.id)}
         onToggleSave={gated(() => toggleSave(item.id))}

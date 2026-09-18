@@ -15,6 +15,18 @@
 // colors rather than thirteen. It disappears when uploads arrive.
 // Save/Going buttons only render when handlers are passed; anonymous gating
 // (route to auth) is the calling screen's decision.
+//
+// SEMANTICS (Arc G, 2026-09-18) — THE TITLE IS THE NAVIGATING CONTROL, NOT
+// THE CARD. The whole card surface still tap-navigates for touch and mouse,
+// but it is focusable={false} / tabIndex -1 with no role, and the title Text
+// carries role="link" + onPress instead. WHY: Save and Going live INSIDE the
+// card. A card with role="button" is a button containing two buttons —
+// invalid ARIA — and some screen readers respond by flattening the card and
+// swallowing the inner controls, which would remove working functionality
+// from exactly the people the role was added for. With the title as the
+// link, a screen-reader user gets the same three actions a sighted user has:
+// open the event, Save, Going. When no `onTap` is passed (the wizard preview
+// cards) the shell is a plain View with no focusable descendant at all.
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -72,6 +84,15 @@ export interface EventStubProps {
   onToggleSave?: () => void;
   onToggleGoing?: () => void;
   onTap?: () => void;
+  /**
+   * Compact only: append ` · X.X mi` to the venue line, in the photo variant's
+   * exact format, when `distance_miles` is present. Default false, so Saved,
+   * Workspace and Organizer — whose rows carry no distance — are untouched.
+   * Explore's timeline opts in: Arc F moved the hyperlocal promise from a
+   * sort claim to a FILTER claim, and "every card states its own distance" is
+   * one of the three things carrying it.
+   */
+  showDistance?: boolean;
   /**
    * How far past the searched radius this event sits, in miles. Set ONLY by
    * Explore search's "just past your radius" overflow band; absent everywhere
@@ -253,6 +274,10 @@ function StubButton({
           pop();
         }}
         onPressOut={() => setPressed(false)}
+        // Part of the same defect as the card (Arc G): these announced their
+        // NAME but never that they were buttons.
+        role="button"
+        accessibilityRole="button"
         accessibilityLabel={label}
         accessibilityState={{ selected: active }}
         hitSlop={6}
@@ -394,6 +419,75 @@ export function PriceLine({ cents }: { cents: number }) {
   );
 }
 
+/**
+ * ONE distance formatter for BOTH variants. Arc F sorts same-instant ties on
+ * the server's distance order, and the timeline shows compact cards while the
+ * list shows photo cards — if the two rounded differently, one event would
+ * state two numbers and the on-screen order would stop matching the sort. The
+ * expression is the photo variant's original, moved, not rewritten.
+ */
+function distanceSuffix(miles: number | undefined): string {
+  return typeof miles === 'number' ? ` · ${miles.toFixed(1)} mi` : '';
+}
+
+/**
+ * The card shell. A Pressable when the card navigates — kept for touch and
+ * mouse, but taken OUT of the keyboard and accessibility tree as a control
+ * (see the header note: the title is the link, and a button-in-button would
+ * swallow Save and Going). A plain View when there is no `onTap`: the wizard
+ * preview cards used to be tabbable and inert, which is a focus trap.
+ */
+function CardShell({
+  onTap,
+  style,
+  children,
+}: {
+  onTap?: () => void;
+  style: React.ComponentProps<typeof View>['style'];
+  children: React.ReactNode;
+}) {
+  if (!onTap) return <View style={style}>{children}</View>;
+  return (
+    <Pressable
+      onPress={onTap}
+      focusable={false}
+      tabIndex={-1}
+      style={style}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
+/** The props that make the title the navigating control — or nothing at all
+ *  when the card does not navigate, so a preview title is plain text with no
+ *  role and no tab stop. NO aria-label: the visible title IS the accessible
+ *  name, complete even when CSS truncates it.
+ *
+ *  ENTER IS WIRED BY HAND. rnw's Text maps `onPress` to `onClick` and nothing
+ *  else (dist/exports/Text/index.js:93-111) — a `div[role=link][tabindex=0]`
+ *  gets no synthetic click from the keyboard the way a native <a> does, so
+ *  without this the title is focusable and inert, the focus-trap shape this
+ *  arc removes from the preview cards. Enter only: link semantics, Space is
+ *  for buttons. `onKeyDown` is forwarded by rnw (forwardedProps
+ *  keyboardProps) but not typed by RN 0.86 on Text, hence the untyped spread
+ *  — Pill.tsx's aria-pressed shim, same reason. Native ignores it. */
+function titleLinkProps(onTap: (() => void) | undefined): Record<string, unknown> {
+  if (!onTap) return {};
+  return {
+    role: 'link',
+    accessibilityRole: 'link',
+    tabIndex: 0,
+    onPress: onTap,
+    onKeyDown: (e: { key?: string; preventDefault?: () => void }) => {
+      if (e.key === 'Enter') {
+        e.preventDefault?.();
+        onTap();
+      }
+    },
+  };
+}
+
 export default function EventStub({
   event,
   variant = 'photo',
@@ -403,6 +497,7 @@ export default function EventStub({
   onToggleSave,
   onToggleGoing,
   onTap,
+  showDistance = false,
   pastRadiusMi,
 }: EventStubProps) {
   const theme = useTheme();
@@ -437,8 +532,8 @@ export default function EventStub({
 
   if (variant === 'compact') {
     return (
-      <Pressable
-        onPress={onTap}
+      <CardShell
+        onTap={onTap}
         style={{
           flexDirection: 'row',
           alignItems: 'stretch',
@@ -461,8 +556,12 @@ export default function EventStub({
         />
         <View style={{ flex: 1, minWidth: 0, paddingHorizontal: 15, paddingVertical: 13 }}>
           <CategoryBadges categories={cats} />
+          {/* THE LINK. Annotated in place, not wrapped: a wrapper adds a
+              layout box that breaks numberOfLines={1} truncation in this flex
+              column. RN Web's Text takes role and onPress directly. */}
           <Text
             numberOfLines={1}
+            {...titleLinkProps(onTap)}
             style={{
               fontFamily: theme.fonts.displayBlack,
               fontWeight: '900',
@@ -481,6 +580,7 @@ export default function EventStub({
               "Local host", never "verified" — Sparked verifies nobody. */}
           <Text numberOfLines={1} style={[styles.metaLine, { color: theme.colors.textMuted, fontFamily: theme.fonts.bodyMedium }]}>
             {event.venue_name ?? event.organizer_name ?? 'Local host'}
+            {showDistance ? distanceSuffix(event.distance_miles) : ''}
           </Text>
           {/* Chip row. Host listings replace the consumer RSVP line with two
               count chips, each zero-suppressed independently — a listing with
@@ -550,13 +650,13 @@ export default function EventStub({
           </View>
           {actionButtons}
         </View>
-      </Pressable>
+      </CardShell>
     );
   }
 
   return (
-    <Pressable
-      onPress={onTap}
+    <CardShell
+      onTap={onTap}
       style={{
         flexDirection: 'row',
         alignItems: 'stretch',
@@ -621,8 +721,10 @@ export default function EventStub({
 
         <View style={{ flexDirection: 'row', alignItems: 'stretch' }}>
           <View style={{ flex: 1, minWidth: 0, paddingHorizontal: 14, paddingVertical: 12 }}>
+            {/* THE LINK — same treatment as the compact title, same reason. */}
             <Text
               numberOfLines={1}
+              {...titleLinkProps(onTap)}
               style={{
                 fontFamily: theme.fonts.displayBlack,
                 fontWeight: '900',
@@ -638,7 +740,7 @@ export default function EventStub({
             </Text>
             <Text numberOfLines={1} style={[styles.metaLine, { color: theme.colors.textMuted, fontFamily: theme.fonts.bodyMedium }]}>
               {event.venue_name ?? event.organizer_name ?? 'Local host'}
-              {typeof event.distance_miles === 'number' ? ` · ${event.distance_miles.toFixed(1)} mi` : ''}
+              {distanceSuffix(event.distance_miles)}
             </Text>
             {/* price + quiet social proof — "N going" only when N > 0 */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -699,7 +801,7 @@ export default function EventStub({
           </View>
         </View>
       </View>
-    </Pressable>
+    </CardShell>
   );
 }
 

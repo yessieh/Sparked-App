@@ -2454,3 +2454,149 @@ applied. `npx tsc --noEmit` exits 0. `npx eslint` on the three source files
 reports the one pre-existing `react/no-unescaped-entities` error Entry 8
 baselined and nothing new. Console: no errors, no rnw deprecation warnings.
 **No database row was written by this arc.**
+
+---
+
+# Entry 11 — 2026-09-18 — EventStub: the title is the link, the card is not a control (Arc G)
+
+**The arc:** semantics only, in `components/EventStub.tsx`, plus one prop
+opted into on Explore's shared card renderer. Zero pixels moved — verified,
+not promised (see truncation below). **No SQL, no migration**; the privilege
+gate is N/A under CLAUDE.md's carve-out, stated rather than omitted.
+
+## THIS CLOSES THE OLDEST OPEN ITEM IN THIS FILE
+
+The role-less card — a Pressable rendering as `div[tabindex="0"]` with no
+role and no name — was recorded in **Entry 2** (the two CTA components, and
+"the 30 bare `div[tabindex="0"]` elements still in the feed"), carried in
+**Entry 6** (search results, "Entry 2's finding, same shape"), **Entry 7**
+(the pill extraction inherited it), and named as the **fifth surface** in
+**Entry 10** (timeline). Tracker: "EventStub role/aria-label fix — the next
+arc." Closed here on every surface the component renders, by one change to
+the component.
+
+**And it was two defects, not one.** `StubButton` — Save and Going — carried
+`accessibilityLabel` and `accessibilityState` but no role, so it announced its
+NAME ("Save") and never that it was a button. Not previously named in any
+entry; found while reading the file for this arc. Fixed in the same commit.
+
+## WHY THE CARD DID NOT GET `role="button"`
+
+Save and Going are buttons INSIDE the card. A card with `role="button"` is a
+button containing two buttons — invalid ARIA — and some screen readers respond
+by flattening the card to one control and swallowing the inner two, which
+would remove working functionality from exactly the people the role was for.
+So: the card shell stays a Pressable for touch and mouse (whole-surface tap
+still navigates), but is `focusable={false}` / `tabIndex={-1}` with no role;
+the **title** Text becomes the link. A screen-reader or keyboard user gets the
+three actions a sighted user has — open, Save, Going — and no phantom fourth.
+
+## Read from the DOM — Explore list (photo variant)
+
+| Check | Value |
+| --- | --- |
+| Title element | `DIV role="link" tabindex="0"`, no `aria-label`, no `href` |
+| Card shell | `DIV tabindex="-1"`, no role, `cursor: pointer` (still tap-navigates) |
+| Save / Going | `role="button"`, `aria-label` "Save" / "I'm going" intact, `tabindex="0"` |
+| Role-less tabbable cards on the page | **0** (was every card) |
+| Title colour | `rgb(238,240,255)` — unchanged; `text-decoration: none` — rnw adds no link styling |
+
+**TAB ORDER, OBSERVED with real Tab keypresses** from a focused title, reading
+`document.activeElement` after each: **Save → I'm going → next card's title.**
+So within one card: title → Save → Going. The shell is never landed on.
+
+**Enter activates the title, and here is the finding this arc would have
+shipped without:** rnw's `Text` maps `onPress` to `onClick` and nothing else
+(`dist/exports/Text/index.js:93–111`). A `div[role=link][tabindex=0]` gets no
+synthetic click from Enter the way a native `<a>` does. The brief's "the same
+keyboard activation RN Web gives a pressable Text" is therefore **none** —
+and a focusable link that does nothing on Enter is the focus-trap shape this
+arc removes from the preview cards. Fixed with an explicit `onKeyDown` (Enter
+only — link semantics; Space is for buttons), spread as an untyped prop
+because rnw forwards `onKeyDown` on Text but RN 0.86 does not type it —
+Pill.tsx's `aria-pressed` shim, same reason. **Verified:** a dispatched
+`KeyboardEvent('keydown', {key:'Enter'})` on the focused title navigated to
+`/event/…0007`; the React props on the element read `onKeyDown` and `onClick`.
+The pane's own Return keypress did not reach the element — same harness
+limitation Entry 9 recorded for the radius input — so the real-key path is on
+the human list.
+
+**Touch still works:** a real click on the venue line of the Lakeside card —
+not the title, not a button — navigated to `/event/…0002`.
+
+## Explore timeline (compact variant) — and the distance string
+
+Same attributes, read on compact cards: title `role="link"` `tabindex="0"`,
+shell `tabindex="-1"`, buttons `role="button"`.
+
+**`showDistance` is wired on Explore's shared renderer only.** The compact
+venue line now reads `Mission San Xavier del Bac · 10.7 mi`. The six venue
+strings rendered in list view and the six in timeline view are **identical
+sets** — same number, same rounding — because both variants call one
+`distanceSuffix()` extracted from the photo variant's original expression,
+not a second copy. Arc F sorts ties on that number; two roundings would have
+put two numbers on one event and the on-screen order out of step with the
+sort.
+
+**On the organizer profile (compact, 7 cards, public, driven signed out):**
+link titles, `-1` shells, `button` roles — and venue lines with **no
+distance**, which is the default holding on a screen that passes no new prop.
+
+## ZERO PIXELS — the regression watched for was truncation, and it held
+
+`numberOfLines={1}` on a title inside a flex column is what breaks when a
+Text gains a wrapper. No wrapper was added; the role props sit on the existing
+element. Checked by swapping in a 100-character title on a rendered card,
+measuring, and restoring:
+
+| Variant | Height before → after | Width before → after | `white-space` / `text-overflow` | Overflowing |
+| --- | --- | --- | --- | --- |
+| Compact (16px) | **19 → 19** | 403 → 403 | `nowrap` / `ellipsis` | true (clipped, not wrapped) |
+| Photo (17px) | **20 → 20** | 405 → 405 | `nowrap` / `ellipsis` | true (clipped, not wrapped) |
+
+The line neither grew nor wrapped. No colour, weight, spacing or size on any
+element changed; the title's computed colour is the value it had before.
+
+## ExploreSearch results
+
+Search open, `canyon` typed: the result card's title is `role="link"`
+`tabindex="0"`, its shell `-1`, its buttons `button`. Search passes no new
+prop and inherited the fix from the component.
+
+## What this entry does NOT establish
+
+- **SAVED, WORKSPACE AND THE CREATE WIZARD PREVIEW WERE NOT RENDERED.** All
+  three are behind auth and no session existed in this pass; signing in is
+  not something this harness does. What IS established: both VARIANTS were
+  rendered (photo on Explore list and search, compact on Explore timeline and
+  the organizer profile), and those three screens pass no prop this arc added
+  — they inherit the same component paths already driven. What is NOT: the
+  `onTap`-less branch. **The wizard preview cards (`create/event.tsx:138` and
+  `:1496`) render a plain `View` with no focusable descendant BY CODE PATH,
+  not by observation** — that is the two-focus-trap removal the brief named,
+  and it is on the human list with the exact check: on `/create` → paid tier
+  → Review, press Tab across the preview card and confirm focus never lands
+  on it or anything inside it.
+- **Real-key Enter on the title was not observed through the harness.** The
+  handler is wired and a dispatched keydown navigates; a person pressing
+  Enter is the remaining check.
+- **Nothing about native.** `accessibilityRole="link"` / `"button"` are in the
+  JSX for iOS/Android; `onKeyDown` is web-only and native ignores it.
+- **No screen reader was run.** Roles and names are read from the DOM; the
+  announcement itself is not.
+- **The organizer profile showed 401s on `event_vendors` for the Plus event's
+  detail screen**, signed out — `EventDetailView`, untouched by this arc and
+  pre-existing. Recorded here so it is not attributed to the semantics
+  change; it belongs in the tracker.
+- **Nothing about light mode**, same structural reason as Entries 1–10.
+
+**Baseline:** checked against the running Expo web dev server at
+`localhost:8081` on 2026-09-18, against `main` @ `27d8ba2` plus this arc's
+working tree (`components/EventStub.tsx`, `(tabs)/index.tsx` modified).
+Driven **signed out**, at the persisted Sahuarita origin, radius 25, window
+through +5 days. `npx tsc --noEmit` exits 0. `npx eslint` on the two files
+reports five findings, **all pre-existing on `27d8ba2`** — four
+`react-hooks/refs` in `StubButton` (baselined by stash/pop, shifted 21 lines
+by this arc's header comment) and the one `react/no-unescaped-entities` Entry
+8 recorded. Console: the two `event_vendors` 401s above and nothing else; no
+rnw deprecation warnings. **No database row was written by this arc.**
