@@ -2283,3 +2283,174 @@ entry in this file driven against a populated live feed. `npx tsc --noEmit`
 exits 0. `npx eslint` on `index.tsx` reports the one pre-existing
 `react/no-unescaped-entities` error Entry 8 baselined and nothing new.
 Console: no errors. **No database row was written by this arc.**
+
+---
+
+# Entry 10 — 2026-09-18 — Explore view switcher + timeline view (Arc E)
+
+**The arc:** a three-segment list / map / timeline switcher beside the
+filter-status line, a timeline body that groups the feed by LOCAL calendar day
+under real headings, and a map position that discloses "Coming soon". New:
+`components/ViewSwitcher.tsx`; two helpers in `lib/eventTime.ts`
+(`localDayKey`, `dayLabel`); `(tabs)/index.tsx` modified. **No SQL, no
+migration, no RPC change** — the privilege gate is N/A under CLAUDE.md's
+carve-out, stated rather than omitted; nothing under `supabase/` was written
+and the RPC is called with the same five arguments.
+
+## THE SPECIFIC RISK: the live region was REPARENTED, and it still announces
+
+The filter-status region — Entry 7's unconditional node, Entry 8's widened
+gate — gained a `flexDirection: 'row'` parent so the switcher could sit beside
+it as a SIBLING. Its node, props and children logic are untouched. Entry 2's
+rule forbids the region remounting at RUNTIME; a wrapper added in source is a
+build-time change, after which the region mounts with the screen and stays.
+Argued in the code comment; **verified by node identity here**, the node
+captured on first load and compared after every transition:
+
+| Transition | Region text | Same node |
+| --- | --- | --- |
+| Loaded, default window | *(empty)* | — captured |
+| End → +5 days | `Showing 5 · Sep 18–23` | **true** |
+| List → **Timeline** | unchanged | **true** |
+| Tap **Music** (auto-joins Curbside), in timeline | `Showing 1 of 5 · Curbside, Music · Sep 18–23` | **true** |
+| Untap both | `Showing 5 · Sep 18–23` | **true** |
+| Timeline → Map → List → Timeline | unchanged | **true** |
+| Header Reset, then End → +5 again | `Showing 5 · Sep 18–23` | **true** |
+| Card tap → event detail → **Back** | `Showing 5 · Sep 18–23` | **true** |
+
+The pill announcement is the check that matters: the text CHANGED on a node
+that was already in the tree, after the reparent, with the switcher beside it.
+`[role="status"]` count stays **3** with cards present; the switcher is not a
+region and the map panel is not one.
+
+## The timeline — four headers, two gaps, and Arc F's tie rendered
+
+Driven at Sahuarita / 25 mi, window through today+5 (Sep 18–23), signed out,
+Phoenix time. DOM order, read by walking headings and card titles together:
+
+```
+TODAY        Downtown Food Truck Round-Up     (LIVE)
+TOMORROW     Lakeside Songwriters Night
+MONDAY       San Xavier Craft Fair
+             Madera Canyon Stargazing
+WEDNESDAY    Green Valley Art Walk
+```
+
+**Four headers. No header for Sep 20 or Sep 22** — the empty-day rule, twice
+on one screen. Groups are built from the rows that exist; no calendar range is
+generated.
+
+**The headers are real headings**, attributes read off the DOM: `<h2
+role="heading" aria-level="2">`. rnw maps `role="heading"` + `aria-level={2}`
+to an `H2` element, so heading navigation works without a role override.
+
+**LOCAL day grouping, exercised:** Lakeside Songwriters Night's `starts_at`
+is `2026-09-20T02:xxZ` — UTC Sep 20 — and it rendered under **TOMORROW**
+(Sep 19 local). A UTC key would have filed it under Monday with the tie pair.
+
+**ARC F'S TIE CASE, RENDERED FOR THE FIRST TIME.** Entry 9 declared the
+RPC's `order by st_distance` load-bearing for equal `starts_at` and could not
+render one. The reseed put San Xavier (0005) and Madera Canyon (0006) at the
+same instant; on the wire both read `2026-09-21T22:24:25.209454+00:00` —
+identical to the microsecond — with the server returning San Xavier (10.73
+mi) at index 2 and Madera (16.59 mi) at index 3. The DOM rendered **San
+Xavier above Madera Canyon**, under one MONDAY header. The stable sort is
+inheriting the server's distance order. Arc F's claim holds.
+
+**Under a pill, the timeline collapses correctly:** Music lit left one
+header (TOMORROW) and one card; the other three headers vanished with their
+rows rather than standing empty.
+
+## The switcher — `aria-pressed`, 44 on both axes, contrast
+
+Three `role="button"`s inside a `role="group"` labelled "Explore view", not a
+tablist — Pill.tsx's shipped pattern, for the reason its header gives.
+
+| Segment | `aria-pressed` (list active) | after tap Timeline | rect |
+| --- | --- | --- | --- |
+| List view | `"true"` | `"false"` | **44 × 44** |
+| Map view | `"false"` | `"false"` | **44 × 44** |
+| Timeline view | `"false"` | `"true"` | **44 × 44** |
+
+Icon-only segments are exactly the control that passes height and fails width
+when the target is left to padding; `minWidth` is set explicitly and measured.
+
+Contrast, off the painted glyph, composited to the first opaque ancestor:
+
+| Element | Painted | Surface | Ratio | Held to |
+| --- | --- | --- | --- | --- |
+| Unselected icon (`textMuted`) | `rgba(238,240,255,0.5)` | `#14213D` page | **4.57:1** | 3:1 (non-text) / 4.5:1 |
+| Selected icon (`navy`) on the spark gradient | `rgb(20,33,61)` | `#ff5f4e` / `#ff8c38` / `#ffca3a` | **5.32 / 6.89 / 10.47:1** | 3:1 |
+| Day heading (`text`, 10px uppercase) | `rgb(238,240,255)` | `#14213D` page | **14.11:1** | 4.5:1 |
+| Map panel "Map view" / "Coming soon" (`text`) | `rgb(238,240,255)` | **`rgb(29,42,69)` card** | **12.62:1** | 4.5:1 |
+
+The gradient figures were taken by reading the three `<stop stop-color>`
+values out of the rendered SVG, Entry 7's method — the composite walker
+reports 1:1 on a gradient control and that is the artifact, not the number.
+The unselected icon sits on the BARE page with no fill, which is Pill.tsx's
+binding constraint carried over: 4.57:1 clears the text floor by 0.07 and any
+fill behind it re-breaks it.
+
+## The map position
+
+Tap Map → header, LocationControl, DateControl, pill row and switcher all
+still present; the list body replaced by one card reading "Map view" / "Coming
+soon"; `aria-pressed` moved to Map. Tap List → five photo cards back,
+`aria-pressed` back on List. The panel's `backgroundColor` reads
+`rgba(255,255,255,0.04)` (`cardBg`) and it sits inside no `aria-live`
+ancestor — it is not a region and was not given one.
+
+## View state survives a trip to an event and back
+
+Real card tap on San Xavier from the timeline → `/event/33333333-0005-…` →
+the real Back control. On return: `Timeline view` still `aria-pressed="true"`,
+the same four headers, the same status node. The Explore tree was in the DOM
+throughout (the switcher was queryable while the event screen showed), which
+is Entry 7's mechanism holding for a third piece of session state.
+
+## FIFTH INSTANCE, RECORDED NOT FIXED: the card is a role-less `div[tabindex="0"]`
+
+Walking up from a compact card's title: `DIV → DIV → DIV[tabindex="0"]` with
+no `role` and no `aria-label`. That is `EventStub`'s Pressable, and it is
+Entry 2's finding on a FIFTH surface — Explore list, Saved, Workspace, the
+organizer profile, and now Explore timeline. Not fixed here, on purpose: the
+fix is one `role="button"` + an accessible name in `EventStub`, and doing it
+inside this arc would have made this arc's verification pass drive five
+screens. **It is the NEXT arc**, and it closes the oldest open item in this
+file.
+
+## What this entry does NOT establish
+
+- **`dayLabel`'s "beyond +6" branch (`Sat, Sep 26`) and its past-day
+  fallthrough were NOT rendered.** The five-day window reaches Wednesday
+  (+5). Both branches are unit-shaped and were read, not driven.
+- **The photo-variant list view rendered ZERO `<img>` elements.** The seeded
+  fixtures have no cover photo, so the list/timeline visual distinction was
+  established by variant (compact drops the image and the "N going" line)
+  rather than by an image appearing and disappearing. Not a defect; a fixture
+  fact.
+- **Compact cards carry no distance line**, so the "18.3 mi" annotations in
+  the arc's expected output are the brief's notation for which fixture is
+  which, not something a user sees in timeline view. List view still shows
+  distance on every card.
+- **No day header spacing was measured.** The separator is 14px between every
+  row; the heading adds `paddingTop: 10` above itself. Whether that reads as
+  grouped is a feel question, on the human list.
+- **Nothing about native.** `accessibilityRole="header"` is in the JSX for
+  iOS/Android and has no web effect; it was not exercised.
+- **Nothing about light mode**, same structural reason as Entries 1–9.
+- **No screenshots.** DOM-read throughout.
+- **The pill-collapsed timeline was seen under ONE pill**, producing one
+  group. A filter that leaves rows on two non-adjacent days — two headers with
+  a suppressed one between — was not driven; the code path is the same loop.
+
+**Baseline:** checked against the running Expo web dev server at
+`localhost:8081` on 2026-09-18, against `main` @ `e2f53e2` plus this arc's
+working tree (`components/ViewSwitcher.tsx` new; `(tabs)/index.tsx`,
+`lib/eventTime.ts` modified). Driven **signed out**, at the persisted
+Sahuarita origin, radius 25 throughout. The dev database had been re-anchored
+by `scripts/reseed-fixture-dates.sql` with the 0005 → +3 days amendment
+applied. `npx tsc --noEmit` exits 0. `npx eslint` on the three source files
+reports the one pre-existing `react/no-unescaped-entities` error Entry 8
+baselined and nothing new. Console: no errors, no rnw deprecation warnings.
+**No database row was written by this arc.**

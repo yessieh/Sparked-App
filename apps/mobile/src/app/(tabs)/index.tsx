@@ -46,10 +46,12 @@ import ExploreSearch, { SearchTrigger } from '../../components/ExploreSearch';
 import InterestPills from '../../components/InterestPills';
 import LocationControl from '../../components/LocationControl';
 import SparkedLogo from '../../components/SparkedLogo';
+import ViewSwitcher, { type ViewMode } from '../../components/ViewSwitcher';
 import { useAuth } from '../../lib/auth';
 import { useEngagement } from '../../lib/engagement';
 import { useCategories } from '../../lib/categories';
 import { buildFilterCounts, matchesFilter, type SearchFilter } from '../../lib/eventFilters';
+import { dayLabel, localDayKey } from '../../lib/eventTime';
 import { MAX_RADIUS, useOrigin } from '../../lib/origin';
 import { supabase } from '../../lib/supabase';
 import { brand, tracking, trackingEm, useTheme } from '../../theme';
@@ -227,6 +229,19 @@ export default function Explore() {
   // was added. The feed's own filtering — the radius passed to the RPC and the
   // ENDED filter in `load` — is exactly what it was.
   const [searchOpen, setSearchOpen] = useState(false);
+
+  /**
+   * The view — list, map or timeline. SAME CLASS AS THE PILLS AND THE DATE
+   * WINDOW: plain useState, session-only, survives a trip to an event detail
+   * and back because this screen never unmounts on that trip (Entry 7 proved
+   * it by node identity), and resets on a real app termination — with the same
+   * native caveat that backgrounding is not termination.
+   *
+   * NOT persisted, deliberately. The pills are not persisted either, and
+   * whether Explore's view state should survive a relaunch is one question
+   * about all of it, not a new one this arc gets to answer alone.
+   */
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
 
   // --- Interest pills ------------------------------------------------------
   //
@@ -632,6 +647,77 @@ export default function Explore() {
     [savedIds, goingIds, rsvpDelta, gated, toggleSave, toggleRsvp],
   );
 
+  /**
+   * THE FEED CARD, list and timeline alike. One function, two callers, so a
+   * timeline card cannot save, gate or navigate differently from a list card —
+   * the only difference between the two views is `variant`, which the caller
+   * passes. Search has its own renderer above because its tap must close the
+   * overlay first; that is the one legitimate divergence.
+   */
+  const renderFeedCard = useCallback(
+    (item: FeedEvent, variant: 'photo' | 'compact') => (
+      <EventStub
+        event={
+          typeof item.rsvp_count === 'number'
+            ? { ...item, rsvp_count: item.rsvp_count + rsvpDelta(item.id) }
+            : item
+        }
+        variant={variant}
+        saved={savedIds.has(item.id)}
+        going={goingIds.has(item.id)}
+        onToggleSave={gated(() => toggleSave(item.id))}
+        onToggleGoing={gated(() => toggleRsvp(item.id))}
+        onTap={() => router.push({ pathname: '/event/[id]', params: { id: item.id } })}
+      />
+    ),
+    [savedIds, goingIds, rsvpDelta, gated, toggleSave, toggleRsvp],
+  );
+
+  /**
+   * The switcher only means something over a populated feed — a view switcher
+   * above an empty state has nothing to switch. Same gate shape as the pill
+   * row. When the feed is empty or pending the view is FORCED to list so the
+   * empty state's four cells render exactly as before; `viewMode` itself is
+   * left alone, so a feed that refills comes back in the view the user chose.
+   */
+  const hasFeed = events !== null && events.length > 0;
+  const effectiveView: ViewMode = hasFeed ? viewMode : 'list';
+
+  /**
+   * ONE FlatList, THREE ROW SHAPES. Switching the list's `data` rather than
+   * swapping the list keeps the header, the live regions, the refresh control
+   * and the EmptyState node in place across a view change — the same reason
+   * EmptyState is one element with four cells and not four elements.
+   *
+   * TIMELINE GROUPS BY LOCAL DAY, IN ARRIVAL ORDER. `visibleEvents` is sorted
+   * by starts_at since Arc F and is NOT re-sorted here; a day header is
+   * emitted the first time a new day key appears. A DAY WITH NO EVENTS HAS NO
+   * GROUP AND NO HEADER — the rows are built from the events that exist,
+   * never from a calendar range with gaps filled in. Two rows sharing a
+   * starts_at (the seeded tie case) arrive in the server's distance order and
+   * stay that way, which is Arc F's load-bearing claim rendered.
+   */
+  type Row =
+    | { kind: 'event'; event: FeedEvent }
+    | { kind: 'day'; key: string; label: string }
+    | { kind: 'map' };
+  const rows = useMemo<Row[]>(() => {
+    if (!visibleEvents) return [];
+    if (effectiveView === 'map') return [{ kind: 'map' }];
+    if (effectiveView === 'list') return visibleEvents.map((event) => ({ kind: 'event', event }));
+    const out: Row[] = [];
+    let lastDay: string | null = null;
+    for (const event of visibleEvents) {
+      const key = localDayKey(event.starts_at);
+      if (key !== lastDay) {
+        out.push({ kind: 'day', key, label: dayLabel(event.starts_at) });
+        lastDay = key;
+      }
+      out.push({ kind: 'event', event });
+    }
+    return out;
+  }, [visibleEvents, effectiveView]);
+
   const header = (
     <View style={{ paddingTop: 24, paddingBottom: 16, gap: 14 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -694,23 +780,48 @@ export default function Explore() {
           The node was already unconditional (Entry 7's ruling, untouched), but
           its children rendered only for pills, so a window change was a SILENT
           feed change. Sixth instance of the Entry 5 shape, and the one where
-          the node was right and the gate on its children was the defect. ===== */}
+          the node was right and the gate on its children was the defect.
+
+          REPARENTED BY ARC E (2026-09-18), AND THAT IS SAFE — read this before
+          treating the wrapper as an Entry 2 violation. Entry 2's rule forbids
+          the region REMOUNTING AT RUNTIME, which is what makes a region arrive
+          already holding its text. A wrapper added in source changes the tree
+          once, at build time; after that the region mounts with the screen
+          and stays, exactly as before. The region keeps its node, its props
+          and its children logic — only its parent changed, so the view
+          switcher could sit BESIDE it. The switcher must not go INSIDE it:
+          a region re-announces everything it contains on every transition,
+          the reason PlacePanel and DatePanel both mount outside theirs. ===== */}
       <View
-        role="status"
-        aria-live="polite"
-        style={{ paddingBottom: statusVisible ? 2 : 0 }}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          // Holds the switcher's vertical position when the region has no
+          // children, so the row does not collapse and re-expand as the
+          // status line comes and goes.
+          minHeight: 44,
+        }}
       >
-        {statusVisible ? (
-          <Text
-            style={{
-              fontFamily: theme.fonts.bodyMedium,
-              fontSize: theme.fontSizes.caption,
-              color: theme.colors.textMuted, // 4.57:1 on the page background
-            }}
-          >
-            {statusText}
-          </Text>
-        ) : null}
+        <View
+          role="status"
+          aria-live="polite"
+          style={{ flex: 1, minWidth: 0, paddingBottom: statusVisible ? 2 : 0 }}
+        >
+          {statusVisible ? (
+            <Text
+              style={{
+                fontFamily: theme.fonts.bodyMedium,
+                fontSize: theme.fontSizes.caption,
+                color: theme.colors.textMuted, // 4.57:1 on the page background
+              }}
+            >
+              {statusText}
+            </Text>
+          ) : null}
+        </View>
+        {hasFeed && <ViewSwitcher value={viewMode} onChange={setViewMode} />}
       </View>
 
       {/* GATED, NOT HEIGHT-RESERVED. Two async reads feed this row — the
@@ -742,22 +853,72 @@ export default function Explore() {
         // this is a pure derivation downstream that never writes back. The two
         // do not contend: one is a fetch-time filter on the response, the other
         // a render-time filter on the result.
-        data={visibleEvents ?? []}
-        keyExtractor={(e) => e.id}
-        renderItem={({ item }) => (
-          <EventStub
-            event={
-              typeof item.rsvp_count === 'number'
-                ? { ...item, rsvp_count: item.rsvp_count + rsvpDelta(item.id) }
-                : item
-            }
-            saved={savedIds.has(item.id)}
-            going={goingIds.has(item.id)}
-            onToggleSave={gated(() => toggleSave(item.id))}
-            onToggleGoing={gated(() => toggleRsvp(item.id))}
-            onTap={() => router.push({ pathname: '/event/[id]', params: { id: item.id } })}
-          />
-        )}
+        data={rows}
+        keyExtractor={(r) => (r.kind === 'event' ? r.event.id : r.kind === 'day' ? `day:${r.key}` : 'map')}
+        renderItem={({ item }) => {
+          if (item.kind === 'event') {
+            return renderFeedCard(item.event, effectiveView === 'timeline' ? 'compact' : 'photo');
+          }
+          if (item.kind === 'day') {
+            // A REAL HEADING, not a styled Text: `role="heading"` + aria-level
+            // for web, accessibilityRole="header" for native. Screen readers
+            // navigate by heading; a bold caption is invisible to that.
+            return (
+              <Text
+                role="heading"
+                aria-level={2}
+                accessibilityRole="header"
+                style={{
+                  fontFamily: theme.fonts.bodySemiBold,
+                  fontSize: theme.fontSizes.eyebrow,
+                  fontWeight: '900',
+                  textTransform: 'uppercase',
+                  letterSpacing: tracking(trackingEm.eyebrow, theme.fontSizes.eyebrow),
+                  color: theme.colors.text, // 14.11:1 on the page; not textMuted, a heading is not a caption
+                  paddingTop: 10,
+                }}
+              >
+                {item.label}
+              </Text>
+            );
+          }
+          // THE MAP POSITION — a disclosure, not an implementation. The
+          // header and switcher stay above it so one tap returns to the list.
+          // Wording borrowed from the Settings stubs; the component is not,
+          // because SettingsStub is a full-screen shell with its own header
+          // and back control. A CARD surface, so every line is colors.text —
+          // textMuted composites to 4.32:1 on #1d2a45 (Entry 2). NOT a live
+          // region: nothing here changes after it mounts.
+          return (
+            <View
+              style={{
+                paddingVertical: 36,
+                paddingHorizontal: 20,
+                alignItems: 'center',
+                gap: 6,
+                borderRadius: theme.radii.lg,
+                backgroundColor: theme.colors.cardBg,
+                borderWidth: 1,
+                borderColor: theme.colors.cardBorder,
+              }}
+            >
+              <Text
+                style={{
+                  fontFamily: theme.fonts.displayBlack,
+                  fontWeight: '900',
+                  fontSize: 15,
+                  letterSpacing: -0.15,
+                  color: theme.colors.text,
+                }}
+              >
+                Map view
+              </Text>
+              <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 12.5, color: theme.colors.text }}>
+                Coming soon
+              </Text>
+            </View>
+          );
+        }}
         ListHeaderComponent={header}
         ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
         contentContainerStyle={{

@@ -77,6 +77,41 @@ export function savedBucket(startsAtISO: string, now: Date = new Date()): SavedB
   return 'coming';
 }
 
+/**
+ * The LOCAL calendar day an instant falls on, as 'YYYY-MM-DD'. The grouping key
+ * for Explore's timeline (Arc E).
+ *
+ * LOCAL IS LOAD-BEARING. Seed event 0002 starts 02:45 UTC on Sep 20, which is
+ * the evening of Sep 19 in Phoenix. `iso.slice(0, 10)` — the UTC day — files it
+ * under the wrong header, and the bug is invisible to anyone testing in UTC+0.
+ * `getFullYear`/`getMonth`/`getDate` resolve in the device timezone.
+ */
+export function localDayKey(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/**
+ * The header a timeline day wears: "Today", "Tomorrow", the weekday name for
+ * the five days after that, then "Sat, Sep 26" beyond. Days BEFORE today (a
+ * multi-day event still running from yesterday) fall through to the dated
+ * form rather than inventing "Yesterday" — a date is truthful, a relative word
+ * for the past reads as an error on a discovery feed.
+ *
+ * Day distance is counted in LOCAL calendar days, not 24-hour spans, so an
+ * event at 11pm tonight and one at 1am tomorrow are one day apart.
+ */
+export function dayLabel(iso: string, now: Date = new Date()): string {
+  const day = new Date(iso);
+  const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diff = Math.round((startOf(day) - startOf(now)) / 86_400_000);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Tomorrow';
+  if (diff >= 2 && diff <= 6) return day.toLocaleDateString(undefined, { weekday: 'long' });
+  return eventDateLabel(iso);
+}
+
 /** "Sat, Jul 12" — device-local. */
 export function eventDateLabel(startsAtISO: string): string {
   return new Date(startsAtISO).toLocaleDateString(undefined, {
