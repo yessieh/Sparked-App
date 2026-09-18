@@ -1,5 +1,6 @@
-// Explore — the anonymous distance-pure feed, now with save/going toggles on
-// each card. Anonymous taps on either route to the auth screen (progressive
+// Explore — the anonymous radius-bounded feed, ordered by start time since Arc
+// F (2026-09-17; it was distance-ordered before — see `load`), with save/going
+// toggles on each card. Anonymous taps on either route to the auth screen (progressive
 // gating); the feed itself never gates.
 // Location and radius are USER-SET and PERSISTED (lib/origin.tsx) — the
 // hardcoded Sahuarita origin retired 2026-08-20 along with lib/devOrigin.ts.
@@ -470,11 +471,41 @@ export default function Explore() {
         // Mapped rather than cast: the RPC returns tier_id, FeedEvent
         // deliberately has no such field, and `lane` is derived from it here. A
         // blanket cast would have compiled while leaving every stripe undefined.
+        //
+        // SORTED BY starts_at ASCENDING, HERE, ONCE — Arc F (2026-09-17). This
+        // reversed the "by distance, honestly" ordering lock; SPARKED_STATE.md
+        // carries the reversal and its reason (a LIVE event rendered fourth,
+        // under three future ones). `visibleEvents` FILTERS this array and so
+        // inherits the order; do not sort there too — two sorts is two sources
+        // of truth for one order.
+        //
+        // THE SORT IS STABLE AND THE SERVER'S ORDER BY IS LOAD-BEARING FOR THE
+        // TIE. Array.prototype.sort is spec-stable since ES2019, so rows with
+        // equal starts_at keep the order the server returned them in — and the
+        // RPC returns them `order by st_distance(...) asc` (0031 PART A, line
+        // 216). The effective order is therefore starts_at, then distance, at
+        // no cost. That server line is NOT redundant now that the client
+        // sorts: removing it would make tie order arbitrary with no error, no
+        // failing test and nothing visible until two events at the same
+        // instant swapped places between loads.
+        //
+        // NO SECOND SORT KEY, and rsvp_count is refused by name: it is in the
+        // return set, it is the one tiebreak already to hand, and it is an
+        // ENGAGEMENT SIGNAL — using it would put algorithmic ranking into the
+        // feed through a tiebreak nobody would think to audit.
         setEvents(
-          (data ?? []).map((r: FeedEvent & { tier_id?: string | null }) => ({
-            ...r,
-            lane: laneFor(r.tier_id),
-          })),
+          (data ?? [])
+            .map((r: FeedEvent & { tier_id?: string | null }) => ({
+              ...r,
+              lane: laneFor(r.tier_id),
+            }))
+            // Compared as instants, not as strings: a lexical compare is only
+            // correct while every row carries the same UTC offset, which is
+            // true of PostgREST today and is not something to lean on.
+            .sort(
+              (a: FeedEvent, b: FeedEvent) =>
+                new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime(),
+            ),
         );
       }
     },
@@ -619,7 +650,7 @@ export default function Explore() {
             color: brand.brightOrange,
           }}
         >
-          Near you · by distance, honestly
+          Soonest first · nothing from other cities
         </Text>
         <Text
           style={{

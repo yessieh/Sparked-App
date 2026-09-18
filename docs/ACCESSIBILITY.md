@@ -2175,3 +2175,111 @@ this arc.** The RPC was READ three times outside the app's own calls, via the
 page's own anon headers, to establish that no future rows exist and to take
 the 11 past rows the stub re-dated. **No source
 file was edited to produce a measurement.**
+
+---
+
+# Entry 9 — 2026-09-17 — Explore orders by start time (Arc F)
+
+**The arc:** one sort in `load` — the RPC's rows are ordered by `starts_at`
+ascending before `setEvents` — and one string, the header eyebrow. **No SQL,
+no migration, no RPC change**; the privilege gate is N/A under CLAUDE.md's
+carve-out, stated rather than omitted, and the grant surface is provably
+untouched: nothing under `supabase/` was written and the RPC is called with the
+same five arguments. This entry is short because the change is; it says so
+rather than padding.
+
+## Reading order changed — DOM order now follows `starts_at`
+
+Driven at Sahuarita / **100 mi**, window Sep 17–23, signed out. The server
+response and the rendered DOM were captured on the same load:
+
+| position | server (wire, `order by st_distance`) | DOM (after the client sort) |
+| --- | --- | --- |
+| 1 | Lakeside Songwriters Night · 1.2 mi | **Downtown Food Truck Round-Up · 18.3 mi · LIVE** |
+| 2 | Green Valley Art Walk · 7.5 mi | Lakeside Songwriters Night · 1.2 mi · Sep 18 |
+| 3 | San Xavier Craft Fair · 10.7 mi | Oro Valley Concert in the Park · 29.9 mi · Sep 19 |
+| 4 | Madera Canyon Stargazing · 16.6 mi | Madera Canyon Stargazing · 16.6 mi · Sep 20 |
+| 5 | Downtown Food Truck Round-Up · 18.3 mi | San Xavier Craft Fair · 10.7 mi · Sep 21 |
+| 6 | Oro Valley Concert in the Park · 29.9 mi | Green Valley Art Walk · 7.5 mi · Sep 22 |
+
+The pair the arc exists for: the LIVE event at 18.3 mi renders FIRST, above
+the 1.2 mi event. Under the old order it was fifth here (fourth at 25 mi,
+which is the observation that justified the arc). Card `getBoundingClientRect().top`
+values ascend in that DOM order (526 → 773 → 1020 → 1267 → 1525 at 25 mi), so
+a screen reader's reading order and the visual order are the same order, and
+it is the time order. Also confirmed at the default 25 mi / "Now through
+Tomorrow" window: Food Truck first, Songwriters second, nothing else — the two
+cards a fresh visitor sees today.
+
+**The server's ordering is still on the wire**, which is the point of the
+stable sort: two rows with identical `starts_at` keep the server's distance
+order. That case exists in the fixtures (`0006` Madera Canyon and `0009`
+Phoenix First Friday share an offset) but Phoenix is 121.8 mi out and the
+radius caps at 100, so the tie was NOT rendered — see below.
+
+## Why no announcement is owed
+
+The order changes only on a LOAD, never in place. Every load path — focus,
+pull-to-refresh, `onWiden`, `onWindowChange`, `onWindowReset` — blanks the
+list first with `setEvents(null)` (Entry 2's rule, restated at each site), so
+the list region is in its pending phase before the newly ordered rows mount.
+Nothing re-orders under a screen reader mid-read, and there is no transition
+from one order to another for a live region to announce. This is the same
+reason a pill toggle needs no announcement of the resulting card order: the
+cards are a filtered view of an array whose order was fixed at load.
+
+## The filter-status live region is UNAFFECTED — read from the DOM
+
+| Transition | Region text | Same node |
+| --- | --- | --- |
+| 100 mi, Sep 17–23, no pills | `Showing 6 · Sep 17–23` | — captured |
+| Tap **Music** (auto-joins Curbside) | `Showing 2 of 6 · Curbside, Music · Sep 17–23` | **true** |
+| Untap Music, untap Curbside | `Showing 6 · Sep 17–23` | **true** |
+
+The two filtered cards rendered in time order (Songwriters Sep 18 before Oro
+Valley Sep 19), which is the `visibleEvents`-inherits-the-sort claim holding:
+it filters `events` and re-orders nothing. Strings identical to Entry 8's
+templates; only the counts differ because the feed is populated now.
+
+## No new interactive element
+
+No new Pressable, no new text style, no new surface. The eyebrow keeps its
+typography, colour and tracking; only the string changed, from `Near you · by
+distance, honestly` to `Soonest first · nothing from other cities`. No touch
+target measurement is owed. The eyebrow's contrast was read anyway rather than
+assumed, because the string got longer and a reader may wonder: `brightOrange`
+`rgb(252,163,17)` at 10px uppercase on the page `#14213D`, **7.90:1**,
+composited off the painted element. (Entry 6's 8.58:1 for the same token was
+on `deepNavy` `#0f1a30`, a different surface — not the figure for this line.)
+
+## What this entry does NOT establish
+
+- **THE TIE CASE WAS NOT RENDERED.** The stable-sort-then-distance claim is
+  argued from the spec (Array.prototype.sort stable since ES2019) and the wire
+  (the server order was present in the response), not observed: the only two
+  fixtures sharing a `starts_at` are 16.6 mi and 121.8 mi apart and the radius
+  cap is 100. Seeing it needs either a second in-radius pair at one instant or
+  the cap raised, and neither is this arc's to do.
+- **Radius was set by writing `sparked.origin.v1` in `localStorage` and
+  reloading, not through the header control.** The inline radius TextInput
+  did not commit under synthetic `input` events or the pane's `form_input` +
+  Return; that is a driving limitation of this session, not a finding about
+  the control, which Entry 3 verified by hand. The stored value was restored
+  to 25 afterwards and confirmed.
+- **Nothing about native.** Expo web only. The sort is platform-neutral
+  JavaScript, so there is no reason to expect a difference, but none was
+  observed either.
+- **Nothing about light mode**, same structural reason as Entries 1–8.
+- **No screenshots.** DOM-read throughout. The eyebrow's rendered feel and the
+  new first card being the live one are on the human list — the second is the
+  thing a person will notice first and this entry can only report positions.
+
+**Baseline:** checked against the running Expo web dev server at
+`localhost:8081` on 2026-09-17, against `main` @ `23b9a50` plus this arc's
+working tree (`(tabs)/index.tsx` modified). Driven **signed out**, at the
+persisted Sahuarita origin, radius 25 → 100 → 25. The dev database had been
+re-anchored by `scripts/reseed-fixture-dates.sql` before this pass — the first
+entry in this file driven against a populated live feed. `npx tsc --noEmit`
+exits 0. `npx eslint` on `index.tsx` reports the one pre-existing
+`react/no-unescaped-entities` error Entry 8 baselined and nothing new.
+Console: no errors. **No database row was written by this arc.**

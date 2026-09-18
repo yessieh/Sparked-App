@@ -9,6 +9,30 @@ A local-events discovery + hosting app. Mobile-first (the rebuild was triggered 
 original code wasn't written mobile-optimized). Two-sided:
 - **Consumers** discover events near them, ranked **by distance, not by algorithm.** Core brand
   promise: "by distance, honestly — no feed fatigue, no algorithmic manipulation."
+  **AMENDED 2026-09-17 (Arc F) — THE SORT REVERSED; THE PROMISE MOVED.** The rule as locked
+  was "ranked by distance, not by algorithm," and the Explore eyebrow said it in those words:
+  `Near you · by distance, honestly`. **Explore now orders by `starts_at` ascending.** The
+  reason is an observation, not a preference: with the fixtures re-anchored and the radius at
+  100 mi, a LIVE event — Downtown Food Truck Round-Up, happening at that moment, 18.3 mi —
+  rendered FOURTH, under three events one, three and four days out. A live event buried under
+  future ones is a product failure on a discovery feed, and no reading of "honestly" survives
+  it. **The hyperlocal promise is not abandoned; it changes from a SORT claim to a FILTER
+  claim:** the feed is radius-bounded, we never pad it with far-away filler, and every card
+  states its own distance. The eyebrow now reads `Soonest first · nothing from other cities` —
+  first half the new sort, second half the surviving promise. The no-algorithm half is intact
+  and is what the sort key protects: `starts_at` is an objective, non-engagement field. Ties
+  (identical `starts_at`) fall back to the server's distance order through a stable sort —
+  the RPC's `order by st_distance` (0031:216) is LOAD-BEARING for that and is not redundant.
+  `rsvp_count` was refused as a tiebreak by name: it is an engagement signal, and ranking on
+  it through a tiebreak is algorithmic ranking through a door nobody audits. **THIS MAKES
+  EXPLORE THE FIRST SURFACE IN THE APP TO ORDER BY SOMETHING OTHER THAN DISTANCE.** The ruling
+  previously written for Timeline (OPEN WORK 1.5) now belongs here: a user-visible sort by an
+  objective, non-engagement field is not algorithmic re-ranking. Timeline inherits that ruling
+  rather than introducing it. The Curbside rule below ("feed stays distance-pure — NO
+  re-ranking/balance") is unaffected in substance: it forbids re-ranking Curbside RELATIVE to
+  paid rows, and a global time sort treats every tier identically. `docs/ACCESSIBILITY.md`
+  Entry 9. Search (`ExploreSearch.tsx`) keeps its own ordering; its overflow band is
+  distance-based by nature.
 - **Hosts / event coordinators** (the paying customers) create and manage event listings.
 
 Future vision (NOT MVP): advertising for local dining, shopping, and contractors/services.
@@ -2178,10 +2202,11 @@ cold-start empty state at 2 while it was already in flight.*
       live data and one prerequisite it surfaced are in the tracker under
       EXPLORE FILTERING.
    5. **Timeline** view — **NEXT.** Two things already agreed and owed when it
-      ships: (a) a user-chosen sort is not algorithmic re-ranking, but Timeline
-      is the FIRST surface in the app that orders by anything other than
-      distance, and that fact gets recorded here, in this document, when it
-      lands; (b) its verification PREREQUISITE — the dev database holds NO
+      ships: (a) a user-chosen sort is not algorithmic re-ranking — **RULING
+      NOW MADE, BY ARC F (2026-09-17): Explore itself orders by `starts_at`
+      and became the first non-distance-ordered surface; Timeline INHERITS
+      that ruling rather than introducing it** (see the amended brand promise
+      under WHAT SPARKED IS); (b) its verification PREREQUISITE — the dev database holds NO
       future-dated events (probed 2026-09-17: 0 rows in the next 200 days at
       100 mi), and a surface that orders by `starts_at ASC` cannot be verified
       against an empty set. A future-dated fixture reseed comes first; the
