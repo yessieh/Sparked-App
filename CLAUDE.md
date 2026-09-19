@@ -69,3 +69,51 @@ to arcs that change RPC arguments, function bodies, or anything reachable from
 PostgREST: **if a migration file is written, the gate applies in full.**
 
 **The rule this enforces:** a grant is written once and reviewed once, at creation. Features change around it and nobody re-reads it. Four privilege incidents in this build traced to exactly that, and all four were found incidentally. The diff is what makes finding them non-incidental.
+
+# Unverified premises are labelled, never asserted
+
+A build prompt states facts about the stack — what an API returns, what a
+library does, what a role can read. **Any such premise is either verified with a
+command before the prompt is written, or carried in the prompt as `UNVERIFIED:`
+alongside the check that would settle it.** An unlabelled wrong premise becomes
+a wrong instruction, and the cost lands at build time or later.
+
+Not hypothetical. A brief asserted that React Native Web gives a pressable
+`Text` the same keyboard activation it gives a `Pressable`. It does not, and
+building to that sentence as written would have shipped a focusable, inert link
+— the exact defect the arc existed to remove. A second brief asserted an
+expected row count that a correct run would have reported as a failure.
+
+A premise that arrives labelled UNVERIFIED is the first step of the arc, and the
+answer goes in the report whichever way it falls.
+
+# A comment asserting a privilege property cites its evidence
+
+Any comment claiming who can read or write something — an RLS outcome, a grant,
+an anonymous-access property — names the migration or the verification that
+established it, with a date. A bare assertion is worse than no comment: it
+answers the question before anyone thinks to ask it.
+
+`(tabs)/event/[id].tsx` carried `// event_vendors RLS lets anon read rows of any
+publicly-visible event, so no RPC is needed.` It was false. Anonymous users
+could not read that table at all, the Plus tier's vendor pins were invisible to
+every signed-out visitor, and that sentence is the reason nobody checked for a
+month.
+
+# Catalog-verified is not behaviour-verified
+
+The per-arc privilege audit proves that grants, policies and functions EXIST
+with the shape recorded. It cannot prove that a given role can actually complete
+a given read. Those are different claims, and the gate only makes the first.
+
+**Any arc that adds or changes a read path owes one behavioural check per role
+meant to use it** — a driven read as that role, not a clean Section 1. Where the
+role is `anon`, that is a `set local role anon` probe in the SQL Editor or an
+anonymous request against the endpoint.
+
+Found the hard way: `anon` held SELECT on `event_vendors` in all eleven
+baselines ever captured, its policy was a permissive PUBLIC SELECT, every audit
+was clean — and anonymous users could not read the table. See
+`docs/STACK_FACTS.md`. This extends **Name the verification baseline** above:
+naming what you checked against is necessary, and insufficient when what you
+checked was the catalog.
