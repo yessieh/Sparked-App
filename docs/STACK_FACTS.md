@@ -65,20 +65,34 @@ predicate contains it):
 | policy | table it guards | reads `workspace_id` on | for `anon` |
 | --- | --- | --- | --- |
 | `events_select_public` | `events` | its OWN table | FINE — entry 8 |
-| `event_categories_select_public` | `event_categories` | `events`, via subquery | BROKEN — unexercised |
-| `event_vendors_select_public` | `event_vendors` | `events`, via subquery | BROKEN — live defect |
+| `event_categories_select_public` | `event_categories` | `events`, via subquery | WAS BROKEN — unexercised; fixed by 0033 |
+| `event_vendors_select_public` | `event_vendors` | `events`, via subquery | WAS BROKEN — live defect 2026-08-16 → 2026-09-21; fixed by 0033 |
 
-`event_categories_select_public` carries the identical defect and is invisible
-only because nothing on a consumer path reads `event_categories` directly. The
-first thing that does will fail identically.
+`event_categories_select_public` carried the identical defect and was invisible
+only because nothing on a consumer path read `event_categories` directly. The
+first thing that did would have failed identically.
+
+**RESOLVED 2026-09-21, migration 0033.** `app.is_event_member(p_event_id uuid,
+p_roles text[])`, SECURITY DEFINER, resolves the event's `workspace_id` inside
+its own body and delegates to `app.is_member`; both policies were ALTERed to
+call it with `e.id` — a column every role reads — in place of
+`app.is_member(e.workspace_id, …)`, one substitution each, nothing else
+changed. Verified per role and per policy branch by
+`scripts/qa-0033-event-member-predicate.sql` (12/12, 18/18): anon reads both
+tables on a published Plus event (`n=2`, was `ERR 42501`); anon on a draft gets
+0 rows and no error. **The fact this entry teaches is unchanged and still
+true**: the mechanism did not go away, the policies stopped exercising it. Any
+future cross-table policy that names a column some admitted role cannot read
+will fail exactly this way, and the six `_members` siblings are one
+`authenticated` revoke from doing so (tracker).
 
 **Consequence here.** Any consumer read of a table whose policy reaches into
 `events` must either go through a SECURITY DEFINER function — which is what
 0028 did for every read path except `event_vendors` — or the policy itself
-must stop naming the revoked column (a definer predicate helper both policies
-call; migration 0033, tracked). Granting `anon` `events.workspace_id` is NOT
-the fix: it reverses 0029's privacy ruling, and the error's own hint proposes
-a still-wider version of the same mistake (entry 2).
+must not name a column the caller cannot read (a definer predicate helper,
+which is what 0033 did). Granting `anon` `events.workspace_id` is NOT the fix:
+it reverses 0029's privacy ruling, and the error's own hint proposes a
+still-wider version of the same mistake (entry 2).
 
 **What made this expensive.** `event_categories_select_public` has the same
 shape and appears to work. It does not: nothing in the consumer app reads

@@ -2087,6 +2087,81 @@ functions and nothing else; Sections 1–3 and 5–8 identical. **Suite 23/23**,
 which raises and takes the grid down), survivors' exact grantee set vs the
 baseline, both roles through the 5-arg path plus 42883 on both 3-arg forms,
 and the PostgREST 404 PGRST202 probe that proves the notify took.
+0033 `app.is_event_member` — the two cross-table policies stop naming a column
+the caller cannot read (**APPLIED 2026-09-21**; suite green and post-arc diffed
+the same day). **THE CAUSE WAS ONE COLUMN.** `event_vendors_select_public`
+(0019) and `event_categories_select_public` (0030) both read
+`events.workspace_id` through `exists (select 1 from public.events e where …
+app.is_member(e.workspace_id, …))`. A subquery inside a policy is the CALLER's
+own query against `events`, privilege-checked per column, and 0029 revoked
+`workspace_id` from `anon` on 2026-08-16 — so every anonymous read of either
+table raised `42501 permission denied for table events` from that day.
+`event_vendors` has a live consumer path (`(tabs)/event/[id].tsx:109`, the
+Plus tier's vendor pins and site map) and it failed SILENTLY: the caller takes
+only `data`, so the error fell through `?? []` and rendered as "no vendors" for
+every signed-out visitor for five weeks. `event_categories` has the identical
+shape and no consumer path yet. `events_select_public` reads the same column on
+its OWN table and never broke: a policy's references to the table it guards
+are not privilege-checked; references to OTHER tables are (`docs/STACK_FACTS.md`
+entries 1 and 8). **THE FIX SHAPE.** `app.is_member` was already a definer;
+the leak was its ARGUMENT, evaluated by the caller. ONE new function,
+`app.is_event_member(p_event_id uuid, p_roles text[]) returns boolean` —
+`language sql stable security definer set search_path = public, app` — takes
+the EVENT id (a column every role reads), resolves `workspace_id` inside its
+own body and delegates to `app.is_member` UNCHANGED. Then TWO `alter policy …
+using (…)` statements — ALTER, not drop + create, so the tables were never
+unprotected and the diff shows a changed qual rather than remove + add — in
+which **exactly one call changes**: `app.is_member(e.workspace_id, array[…])`
+→ `app.is_event_member(e.id, array[…])`, the role array identical, every other
+token of both predicates reproduced verbatim from 0019 and 0030 PART C. The two
+public branches DIFFER (categories carries `deleted_at`, `curbside_expired` and
+the attendee-history branch; vendors carries none) and were not unified: this
+fixes a privilege bug and changes no visibility semantics. NOT the fix, named
+in the header: re-granting `workspace_id` to anon (reverses 0029; the error's
+own hint proposes a wider version), and moving `event_vendors` behind an RPC
+(0028-pattern tidy-up, a separate decision). **Grant surface: one new
+function, two grants, no PUBLIC.** The implicit PUBLIC EXECUTE that CREATE
+FUNCTION mints is revoked, then EXECUTE granted to `anon, authenticated` —
+CONSUMED BY both altered policies (an RLS expression calling a function needs
+the caller to hold EXECUTE; anon is REQUIRED, the storefront is signed out and
+the member branch is evaluated for anon on any row the public branch refuses).
+The revoke is not boilerplate: `app.is_member` itself still carries
+`PUBLIC:EXECUTE` as a tracked pre-launch item, and this arc must not add a
+second. Escalation surface stated in the header: one bit — is the caller a
+member of this event's workspace — which a member already knows; no row data
+crosses. **THE SIX `_members` SIBLINGS** (INSERT/UPDATE/DELETE on both tables)
+read `e.workspace_id` the same way for `authenticated` and are NOT broken,
+because `authenticated` retains that column; the header records that a future
+revoke from `authenticated` must land AFTER they move onto the helper — the
+warning 0029 did not have. No `notify pgrst`: nothing in PostgREST's cache
+changed. **Post-arc diff against
+`supabase/audits/baselines/2026-09-17-post-drop-3arg.md`** (the pre-arc
+baseline — no migration ran between; post-arc
+`2026-09-21-post-event-member-predicate.md`): Section 4 41 → 42, the one new
+function, `definer=true`, `search_path=public, app`, `postgres, anon,
+authenticated`, NO PUBLIC; Section 8 exactly TWO `using_md5` changes —
+`event_categories_select_public` f6ff7b47… → a51a4139…,
+`event_vendors_select_public` 2d84b95f… → 0c5031e1… — and 27 of 29 policies
+byte-identical on both hashes, all six `_members` siblings among them;
+Sections 1/2/3/5/6/7 identical (114/13/0/268/4/19). **METHOD, worth keeping:
+compare the md5 columns, not the rendered rows.** The raw text diff showed
+ALL of Section 8 as changed — the longer expressions re-padded every column —
+and only the hash comparison separated two real changes from 27 phantom ones.
+**Suite `scripts/qa-0033-event-member-predicate.sql`: Section 1 12/12,
+Section 2 18/18** — the first suite in this project written per ROLE AND PER
+POLICY BRANCH (CLAUDE.md, "Catalog-verified is not behaviour-verified"): 2b/2c
+anon reads vendors and categories on a published Plus event, `n=2` (was `ERR
+42501` since 0029); 2d/2e anon on a DRAFT, `n=0` and NO ERROR — the member
+branch evaluated for anon and false, which a published row cannot prove (the
+OR short-circuits), and the world-readable control in the same query; 2f–2i
+the stranger, public yes / member no; 2j/2k the host sees the draft's rows
+through the helper, which cannot pass on a NULL `auth.uid()`; **2a asserted
+`auth.uid()` resolved to the host BEFORE any member case**, so those rows are
+meaningful rather than NULL-user artefacts. One suite fix on first run:
+`p.provolatile` is `"char"` and `"char" || text` is ambiguous — cast to text
+(committed with the close-out). The false comment at `(tabs)/event/[id].tsx:105`
+was replaced in the same commit as the migration with one that cites 0033, the
+suite and STACK_FACTS entry 1.
 
 **Auth backend configured (2026-07-09, dashboard only — no app code):**
 email confirmations ON; Google OAuth provider ENABLED (GCP web client,

@@ -73,8 +73,8 @@
 -- is PUBLIC and renders as `=X/owner`.
 -- ############################################################################
 select * from (values
-    ('1a. app.is_event_member(uuid, text[]) exists',
-     'true',
+    ('1a. app.is_event_member(uuid, text[]) exists (count of matching pg_proc rows)',
+     '1',
      (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'app' and p.proname = 'is_event_member'
          and pg_get_function_identity_arguments(p.oid) = 'p_event_id uuid, p_roles text[]')::text,
@@ -84,7 +84,7 @@ select * from (values
 
     ('1b. it is SECURITY DEFINER, stable, search_path=public, app',
      'true | s | search_path=public, app',
-     (select p.prosecdef::text || ' | ' || p.provolatile || ' | ' || coalesce(array_to_string(p.proconfig, ', '), '(NONE)')
+     (select p.prosecdef::text || ' | ' || p.provolatile::text || ' | ' || coalesce(array_to_string(p.proconfig, ', '), '(NONE)')
         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'app' and p.proname = 'is_event_member'),
      (select p.prosecdef and p.provolatile = 's' and array_to_string(p.proconfig, ', ') = 'search_path=public, app'
@@ -112,8 +112,8 @@ select * from (values
         cross join lateral unnest(coalesce(p.proacl, '{}'::aclitem[])) as a(item)
        where n.nspname = 'app' and p.proname = 'is_event_member') = false),
 
-    ('1f. app.is_member is UNCHANGED (still 0001''s ws uuid, text[] signature)',
-     'true',
+    ('1f. app.is_member is UNCHANGED (still 0001''s ws uuid, text[] signature; count)',
+     '1',
      (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'app' and p.proname = 'is_member'
          and pg_get_function_identity_arguments(p.oid) = 'ws uuid, roles text[]')::text,

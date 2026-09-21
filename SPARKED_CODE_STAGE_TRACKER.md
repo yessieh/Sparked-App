@@ -688,8 +688,35 @@ migration lands between, the NAME is the anchor, not the number.
 > qualify the anonymity claim above — it is collateral, in the opposite
 > direction from a leak.
 
-- [ ] **ANON CANNOT READ `public.event_categories` — 42501, pre-existing since
-      0029, UNFIXED.** Its own arc; do not fold it into anything.
+- [x] **ANON CANNOT READ `public.event_categories` — 42501, pre-existing since
+      0029 — CLOSED 2026-09-21 BY MIGRATION 0033.** History kept below as
+      written; this paragraph is the close.
+      **Both halves fixed by the one migration.** `app.is_event_member(uuid,
+      text[])`, SECURITY DEFINER, resolves the event's workspace inside its
+      own body and delegates to `app.is_member`; `alter policy` on
+      `event_categories_select_public` AND `event_vendors_select_public`
+      substitutes exactly one call each (`is_member(e.workspace_id, …)` →
+      `is_event_member(e.id, …)`), everything else verbatim, no visibility
+      semantics changed. The `event_categories` half — this item's original
+      subject, open since 2026-09-02, nineteen days before the arc — is fixed
+      by the same two statements, not by a follow-up.
+      **Evidence:** applied via `npx supabase db push --linked`;
+      `scripts/qa-0033-event-member-predicate.sql` Section 1 **12/12**,
+      Section 2 **18/18** — 2b/2c anon reads both tables on a published Plus
+      event `n=2` (was `ERR 42501`), 2d/2e anon on a draft `n=0` with NO
+      ERROR (the member branch evaluated for anon; also the world-readable
+      control), 2j/2k the host sees the draft through the helper, 2a proved
+      `auth.uid()` resolved first. Post-arc baseline
+      `supabase/audits/baselines/2026-09-21-post-event-member-predicate.md`
+      diffed against `2026-09-17-post-drop-3arg.md`: Section 4 +1
+      (`app.is_event_member`, definer, `search_path=public, app`, `postgres,
+      anon, authenticated`, no PUBLIC); Section 8 exactly two `using_md5`
+      changes (categories f6ff7b47→a51a4139, vendors 2d84b95f→0c5031e1), 27/29
+      policies byte-identical including all six `_members`; Sections 1–3,
+      5–7 identical. Full entry in SPARKED_STATE's applied-migrations
+      paragraph. Grant surface: one new function, two grants, no PUBLIC.
+      **Still open, split out below:** the six `_members` siblings (latent),
+      and the fixture that is the only way to SEE vendor pins render.
 
       **AMENDED 2026-09-21 — THE SAME DEFECT IS LIVE ON `public.event_vendors`,
       AND IT HAS BEEN USER-VISIBLE SINCE 0029 (2026-08-16).** This item was
@@ -708,7 +735,10 @@ migration lands between, the NAME is the anchor, not the number.
       same-table exemption that spares `events_select_public`:
       `docs/STACK_FACTS.md` entries 1 and 8, which supersede the mechanism
       paragraph below where they differ (they do not; the paragraph was right).
-      **The fix is migration 0033, NOT YET WRITTEN:** the definer predicate
+      **The fix is migration 0033** (written 2026-09-21 as
+      `app.is_event_member`, applied and verified the same day — see the close
+      at the top of this item; the rest of this paragraph is the plan as it
+      stood before it was written): the definer predicate
       helper described under "THE FIX SHAPE" — e.g.
       `app.event_is_publicly_readable(p_event_id uuid)` — called by BOTH
       `event_categories_select_public` and `event_vendors_select_public`, so
@@ -773,6 +803,41 @@ migration lands between, the NAME is the anchor, not the number.
       0020→0021 lesson quoted at the bottom of this section: several read paths
       changed at once, one checked nothing, and the storefront went down for
       anon.
+
+- [ ] **THE SIX `_members` POLICIES ARE ONE REVOKE FROM THE SAME FAILURE —
+      KNOWN-LATENT, NOT BROKEN, NOT CHANGED BY 0033.** Recorded 2026-09-21.
+      `event_categories_{insert,update,delete}_members` and
+      `event_vendors_{insert,update,delete}_members` read `e.workspace_id`
+      through the same cross-table subquery, for `authenticated`. They work
+      today only because `authenticated` still holds SELECT on that column
+      (0029 revoked it from anon alone). The item immediately above this
+      section's "The gap" — revoking `workspace_id` from `authenticated` to
+      close correlation by account holders — is exactly the revoke that would
+      break all six at once, and every audit would read clean while they were
+      broken. 0033's header states the ordering: **that revoke lands AFTER
+      the six are moved onto `app.is_event_member` (or a sibling helper),
+      never before.** The 2026-09-21 post-arc baseline shows all six hashes
+      unchanged (Section 8, `8d73d16e` ×3 categories, `41c8ed7d` ×3 vendors),
+      which is the state this item guards. Do not fold into 0033; it is the
+      authenticated-revoke arc's first step.
+
+- [ ] **THE ONLY VENDOR FIXTURE IS A HAND-MADE TEST EVENT — DO NOT LET
+      `qa-cleanup.sql` DESTROY IT.** Recorded 2026-09-21 before it happens.
+      `2adc4e91-3e76-411a-b8f3-37fdc071d947` ("TEST EVENT") is a published
+      Plus event with **2 `event_vendors` rows**, and it is the ONLY event in
+      the database with any vendor rows — the seeded fixtures (`33333333-%`)
+      have none, so it is the only way to see vendor pins and the site map
+      render, and the only way to re-verify 0033 in the app rather than in
+      SQL. It is NOT seeded and NOT under the `33333333-%` prefix, so
+      `qa-cleanup.sql`'s seed exclusion does not protect it; that script
+      deletes by ADDRESS prefix (`18680 S Nogales Hwy%`, `123 Rainbow
+      Road%`), so it survives only as long as its address does not match.
+      **Before any cleanup run, confirm its address is not a QA address; if it
+      ever is, add its id to the exclusion, or re-seed vendor rows onto a
+      `33333333-%` Plus event (0002 or 0006) via `supabase/seed.sql` so the
+      fixture is durable** — the second is the real fix and belongs to the
+      next seed change. `event_vendors` cascades on the events FK; a delete
+      of this row takes both vendor rows with it silently.
 
 - [x] **The gap.** `events.workspace_id` carried an anon SELECT grant, so
       `/rest/v1/events?select=workspace_id,curbside_anonymous` resolved an anonymous
