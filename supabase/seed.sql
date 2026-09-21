@@ -141,6 +141,27 @@ values
    extensions.st_setsrid(extensions.st_makepoint(-110.9556, 31.9576), 4326)::extensions.geography,
    0, null);
 
+-- Vendor pins on 0002 (Lakeside Songwriters Night: Plus, published, 1.2 mi —
+-- inside even the default 25-mile radius, so the pins are reachable without
+-- touching any control). Two rows, fixed ids in the seed's style, so
+-- `db reset` is deterministic.
+--
+-- WHY THESE EXIST. Vendor pins are a paid-tier feature that had NO seeded
+-- fixture. The only event_vendors rows in dev belonged to a hand-made event
+-- that was soft-deleted on 2026-08-15 — so the feature was unverifiable in
+-- the app from that day, which is part of why migration 0029's breakage of
+-- the read (anon 42501 on event_vendors, fixed by 0033 on 2026-09-21) went
+-- unnoticed for five weeks. A feature with no fixture is a feature nobody
+-- looks at. Columns match lib/vendors.ts VendorRow and what the wizard writes;
+-- logo_path stays NULL (placeholder image until real uploads land).
+-- scripts/seed-vendor-fixture.sql inserts the same two rows into the CURRENT
+-- database, idempotently — this file only runs on a reset.
+insert into public.event_vendors (id, event_id, name, vendor_type, logo_path, pin_x, pin_y, sort_order) values
+  ('44444444-0001-4000-8000-000000000001', '33333333-0002-4000-8000-000000000002',
+   'Lakeside Coffee Cart', 'Coffee', null, 0.28, 0.36, 1),
+  ('44444444-0002-4000-8000-000000000002', '33333333-0002-4000-8000-000000000002',
+   'Valley Vinyl & Merch', 'Merch', null, 0.71, 0.62, 2);
+
 -- Category tags (the curbside event self-tags via trigger; skip it here).
 insert into public.event_categories (event_id, category_id) values
   ('33333333-0001-4000-8000-000000000001', 'markets'),

@@ -282,6 +282,13 @@ where e.id = v.id
 --                      this query has no distance tiebreak. The feed's does.
 --       0004  +120   ← the swap: 7.48 mi lands at 5 days
 --     `touched_this_run` true on the nine rows other than 0003.
+--     THE BOOLEAN IS A CONVENIENCE, NOT THE PROOF. It was 1 minute and
+--     false-alarmed on its first real use (2026-09-21) — reading a ten-row
+--     grid takes longer than sixty seconds — so it is now 30. The
+--     authoritative proof that one UPDATE touched all nine rows needs no
+--     boolean at all: the nine `updated_at` values are IDENTICAL to the
+--     microsecond (one transaction, one now(); see 0003 for the one that
+--     differs). Read that column; trust it over the flag.
 --     Confirm the pair is a real tie: 0005's and 0006's `starts_at` must be
 --     EQUAL to the microsecond, not merely the same day.
 -- ---------------------------------------------------------------------------
@@ -293,7 +300,7 @@ select
   e.starts_at,
   e.ends_at,
   round((extract(epoch from (e.starts_at - now())) / 3600.0)::numeric, 1) as hours_from_now,
-  e.updated_at > now() - interval '1 minute'                    as touched_this_run
+  e.updated_at > now() - interval '30 minutes'                  as touched_this_run
 from public.events e
 where e.id::text like '33333333-%'
   and e.deleted_at is null

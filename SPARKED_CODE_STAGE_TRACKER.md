@@ -821,23 +821,32 @@ migration lands between, the NAME is the anchor, not the number.
       which is the state this item guards. Do not fold into 0033; it is the
       authenticated-revoke arc's first step.
 
-- [ ] **THE ONLY VENDOR FIXTURE IS A HAND-MADE TEST EVENT — DO NOT LET
-      `qa-cleanup.sql` DESTROY IT.** Recorded 2026-09-21 before it happens.
-      `2adc4e91-3e76-411a-b8f3-37fdc071d947` ("TEST EVENT") is a published
-      Plus event with **2 `event_vendors` rows**, and it is the ONLY event in
-      the database with any vendor rows — the seeded fixtures (`33333333-%`)
-      have none, so it is the only way to see vendor pins and the site map
-      render, and the only way to re-verify 0033 in the app rather than in
-      SQL. It is NOT seeded and NOT under the `33333333-%` prefix, so
-      `qa-cleanup.sql`'s seed exclusion does not protect it; that script
-      deletes by ADDRESS prefix (`18680 S Nogales Hwy%`, `123 Rainbow
-      Road%`), so it survives only as long as its address does not match.
-      **Before any cleanup run, confirm its address is not a QA address; if it
-      ever is, add its id to the exclusion, or re-seed vendor rows onto a
-      `33333333-%` Plus event (0002 or 0006) via `supabase/seed.sql` so the
-      fixture is durable** — the second is the real fix and belongs to the
-      next seed change. `event_vendors` cascades on the events FK; a delete
-      of this row takes both vendor rows with it silently.
+- [x] **VENDOR PINS HAVE A SEEDED FIXTURE — two `event_vendors` rows on
+      `33333333-0002` (Lakeside Songwriters Night: Plus, published, 1.2 mi).**
+      Added to `supabase/seed.sql` 2026-09-21 with fixed ids
+      `44444444-0001-…` / `44444444-0002-…`, and inserted into the current
+      database by `scripts/seed-vendor-fixture.sql` (hand-run, idempotent,
+      `on conflict do nothing`). They survive a `db reset` by construction,
+      and `qa-cleanup.sql` cannot reach them: it deletes events by QA address
+      prefix and excludes `33333333-%`, and these rows cascade only from their
+      seeded parent. **The cleanup hazard this item was written for is gone.**
+      **WHY THE ITEM EXISTED, kept as history.** As first written on
+      2026-09-21 it said `2adc4e91-3e76-411a-b8f3-37fdc071d947` ("TEST
+      EVENT") was the only event with vendor rows and warned a cleanup could
+      destroy it. That was half right: it IS the only other event with vendor
+      rows, and it was never going to render — it carries
+      `deleted_at = 2026-08-15 22:37:55`, soft-deleted, refused by every read
+      path for every role, permanently. So from 2026-08-15 the feature had NO
+      fixture at all, which is part of why 0029's breakage of the read the next
+      day (anon 42501 on `event_vendors`, fixed by 0033) went unnoticed for
+      five weeks: nothing in dev could have shown pins even if the read had
+      worked. A feature with no fixture is a feature nobody looks at. TEST
+      EVENT is left exactly as it is — not undeleted, not touched.
+      **What the seeded rows give:** the first VISUAL confirmation path for
+      0033 (the suite proved it in SQL only) — signed out, open Lakeside
+      Songwriters Night, expect two pins and the directory. No ACCESSIBILITY
+      entry covers the site map yet; whatever that first render shows is a
+      new finding, not a regression.
 
 - [x] **The gap.** `events.workspace_id` carried an anon SELECT grant, so
       `/rest/v1/events?select=workspace_id,curbside_anonymous` resolved an anonymous

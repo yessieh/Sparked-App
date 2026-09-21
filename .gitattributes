@@ -1,0 +1,5 @@
+# Every markdown file in this repo is LF in git already; make that a property
+# of the repo rather than of one machine's core.autocrlf, so line endings stop
+# costing attention in prompts and reports. Other file types are left to the
+# default so nothing else changes.
+*.md text eol=lf
