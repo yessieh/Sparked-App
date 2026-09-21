@@ -132,3 +132,41 @@ was clean — and anonymous users could not read the table. See
 `docs/STACK_FACTS.md`. This extends **Name the verification baseline** above:
 naming what you checked against is necessary, and insufficient when what you
 checked was the catalog.
+
+# A defect's boundary is its shape, not its name
+
+Two searches, at two moments. Both are mechanical — a grep, not a judgement.
+
+**Before diagnosing, search the record by SYMPTOM as well as by object** — the
+error code, the HTTP status, the observed behaviour. A defect is filed under the
+object where it was found, and the same defect in a sibling object is invisible
+to anyone searching for that sibling's name.
+
+**Before scoping a fix, enumerate every object sharing the defect's shape.** One
+grep for the failing construct, not the failing object. A defect found in one
+instance of a shared shape is a defect in the shape until proven otherwise.
+
+This project already applies the second half to components — `Pill.tsx` was
+treated as a three-screen blast radius, `EventStub` as five — and has not been
+applying it to schema objects.
+
+**The incident.** On 2026-09-02 the 0030 suite found that `anon` could not read
+`public.event_categories`, and diagnosed it correctly and completely: a
+cross-table subquery inside a policy is privilege-checked against the caller,
+branch 1 passes `e.workspace_id` to `app.is_member`, and 0029 revoked exactly
+that column — with a discriminating query and a control. It then scoped the
+impact to that one table ("no app path reads it as anon") and nobody grepped for
+another policy with the same body. `event_vendors_select_public` has that body
+byte-for-byte and IS read directly, at `(tabs)/event/[id].tsx:109`. The Plus
+tier's vendor pins have been invisible to every signed-out visitor since
+2026-08-16, and the read fails silently — the caller takes only `data`, so the
+error falls through `?? []` and renders as "this event has no vendors."
+
+Found again on 2026-09-21, from scratch, through three wrong theories, by
+someone who HAD grepped the tracker for `event_vendors` and found nothing —
+because the item is titled `event_categories`. A search for `42501` would have
+returned it in one command, before any theorising.
+
+**A correct diagnosis with a wrong blast radius is more dangerous than no
+diagnosis**, because the written record then reads as "known, assessed, not a
+problem" and stops the next person from looking.
