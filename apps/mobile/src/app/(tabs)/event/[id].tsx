@@ -102,8 +102,16 @@ export default function EventDetailScreen() {
       // Zero rows is the whole not-found surface. See the LoadState note.
       setState(ev ? 'found' : 'missing');
       // Vendors are a Plus-only feature — skip the extra read for every other
-      // event (the common feed→detail path). event_vendors RLS lets anon read
-      // rows of any publicly-visible event, so no RPC is needed.
+      // event (the common feed→detail path). This is a DIRECT table read under
+      // `event_vendors_select_public`, and anon can complete it because of
+      // migration 0033 (2026-09-21): the policy's member branch resolves the
+      // event's workspace inside `app.is_event_member`, a SECURITY DEFINER,
+      // rather than reading `events.workspace_id` as the caller — a column
+      // 0029 revoked from anon. From 2026-08-16 to 0033 this read raised
+      // 42501 for every signed-out visitor and rendered as "no vendors",
+      // because only `data` is taken below. Verified by
+      // scripts/qa-0033-event-member-predicate.sql (anon, published Plus event
+      // → rows) on the date 0033 was applied; see docs/STACK_FACTS.md entry 1.
       if (ev && ev.tier_id === 'plus') {
         const { data: vRows } = await supabase
           .from('event_vendors')
