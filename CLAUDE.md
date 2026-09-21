@@ -78,6 +78,13 @@ command before the prompt is written, or carried in the prompt as `UNVERIFIED:`
 alongside the check that would settle it.** An unlabelled wrong premise becomes
 a wrong instruction, and the cost lands at build time or later.
 
+**Scope: the label belongs on claims about CODE NOBODY HERE WROTE** — a
+library, a database engine, a role's privileges, an external API. It does NOT
+belong on claims about this repo, which the builder can open and read; labelling
+those is noise, and noise is how a label loses its force. The boundary sits
+there because every premise that has been wrong so far was about Postgres,
+PostgREST or React Native Web, and none was about Sparked.
+
 Not hypothetical. A brief asserted that React Native Web gives a pressable
 `Text` the same keyboard activation it gives a `Pressable`. It does not, and
 building to that sentence as written would have shipped a focusable, inert link
@@ -107,9 +114,17 @@ with the shape recorded. It cannot prove that a given role can actually complete
 a given read. Those are different claims, and the gate only makes the first.
 
 **Any arc that adds or changes a read path owes one behavioural check per role
-meant to use it** — a driven read as that role, not a clean Section 1. Where the
-role is `anon`, that is a `set local role anon` probe in the SQL Editor or an
-anonymous request against the endpoint.
+AND per policy branch meant to admit it** — a driven read as that role, reaching
+that branch, not a clean Section 1. Where the role is `anon`, that is a `set
+local role anon` probe in the SQL Editor or an anonymous request against the
+endpoint.
+
+Per branch, not only per role, because a role is not an outcome: a signed-in
+member and a signed-in stranger are both `authenticated` and get different RLS
+results, and the `event_vendors` policy has a branch for each. A per-role-only
+rule passes by checking whichever branch is easier to reach — usually the
+member's, since that is who is testing — and the storefront branch is the one
+that fails.
 
 Found the hard way: `anon` held SELECT on `event_vendors` in all eleven
 baselines ever captured, its policy was a permissive PUBLIC SELECT, every audit

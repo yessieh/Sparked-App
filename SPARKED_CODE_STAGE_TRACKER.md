@@ -691,6 +691,38 @@ migration lands between, the NAME is the anchor, not the number.
 - [ ] **ANON CANNOT READ `public.event_categories` — 42501, pre-existing since
       0029, UNFIXED.** Its own arc; do not fold it into anything.
 
+      **AMENDED 2026-09-21 — THE SAME DEFECT IS LIVE ON `public.event_vendors`,
+      AND IT HAS BEEN USER-VISIBLE SINCE 0029 (2026-08-16).** This item was
+      written on 2026-09-02 for `event_categories` and said "no app path reads
+      it as anon". True of categories; not of vendors. `event_vendors_select_
+      public` has the identical shape — `exists (select 1 from public.events e
+      where … app.is_member(e.workspace_id, …))` — and `(tabs)/event/[id].tsx`
+      reads the table directly on the consumer path. Confirmed 2026-09-21 by
+      two discriminating queries as `anon` (`select e.id, e.status,
+      e.archived_at from events` succeeds; `select e.workspace_id from events`
+      raises 42501): **the Plus tier's vendor pins and site map are invisible
+      to every signed-out visitor, and have been for five weeks.** Over the API
+      it presents as **401**, not 403 — PostgREST maps `42501` to 401 for an
+      unauthenticated request — which is how it was misread as an auth problem
+      when Arc G first saw it. Cause, evidence, blast radius and the
+      same-table exemption that spares `events_select_public`:
+      `docs/STACK_FACTS.md` entries 1 and 8, which supersede the mechanism
+      paragraph below where they differ (they do not; the paragraph was right).
+      **The fix is migration 0033, NOT YET WRITTEN:** the definer predicate
+      helper described under "THE FIX SHAPE" — e.g.
+      `app.event_is_publicly_readable(p_event_id uuid)` — called by BOTH
+      `event_categories_select_public` and `event_vendors_select_public`, so
+      neither names the revoked column. Granting anon `events.workspace_id` is
+      still NOT the fix, for the reason below, and Postgres's own error hint
+      (`GRANT SELECT ON public.events TO anon`) proposes a still-wider version
+      of the same mistake. **The false comment at `(tabs)/event/[id].tsx:105`**
+      ("event_vendors RLS lets anon read rows of any publicly-visible event, so
+      no RPC is needed") **goes with 0033**, replaced by one that cites 0033 and
+      its verification date, per CLAUDE.md "A comment asserting a privilege
+      property cites its evidence". 0033 owes one behavioural check per role
+      AND per policy branch — anon storefront, signed-in stranger, signed-in
+      member — per the tightened gate.
+
       **The mechanism.** `event_categories_select_public` is a policy on
       `event_categories` whose body is
       `exists (select 1 from public.events e where …)`. 0021's exemption —
@@ -1647,6 +1679,7 @@ migration lands between, the NAME is the anchor, not the number.
       | `20260815000028_read_paths_to_definer.sql` | ~216 | the ENDED expression lives in FOUR places | **FIVE** — `me.tsx:576`'s client-built `graceISO` is the fifth |
       | `20260902000030_curbside_history_does_not_survive.sql` | 87 | "Arc C Part 2 — the date bounds" | date bounds are **PART 1** |
       | `20260902000030_curbside_history_does_not_survive.sql` | 233 | "changes in Arc C Part 2" | changes in **PART 1** |
+      | `20260816000029_revoke_anon_workspace_id.sql` | 89–90 | "Nothing granted, no object created or replaced, no policy or function touched." | Accurate about OBJECTS; misleading about CONSEQUENCES. Two cross-table PUBLIC policies (`event_categories_select_public`, `event_vendors_select_public`) read the revoked column and broke for `anon` the moment it applied — added 2026-09-21, see `docs/STACK_FACTS.md` entries 1 and 8 |
       0028's correction went into 0030's header; 0030's went into SPARKED_STATE
       and this tracker. **One place to check beats hoping the correction sits in
       whichever doc you happened to open** — and a reader of an applied migration
