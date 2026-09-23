@@ -17,6 +17,7 @@ import { Platform } from 'react-native';
 
 import { AuthProvider, createSessionFromUrl } from '../lib/auth';
 import { EngagementProvider } from '../lib/engagement';
+import { InterestsProvider } from '../lib/interests';
 import { OriginProvider } from '../lib/origin';
 import { ThemeProvider, useTheme } from '../theme';
 
@@ -97,13 +98,17 @@ export default function RootLayout() {
     <ThemeProvider>
       <AuthProvider>
         <EngagementProvider>
-          {/* Browsing origin + radius. Above the Stack because BOTH Explore
-              and Event Detail measure distance from it, and they must agree —
-              the same reason the retired TEST_ORIGIN was a shared constant. */}
-          <OriginProvider>
-            <AuthDeepLinkHandler />
-            <ThemedStack />
-          </OriginProvider>
+          {/* Interests & blocks. Beside engagement and for the same reason:
+              keyed on the session, so it must sit inside AuthProvider. */}
+          <InterestsProvider>
+            {/* Browsing origin + radius. Above the Stack because BOTH Explore
+                and Event Detail measure distance from it, and they must agree —
+                the same reason the retired TEST_ORIGIN was a shared constant. */}
+            <OriginProvider>
+              <AuthDeepLinkHandler />
+              <ThemedStack />
+            </OriginProvider>
+          </InterestsProvider>
         </EngagementProvider>
       </AuthProvider>
     </ThemeProvider>
