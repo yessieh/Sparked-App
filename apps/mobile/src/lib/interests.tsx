@@ -56,6 +56,13 @@ interface InterestsContextValue {
    * first as the second would flash blocked events in and then out.
    */
   loaded: boolean;
+  /**
+   * True when the LATEST read for this user errored; false after a successful
+   * one (and always false signed out). `loaded` stays true on a failed read —
+   * engagement's rule — so this is how a screen tells "you block nothing" from
+   * "we could not ask".
+   */
+  readFailed: boolean;
   /** Re-pull both sets (screens call this on focus). No-op when signed out. */
   refresh: () => Promise<void>;
   /** Move a category to a bucket; `null` = back to Undecided. */
@@ -66,6 +73,7 @@ const InterestsContext = createContext<InterestsContextValue>({
   into: new Set(),
   blocked: new Set(),
   loaded: false,
+  readFailed: false,
   refresh: async () => {},
   setStance: async () => {},
 });
@@ -102,12 +110,14 @@ interface Snapshot {
   user: string | null;
   into: ReadonlySet<string>;
   blocked: ReadonlySet<string>;
+  /** The latest read for `user` errored. */
+  failed: boolean;
 }
 
 export function InterestsProvider({ children }: { children: ReactNode }) {
   const { session } = useAuth();
   const userId = session?.user.id ?? null;
-  const [snap, setSnap] = useState<Snapshot>({ user: null, into: EMPTY, blocked: EMPTY });
+  const [snap, setSnap] = useState<Snapshot>({ user: null, into: EMPTY, blocked: EMPTY, failed: false });
   // Stale-response guard: a refresh started before sign-out (or before a user
   // switch) must not resurrect rows under the new state.
   const generation = useRef(0);
@@ -116,6 +126,7 @@ export function InterestsProvider({ children }: { children: ReactNode }) {
   const into = snapIsMine ? snap.into : EMPTY;
   const blocked = snapIsMine ? snap.blocked : EMPTY;
   const loaded = userId === null || snap.user === userId;
+  const readFailed = snapIsMine && snap.failed;
 
   /** Land one read's answer for `uid`, unless a newer read (or a sign-out)
    *  has started since generation `gen` was taken. */
@@ -123,8 +134,13 @@ export function InterestsProvider({ children }: { children: ReactNode }) {
     if (gen !== generation.current) return;
     if (result.error) {
       // Resolved, even on failure — engagement's rule. Keeps the sets already
-      // held for this user; a first load that fails resolves to empty.
-      setSnap((prev) => (prev.user === uid ? prev : { user: uid, into: EMPTY, blocked: EMPTY }));
+      // held for this user; a first load that fails resolves to empty. Either
+      // way the failure is flagged, so a screen can say so.
+      setSnap((prev) =>
+        prev.user === uid
+          ? { ...prev, failed: true }
+          : { user: uid, into: EMPTY, blocked: EMPTY, failed: true },
+      );
       return;
     }
     const nextInto = new Set<string>();
@@ -133,7 +149,7 @@ export function InterestsProvider({ children }: { children: ReactNode }) {
       if (row.stance === 'into') nextInto.add(row.category_id);
       else if (row.stance === 'blocked') nextBlocked.add(row.category_id);
     }
-    setSnap({ user: uid, into: nextInto, blocked: nextBlocked });
+    setSnap({ user: uid, into: nextInto, blocked: nextBlocked, failed: false });
   }, []);
 
   const refresh = useCallback(async () => {
@@ -163,7 +179,7 @@ export function InterestsProvider({ children }: { children: ReactNode }) {
         prev.user !== userId
           ? prev
           : {
-              user: prev.user,
+              ...prev,
               into: withMember(prev.into, categoryId, stance === 'into'),
               blocked: withMember(prev.blocked, categoryId, stance === 'blocked'),
             },
@@ -222,8 +238,8 @@ export function InterestsProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<InterestsContextValue>(
-    () => ({ into, blocked, loaded, refresh, setStance }),
-    [into, blocked, loaded, refresh, setStance],
+    () => ({ into, blocked, loaded, readFailed, refresh, setStance }),
+    [into, blocked, loaded, readFailed, refresh, setStance],
   );
 
   return <InterestsContext.Provider value={value}>{children}</InterestsContext.Provider>;

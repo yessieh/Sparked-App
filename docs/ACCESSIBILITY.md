@@ -2611,3 +2611,207 @@ because the map surface is a documented placeholder (SPARKED_STATE, "Site map &
 vendors") — auditing it now means measuring it twice. This note is the record
 that the gap is known and deliberate, not missed; the numbered entry lands with
 the uploads arc.
+
+---
+
+# Entry 12 — 2026-09-23 — Settings → Interests & blocks
+
+**The arc:** the `settings/interests.tsx` stub became the real screen — three
+exclusive buckets over the 13-category taxonomy, backed by `lib/interests.tsx`
+and `public.category_preferences` (0034), presented as TABS: Undecided (N) ·
+I'm into (N) · Not for me (N), Undecided selected on every open, every tile
+shown (no peek caps). First screen in this file built for BOTH themes from the
+start rather than audited dark-only. Amended twice before commit — direct
+moves, then sections → tabs; this entry describes the final state.
+
+## THE HEADLINE: the reference's coral heading fails light mode, and so does `textMuted`
+
+Measured by this file's method (WCAG 2.x relative luminance from the tokens in
+`theme/colors.ts`; translucent dark tokens composited onto `#14213D`, dark card
+composited to `#1d2a45`):
+
+| Text colour | Dark page `#14213D` | Dark card `#1d2a45` | Light page `#f4f5f8` | Light card `#ffffff` |
+| ----------- | ------------------- | ------------------- | -------------------- | -------------------- |
+| Reference coral `#ff8a72` ("Not for me") | 6.94 ✅ | 6.21 ✅ | **2.11 ❌** | **2.30 ❌** |
+| `brand.brightOrange` `#FCA311` (reference eyebrows) | 7.90 ✅ | 7.07 ✅ | **1.85 ❌** | **2.02 ❌** |
+| `textMuted` (0.50 → composited / `#7a849e`) | 4.57 ✅ | 4.32 ❌ | **3.43 ❌** | **3.74 ❌** |
+| `danger` (`#f87171` / `#b91c1c`) | 5.77 ✅ | 5.17 ✅ | 5.93 ✅ | 6.47 ✅ |
+| **`text` (`#eef0ff` / `#1c2840`) — used for every line on this screen** | **14.11 ✅** | **12.62 ✅** | **13.50 ✅** | **14.72 ✅** |
+
+- **Every heading, count, label, prompt and link on this screen is
+  `colors.text`.** The coral was not swapped for `danger` even though `danger`
+  passes: blocking a category is not a destructive or error state, and
+  `danger` means exactly that everywhere else in the app.
+- **LIGHT-MODE `textMuted` FAILS 1.4.3 ON THE PAGE (3.43:1).** Every entry
+  before this one was dark-only and said so; this is the first light-mode
+  measurement of that token, and it fails. Not fixed here — the token is used
+  app-wide and changing it is its own arc. Recorded so it is known, not
+  rediscovered.
+- **Icons** (✓ / − / ✕ on the tile buttons) are `colors.text`: same ratios as
+  the table's last row, well past 1.4.11's 3:1.
+- **Tile and button outlines** are `borderStrong` (dark 1.89:1, light 1.28:1
+  against the page). **They do not carry 1.4.11 on their own and are not
+  asked to:** every control is identified by its icon at `colors.text` and by
+  its accessible name. Same reasoning as `Pill`'s unselected border (Entry 7).
+- No gradient on any tile (gradient = actionable only, `theme/colors.ts:44-48`);
+  the signed-out "Create free account" CTA is the one gradient, as on Saved.
+- **One symbol per destination, everywhere:** ✓ → I'm into, − → Not for me,
+  ✕ → Undecided. Meaning is never carried by colour — every symbol is the same
+  `colors.text`.
+
+### Tab labels — selected and unselected
+
+| Tab state | Label colour | Dark page | Light page | Other cue |
+| --------- | ------------ | --------- | ---------- | --------- |
+| Selected | `colors.text`, weight 800 | **14.11 ✅** | **13.50 ✅** | 3px underline in `colors.text` — non-text, **14.11 / 13.50** vs page (1.4.11 needs 3:1) |
+| Unselected | `colors.text`, weight 500 | **14.11 ✅** | **13.50 ✅** | transparent underline (keeps labels from shifting) |
+
+- **Selection is NOT carried by colour** (1.4.1): both states use the same
+  text colour; the difference is the underline and the weight. `textMuted`
+  for unselected — the usual tab convention — was rejected: 3.43:1 on the
+  light page.
+- **The selected tab is not gradient.** A tab is navigation, not an action,
+  and the gradient is reserved for actionable elements.
+- The tablist's bottom rule is `divider` — decorative, not asked to carry
+  anything.
+
+## Targets — 2.5.5 on both axes
+
+| Control | How the target is set | Measured |
+| ------- | --------------------- | -------- |
+| "Create free account" (signed out) | `minHeight: 44`, stretches | **320 × 51** in the DOM, localhost:8081, signed out |
+| Tile buttons, all three buckets (✓ / − / ✕) | `width: 44`, `height: 44` | set in code — signed-in branch not rendered (below). The reference's are 26 × 26. |
+| Tabs | `minHeight: 44`, `minWidth: 44`, one third of the row each | set in code — as above |
+| Retry (read failed) | `minHeight: 44`, `minWidth: 120` | set in code — as above |
+| **Back chip (shared `SubHeader`)** | **36 × 36, no `role`** — `div[tabindex="0"]` in the DOM | **36 × 36, measured. PRE-EXISTING, NOT FIXED:** `components/SubHeader.tsx` is shared by five create/workspace screens and was out of scope. |
+
+## Roles and names
+
+**DIRECT MOVES (amended in this arc, before commit — replaces the reference's
+tap-a-chip-to-Undecided).** Every tile in every bucket is the category name
+plus two `Pressable` buttons with `role="button"`, one per OTHER bucket, each
+with an `aria-label` naming the category and the result:
+
+| Tile in | First button | Second button |
+| ------- | ------------ | ------------- |
+| I'm into | − `"Block Music"` | ✕ `"Move Music to Undecided"` |
+| Undecided | ✓ `"Add Music to I'm into"` | − `"Block Music"` |
+| Not for me | ✓ `"Add Music to I'm into"` | ✕ `"Move Music to Undecided"` |
+
+The tile itself is a plain `View` — only its two buttons are controls, so
+there is no nested-control or double-tab-stop shape (Entry 11's lesson).
+- Headings: the screen title is `role="heading"` `aria-level={1}`. The bucket
+  names are now tab labels, not headings.
+
+## Tabs — the WAI-ARIA tabs pattern
+
+- `role="tablist"` (`aria-label="Interest buckets"`) holding three
+  `role="tab"` Pressables, each with `id="interests-tab-<bucket>"`,
+  `aria-selected`, and `aria-controls="interests-panel"`.
+- ONE `role="tabpanel"` node, `id="interests-panel"`, whose `aria-labelledby`
+  follows the selected tab. Its content swaps; the node stays.
+- **Roving tabindex:** only the selected tab is `tabIndex={0}`; the others are
+  `-1`. Tab moves from the tablist straight into the panel.
+- **Keys:** ← / → move between tabs and wrap; Home / End jump to first / last.
+  Automatic activation — the arrow selects as well as focuses, because the
+  panel swap is instant. Enter and Space select the focused tab.
+
+**THE UNVERIFIED PREMISE, SETTLED FROM SOURCE (rnw 0.21.2) — it split:**
+
+- **Roles and attributes: YES.** `role="tab"`, `"tablist"` and `"tabpanel"`
+  are not in `propsToAriaRole`'s remap table
+  (`modules/AccessibilityUtil/propsToAriaRole.js`), so they pass through
+  untouched. `aria-selected`, `aria-controls` and `aria-labelledby` are
+  forwarded to the DOM (`modules/createDOMProps/index.js:271-273, 434-436,
+  673-675`). `nativeID` is deprecated there (`:822-823`), so the panel uses
+  `id`.
+- **Keyboard: NO — partly.** Pressable activates on **Enter for any role**,
+  but on **Space only for `role="button"` or a real `<button>`**
+  (`modules/usePressEvents/PressResponder.js:70-71`). So on `role="tab"`,
+  **Space and the arrow keys do nothing unless wired.** Both are wired by
+  hand in an `onKeyDown` (forwarded by rnw, not typed by RN 0.86 on Pressable
+  — hence an untyped spread, EventStub's and Pill's precedent).
+- **Not confirmed in the DOM:** the tabs render only signed in. The DOM check
+  is on the human list.
+
+## The live region — Entry 2's rule, applied from the start
+
+ONE `role="status"` `aria-live="polite"` node, visually hidden, mounted with
+the signed-in screen **in every state** (loading, read-failed, ready) and
+before any move. Only its child changes: each move sets
+`"<Category> moved to <Bucket>"`. So every announcement is a change to a node
+already in the tree — never a region that arrives holding its text.
+
+**A REPEATED MESSAGE IS STILL ANNOUNCED.** Music → I'm into, → Undecided,
+→ I'm into produces the identical string twice. The region's text is first
+cleared, then set on the next animation frame (a pending frame is cancelled if
+another move lands first), so the region sees a removal and then an addition —
+never an unchanged string, which some screen readers skip. The node itself is
+never unmounted.
+
+It announces on TAP, together with the optimistic move — the same moment the
+tile visibly changes bucket. `setStance` reports no outcome, so a write that
+fails and is reverted is **not** announced; the tile visibly moves back.
+
+## Focus after a move — the category leaves; focus stays in the tab
+
+(Replaces the earlier focus-follows-the-category rule, which belonged to the
+stacked-sections layout and was deleted with it.) A move takes the category
+out of the visible tab, which on its own drops focus to the document. Instead,
+in order:
+
+1. the **next** tile's first button in the same tab;
+2. if the moved tile was last, the **previous** tile's first button;
+3. if the tab is now empty, **the selected tab itself**.
+
+The target is chosen at the moment of the move, from the tab's list before it
+changes. Each tile's first button and each tab register themselves in a map
+(React 19 ref callbacks with cleanup — React 19.2.3 installed; a cleanup
+deletes only an entry still pointing at its own node). An effect after the
+next commit — so after the moved tile has unmounted — calls `.focus()` on the
+target.
+
+Example: Undecided holds Curbside, Markets, Music. "Block Markets" → focus on
+Music's ✓ ("Add Music to I'm into"). Then "Block Music" (now last) → focus on
+Curbside's ✓. Then "Block Curbside" (tab empty) → focus on the Undecided tab.
+
+## What this entry does NOT establish
+
+- **THE SIGNED-IN BRANCH WAS NOT RENDERED.** Signing in is not something this
+  harness does. Everything under "Targets" marked "set in code" and all of
+  "Roles and names" and "The live region" is read from the source, not the
+  DOM. The human verification list for this arc covers it.
+- **THE FOCUS RULE AND THE TABS WERE NOT OBSERVED IN THE DOM.** Both need the
+  signed-in branch. The focus check, for a human: paste
+  `document.addEventListener('focusin', e => console.log('focus →', e.target.getAttribute('aria-label') || e.target.getAttribute('role')))`
+  into DevTools → Console once, click back into the page, then use only the
+  keyboard and read the log. (Reading `document.activeElement` after clicking
+  into DevTools is unreliable — DevTools itself takes focus.) The tabs check:
+  Elements panel, confirm `role="tab"` and `aria-selected` on the DOM nodes.
+- **No screen reader was run.** Specifically unobserved:
+  - whether the announcement is read after each move;
+  - whether the identical second announcement is read (the clear-then-set
+    mechanism is in code; its effect on a real screen reader is not observed);
+  - **whether the focus move and the announcement collide** — the newly
+    focused button's name ("Add Curbside to I'm into, button") and the polite
+    "Music moved to Not for me" may be read in either order, or the focus
+    announcement may pre-empt the polite one;
+  - how the tabs are announced ("Undecided (13), tab, 1 of 3, selected") and
+    whether the count in the label reads naturally.
+- **The loading skeleton** carries a visually hidden "Loading your interests"
+  text but is not a live region; its announcement is unobserved.
+- **Nothing about native.** `role` / `aria-*` are RN 0.86 props forwarded by
+  rnw on web; native behaviour was not run.
+- **Pre-existing, recorded not fixed:** `SubHeader`'s back chip (36 × 36, no
+  role) and its `brightOrange` crumb (1.85:1 on the light page);
+  `ActivityIndicator` in `brightOrange` while auth resolves (me.tsx's pattern,
+  1.85:1 on light — non-text, below 3:1).
+
+**Baseline:** contrast computed from `theme/colors.ts` at `main` @ `78a920d`
+plus this arc's working tree. Signed-out branch driven at
+`localhost:8081/settings/interests` on 2026-09-23, viewport 1024 (outerWidth
+1024 — not maximised, so the measurement is the real viewport), and re-run
+after each amendment (direct moves; tabs): invitation rendered with its headline
+"Make your feed yours" as `role="heading"` `aria-level="1"`, no bucket content, **no request to any Supabase endpoint**
+(resource timing list empty for `supabase`), console clean. `npx tsc
+--noEmit` exits 0; `npx expo lint` 64 problems, unchanged from before this arc.
