@@ -2600,3 +2600,14 @@ reports five findings, **all pre-existing on `27d8ba2`** — four
 by this arc's header comment) and the one `react/no-unescaped-entities` Entry
 8 recorded. Console: the two `event_vendors` 401s above and nothing else; no
 rnw deprecation warnings. **No database row was written by this arc.**
+
+---
+
+# DEFERRED — `components/SiteMap.tsx` (noted 2026-09-22, not a numbered entry)
+
+`components/SiteMap.tsx` rendered for the first time on 2026-09-22 and **has no
+accessibility entry.** The audit is deferred until real media uploads exist,
+because the map surface is a documented placeholder (SPARKED_STATE, "Site map &
+vendors") — auditing it now means measuring it twice. This note is the record
+that the gap is known and deliberate, not missed; the numbered entry lands with
+the uploads arc.

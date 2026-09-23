@@ -723,8 +723,14 @@ confirmation, published events in Workspace.
 - **Site-map section visibility = `tier = plus` AND `>= 1 vendor`.** The map
   IMAGE is an ephemeral placeholder (same pattern as photos — real uploads are
   stage 5), so only the vendor rows persist; an empty map has no pins worth
-  showing. Consequence to revisit when uploads land: a Plus event with a map
-  and zero vendors currently shows nothing. Standard events show the section
+  showing. **REQUIREMENT ON THE UPLOADS ARC (added 2026-09-22):** today ONE
+  gate controls both the map surface and the vendor directory
+  (`components/EventDetailView.tsx:504` — `tier_id === 'plus'` AND
+  `vendors.length > 0`, ruling 2026-07-23). When a site-map image becomes
+  representable, **split it: the map surface renders only if an image exists,
+  the directory only if vendors exist, and the heading adapts to whichever is
+  present.** A Plus host who uploads no map sees no map surface — not an empty
+  one. Mirrored on the tracker's "Real image uploads" item. Standard events show the section
   NOWHERE, and the wizard shows no in-form upsell — the tier card is the only
   pitch.
 - **Vendors are EVENT-OWNED data, never accounts.** Name + type + a pin as
@@ -880,6 +886,39 @@ confirmation, published events in Workspace.
 - **Taxonomy = the canonical event-category list** (same vocabulary as Create Event categories
   and Explore filters). Onboarding shows a distilled subset; Settings exposes the fuller list.
 - **Custom interests: PARKED to Code stage** (taxonomy-pollution/moderation decision).
+
+#### RULINGS (LOCKED 2026-09-22)
+
+- **A category block hides an event if ANY of the event's categories is
+  blocked.** One blocked category is enough; the event's other categories do
+  not rescue it.
+- **Blocks apply ONLY to the signed-in user's Explore feed and every view of
+  it** — list, timeline, and map when built — plus search/radius overflow and
+  the filter finder counts. **NEVER to Saved (incl. Past), the Organizer
+  Profile, or direct/shared event links. Signed-out users have no blocks.**
+- **Disclosure: a "Blocked (N)" pill in the Explore filter pill row, shown
+  WHENEVER N > 0** — not only when the feed is light — so hiding is never a
+  decision the user loses track of. **Dashed outline when off; solid outline
+  reading "Showing blocked (N)" when on. NEVER gradient:** revealing widens the
+  feed, it is not a promoted action.
+- **N = events hidden by blocks within the CURRENT radius, date range, filters
+  and view** — so the count always equals what the tap reveals.
+- **Tapping reveals blocked events for the SESSION only** — in-memory, same as
+  the Past collapse state. Nothing is persisted and Settings is untouched.
+- **Revealed cards: a dashed card border matching the pill, plus a
+  "Blocked · <Category>" chip naming the blocking category. NOT reduced
+  opacity** — dimming already means "deleted, inert" in Saved, and reduced
+  opacity fails text contrast (the same WCAG failure that retired the category
+  stripe hues). Revealed cards stay fully tappable.
+- **Empty state: when blocks hide every in-radius event, say so in the radius
+  empty-state pattern** ("All N nearby events are in categories you've
+  blocked") with the Blocked pill beside it — **never the cold-start copy.**
+  Filtering by a blocked category lands here too; no special rule.
+- **"I'm into" never changes feed order** (the no-algorithm promise). It exists
+  to feed the Notifications fit-gate (Architecture Decision 6).
+- **This arc does NOT exercise `categories.show_in_onboarding`:** Settings
+  shows the full list per this decision. Schema lock 4 stays half-open until
+  Onboarding ships.
 
 ### 8. Data lifecycle — delete / archive / quota ledger (LOCKED 2026-07-30)
 
@@ -1248,6 +1287,12 @@ Create Event's tier step (per-day model is DEAD everywhere):
 - **Socials moved from Plus to STANDARD** (the Organizer Profile gives links away free —
   charging for them on the card would read as a scam). Plus keeps: 10-photo gallery, paid-entry
   display, site map + vendor pins.
+- **PRICING COUPLING — Plus is not sellable before media uploads (LOCKED 2026-09-22).**
+  The Plus tier promises "Interactive site map with vendor pins" (the frozen reference's
+  `PRICING_TIERS`, `design-reference/ui_kits/mobile-app/AppScreens.jsx:195`). Until media
+  uploads ship, the map image is an ephemeral placeholder (see "Site map & vendors"), so that
+  promise cannot be kept. **Plus must not be sold before uploads exist, or the Plus copy
+  changes first.** Tracked under LAUNCH INFRASTRUCTURE.
 - Multi-post packs (e.g. 10 Standard/$40), QR flyer generator, digest sponsorship, host
   analytics = revenue roadmap. Third paid tier = feature-pulled, post-MVP.
 

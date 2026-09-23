@@ -359,6 +359,13 @@ and verified in Cursor/Claude Code.
       with zero vendors; (2) `event_vendors.logo_path` (nullable placeholder in
       0013) starts carrying a real storage path for vendor logos. So the two
       stages find each other — this item OWNS `event_photos`; 0013 owns vendors.
+      - **REQUIREMENT (2026-09-22): split the site-map gate.** Today ONE gate
+        controls both the map surface and the vendor directory
+        (`components/EventDetailView.tsx:504` — Plus AND `>= 1 vendor`, ruling
+        2026-07-23). When a site-map image is representable: map surface only
+        if an image exists, directory only if vendors exist, heading adapts.
+        A Plus host who uploads no map sees no map surface — not an empty one.
+        Source: SPARKED_STATE "Site map & vendors + create-flow chrome".
 - [ ] **Entry-fee display: RESOLVED — ALL-TIER.** Any tier with paid entry on
       shows the fee. The prototype's `isPlus` gate is a known frozen-reference
       bug (`design-reference/ui_kits/mobile-app/AppScreens.jsx:404, :1009`) —
@@ -556,8 +563,8 @@ and verified in Cursor/Claude Code.
          to may remain in your own history after the host withdraws it.
       Goes to the pre-launch legal consult together with the retention windows.
 - [ ] **"Download my data" export — UNBUILT.** No self-serve export exists.
-      Needs to cover profile, saves, RSVPs, workspaces, events, and the quota
-      ledger. Pairs with the erasure path, which IS specced (real cascade) but
+      Needs to cover profile, saves, RSVPs, workspaces, events, the quota
+      ledger, and category preferences (interests/blocks). Pairs with the erasure path, which IS specced (real cascade) but
       has no UI either.
 - [ ] **Re-enable "Confirm email" + real SMTP** — see the detailed item in
       LAUNCH INFRASTRUCTURE below. Listed here too because it is the same gate:
@@ -957,6 +964,13 @@ migration lands between, the NAME is the anchor, not the number.
       3-single-day copy that still lives in the frozen `design-reference`
       `PRICING_TIERS`. There is no `description` column on `tiers`, so this
       copy has no production home yet and can't drift until it does.
+- [ ] **PRICING COUPLING — do not sell Plus before media uploads ship (LOCKED
+      2026-09-22).** The Plus tier promises "Interactive site map with vendor
+      pins" (`design-reference/ui_kits/mobile-app/AppScreens.jsx:195`). Until
+      "Real image uploads" lands, the map image is an ephemeral placeholder and
+      that promise cannot be kept. **Plus must not be sold before uploads
+      exist, or the Plus copy changes first.** Source: SPARKED_STATE PRICING
+      MODEL lock.
 - [x] **Lint setup — LANDED 2026-07-30.** `eslint ^9.39.5` +
       `eslint-config-expo ^57.0.0` are declared in `apps/mobile` devDependencies,
       `package-lock.json` is synced, and `eslint.config.js` is committed. The
