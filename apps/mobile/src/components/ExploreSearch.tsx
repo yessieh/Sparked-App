@@ -11,7 +11,10 @@
 // plus "Free". These are SUGGESTIONS, not results: tapping one applies it and
 // the panel shows that filter's events.
 //
-// TIER 2 — EVENT TITLES, AND ONLY TITLES, AND ONLY ONES ALREADY FETCHED.
+// TIER 2 — EVENTS BY TITLE OR CATEGORY LABEL, AND ONLY ONES ALREADY FETCHED.
+// (Category labels since 2026-09-27: typing "community" shows every Community
+// event at once — the Tier-1 row above them is an optional shortcut, never a
+// required step. lib/eventFilters.ts `searchEvents`.)
 // This is an in-memory `String.includes` over the array the feed is currently
 // holding. THERE IS NO SERVER-SIDE SEARCH BEHIND IT AND NOTHING HERE CAN FIND
 // AN EVENT THE FEED HAS NOT ALREADY LOADED. Two independent reasons, both
@@ -53,12 +56,10 @@
 //     nearby" while the list is four fixed strings.
 //
 // DIVERGENCES FROM THE REFERENCE, EACH A RULING, EACH RECORDED:
-//   • OVERFLOW APPLIES TO TIER 2 ONLY. The reference applies it to every filter
-//     type (`applyInterest`/`applyPrice` both pass `effRadius: radius` into the
-//     same overflow math, Screens.jsx:682-684). Here an applied filter is
-//     strictly in-radius, because a filter name is not location-bound and a
-//     "Music" filter surfacing out-of-radius events would contradict the feed's
-//     distance promise.
+//   • OVERFLOW — NO LONGER A DIVERGENCE (RULING 2026-09-27, Jas). It was
+//     title-only here, applied filters strictly in-radius; it now covers
+//     category matches and applied filters too, as the reference does
+//     (Screens.jsx:682-684). The reach is unchanged: overflowCap.
 //   • APPLIED FILTERS SHOW A "Music · Clear" ROW, NOT A PILL. The reference's
 //     ActiveFilterPill is a static label with a nested remove button — a
 //     different control wearing a pill shape, and a nested pressable this arc
@@ -70,6 +71,7 @@
 //     arc, not smuggled in here.
 
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Pressable,
@@ -84,8 +86,20 @@ import {
 import { useCategories } from '../lib/categories';
 import {
   FREE_FILTER,
+  allBlockedAnnouncement,
+  blockedByLabel,
+  buildFilterCounts,
+  filterRowCount,
+  groupHiddenMatches,
+  hiddenFromExplore,
+  hiddenMatchesLabel,
+  hiddenMatchesTopLine,
   matchesFilter,
+  nothingWithinLine,
+  partitionHidden,
+  searchEvents,
   type FilterKind,
+  type GroupedHiddenMatches,
   type SearchFilter,
 } from '../lib/eventFilters';
 import { hasEnded } from '../lib/eventTime';
@@ -108,6 +122,21 @@ const DEBOUNCE_MS = 200;
  *  set is thin enough that widening is a service rather than noise. */
 const OVERFLOW_THRESHOLD = 3;
 
+/** Every match blocked (PROVISIONAL, 2026-09-27): the empty state's headline,
+ *  body-less, and the status line's visible text. */
+const ALL_BLOCKED_HEADLINE = 'Nothing matches your criteria';
+const ALL_BLOCKED_STATUS = 'No matches shown';
+
+/** Visually hidden but in the accessibility tree — settings/interests.tsx's
+ *  `srOnly`, same shape. */
+const srOnly = {
+  position: 'absolute' as const,
+  width: 1,
+  height: 1,
+  overflow: 'hidden' as const,
+  opacity: 0,
+};
+
 const LABEL_ID = 'sparked-explore-search-label';
 const PANEL_ID = 'sparked-explore-search';
 
@@ -121,9 +150,6 @@ const KIND_LABEL: Record<FilterKind, string> = {
   category: 'Category',
   price: 'Price',
 };
-
-const titleContains = (event: FeedEvent, q: string) =>
-  event.title.toLowerCase().includes(q);
 
 // ---------------------------------------------------------------------------
 // The collapsed affordance — lives in the Explore header.
@@ -191,23 +217,27 @@ function FilterRow({
   filter,
   query,
   count,
+  hidden,
   radius,
   onApply,
 }: {
   filter: SearchFilter;
   query: string;
   count: number;
+  /** In-range matches blocks are holding back (0 when revealed). */
+  hidden: number;
   radius: number;
   onApply: () => void;
 }) {
   const theme = useTheme();
+  const countLine = filterRowCount(count, hidden, radius);
   return (
     <Pressable
       onPress={onApply}
       role="button"
       // The visible label carries the filter name; the count and kind are
       // announced with it so "Music" is not read alone out of context.
-      aria-label={`${filter.label}, ${KIND_LABEL[filter.kind]} filter, ${count} within ${radius} miles`}
+      aria-label={`${filter.label}, ${KIND_LABEL[filter.kind]} filter, ${countLine}`}
       style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -225,11 +255,12 @@ function FilterRow({
             getting nothing back reads as a broken search; the empty result
             that follows the tap is the honest answer. */}
         <Text
-          numberOfLines={1}
           style={{
             fontFamily: theme.fonts.bodyMedium,
             fontSize: theme.fontSizes.caption,
-            // 4.5:1+ on the panel background. These rows are deliberately
+            // Not truncated: the blocks clause makes this line long enough
+            // to wrap at 375pt, and a cut-off "hidden by your bl…" says less
+            // than nothing. 4.5:1+ on the panel background. These rows are deliberately
             // UNFILLED — Entry 2 measured textMuted at 4.32:1 on a card, which
             // fails, and passing on the bare background is the reason the
             // reference's `rgba(255,255,255,0.03)` row fill was not ported.
@@ -237,7 +268,7 @@ function FilterRow({
             marginTop: 3,
           }}
         >
-          {KIND_LABEL[filter.kind]} · {count} within {radius} mi
+          {countLine}
         </Text>
       </View>
       <Ionicons name="chevron-forward" size={15} color={theme.colors.textFaint} />
@@ -271,21 +302,11 @@ function SectionHeading({ children }: { children: ReactNode }) {
 // ---------------------------------------------------------------------------
 
 export interface ExploreSearchProps {
-  /** The feed's CURRENT result set — already radius-bounded and already
-   *  ENDED-filtered by (tabs)/index.tsx. Read-only here: this component never
-   *  writes it and never changes how the feed itself filters. */
+  /** The feed's result set BEFORE blocks — radius-bounded and ENDED-filtered by
+   *  (tabs)/index.tsx, not yet split by blocks. This panel splits it itself
+   *  (see `blocked`). Read-only here: this component never writes it and never
+   *  changes how the feed itself filters. */
   events: FeedEvent[];
-  /**
-   * Every filter's count over the UNFILTERED feed, built once by the feed and
-   * passed down (lib/eventFilters.ts `buildFilterCounts`).
-   *
-   * Passed rather than computed here so the header pill row and this panel read
-   * ONE pass. This used to be `events.filter(...).length` inline per row per
-   * render, and the pill row needed the same numbers — two surfaces each doing
-   * it their own way is ~26 array passes per render for a number that does not
-   * change until the feed does.
-   */
-  counts: Map<string, number>;
   radius: number;
   place: Place | null;
   /**
@@ -306,18 +327,36 @@ export interface ExploreSearchProps {
   onClose: () => void;
   /** Supplied by the feed so search results carry the same save/going wiring
    *  and the same gating as feed cards, without this component knowing
-   *  anything about engagement or auth. */
-  renderEvent: (event: FeedEvent, pastRadiusMi?: number) => ReactNode;
+   *  anything about engagement or auth. `blockedBy` = the chip label ("Music
+   *  +1") for the blocked treatment — computed HERE from this panel's own
+   *  `blocked` set, so the card's treatment and the decision to hide it can
+   *  never come from two different sets. */
+  renderEvent: (event: FeedEvent, pastRadiusMi?: number, blockedBy?: string) => ReactNode;
+  /**
+   * CATEGORY BLOCKS (RULING 2026-09-27, reversing 2026-09-26's "whatever the
+   * reveal state"). Reveal OFF: every path (in-radius matches, applied-filter
+   * results, the overflow read) is split by lib/eventFilters.ts
+   * `partitionHidden`, and the blocked side goes to ONE dropdown at the
+   * bottom, ALWAYS collapsed by default. Reveal ON: nothing is split — blocked
+   * matches render inline in their normal place (in range, or in the just-past
+   * band) with the dashed border + chip, and there is no dropdown. Applied at
+   * RENDER, not in the fetch, so blocking or unblocking needs no refetch.
+   * Empty (signed out, read failed, nothing blocked) ⇒ every path untouched.
+   */
+  blocked: ReadonlySet<string>;
+  /** The feed's reveal state ("Showing blocked"). */
+  reveal: boolean;
 }
 
 export default function ExploreSearch({
   events,
-  counts,
   radius,
   place,
   dateWindow,
   onClose,
   renderEvent,
+  blocked,
+  reveal,
 }: ExploreSearchProps) {
   const theme = useTheme();
   const categories = useCategories();
@@ -369,18 +408,63 @@ export default function ExploreSearch({
     [query, registry],
   );
 
-  /** Tier 2 — in-radius title matches, sorted by the reference's rule (match
-   *  offset first, then the shorter title). */
-  const titleMatches = useMemo(
-    () => (query ? matchLabels(query, events, (e) => e.title).map((m) => m.item) : []),
-    [query, events],
+  const categoryOrder = useMemo(() => new Map(categories.map((c, i) => [c.id, i])), [categories]);
+  const labelOf = useCallback(
+    (id: string) => categories.find((c) => c.id === id)?.label ?? id,
+    [categories],
+  );
+  /** The card chip's label, from THIS panel's blocked set. `undefined` for an
+   *  unblocked event — so passing it for every card is safe, and with reveal
+   *  OFF no shown card is blocked, so none carries it. */
+  const chipFor = useCallback(
+    (e: FeedEvent) => blockedByLabel(e, blocked, categoryOrder, labelOf),
+    [blocked, categoryOrder, labelOf],
   );
 
-  /** Results for an applied filter. Strictly in-radius — see the divergence
-   *  note in the header. */
+  /** Hidden from search's results: blocked AND reveal off — the FEED's own
+   *  predicate, so search and feed cannot disagree about what "revealed"
+   *  means. `undefined` (revealed, or nothing blocked) leaves every path
+   *  unsplit. */
+  const isHidden = useMemo(() => hiddenFromExplore(blocked, reveal), [blocked, reveal]);
+
+  /** The in-radius pool, SPLIT into shown and hidden-by-blocks. Both Tier-2
+   *  paths read `shown`; the dropdown reads `hidden`. */
+  const inRadius = useMemo(() => partitionHidden(events, isHidden), [events, isHidden]);
+  const pool = inRadius.shown;
+
+  /** Tier-1 counts over what search can actually SHOW — built here, not taken
+   *  from the feed — plus what blocks hold back, for the row's "· M hidden by
+   *  your blocks" (always 0 when revealed: nothing is held back). */
+  const counts = useMemo(() => buildFilterCounts(pool), [pool]);
+  const hiddenCounts = useMemo(() => buildFilterCounts(inRadius.hidden), [inRadius]);
+
+  /** Tier 2 — in-radius events whose TITLE or a CATEGORY LABEL matches.
+   *  Rendered at once; no filter tap is needed to see them. */
+  const eventMatches = useMemo(
+    () => (query ? searchEvents(query, pool, labelOf) : []),
+    [query, pool, labelOf],
+  );
+
+  /** Results for an applied filter, in range. The just-past band below
+   *  extends them, as it does typed matches. */
   const appliedResults = useMemo(
-    () => (applied ? events.filter((e) => matchesFilter(applied, e)) : []),
-    [applied, events],
+    () => (applied ? pool.filter((e) => matchesFilter(applied, e)) : []),
+    [applied, pool],
+  );
+
+  /** Whichever in-range set is on screen — the band's "Only N within". */
+  const inRangeResults = applied ? appliedResults : eventMatches;
+
+  /** The SAME two questions asked of the blocked side — what the dropdown
+   *  lists from in range. */
+  const hiddenInRange = useMemo(
+    () =>
+      applied
+        ? inRadius.hidden.filter((e) => matchesFilter(applied, e))
+        : query
+          ? searchEvents(query, inRadius.hidden, labelOf)
+          : [],
+    [applied, query, inRadius, labelOf],
   );
 
   // --- The widened read ----------------------------------------------------
@@ -396,20 +480,65 @@ export default function ExploreSearch({
   // NO NEW ARGUMENT, NO NEW GRANT. This calls the existing RPC with a different
   // `radius_miles`. Nothing about the signature, the ACL, or the grant surface
   // changes.
-  // Widening is not applicable when: nothing typed, no origin to measure from,
-  // a filter is applied (Tier 1 is not location-bound), or the in-radius set is
-  // already thick enough that widening would be noise.
+  // Widening is not applicable when: nothing typed and no filter applied, no
+  // origin to measure from, or the in-range set is already thick enough that
+  // widening would be noise. Typed matches AND applied filters both widen
+  // (RULING 2026-09-27); the reach is unchanged (overflowCap).
   const overflowNeeded =
-    query.length > 0 && !!place && !applied && titleMatches.length < OVERFLOW_THRESHOLD;
-  // THE WINDOW IS PART OF THE KEY. The cached result is tagged with the query
-  // it answers, and since 0031 the window is part of that question — without
-  // these two the panel would reuse an overflow result fetched under a
-  // different date range for the same query and radius, and serve a stale
-  // answer that looks fresh.
-  const overflowKey = `${lowerQuery}|${radius}|${dateWindow.from}|${dateWindow.to}`;
+    (query.length > 0 || !!applied) && !!place && inRangeResults.length < OVERFLOW_THRESHOLD;
+  // THE KEY IS THE READ, NOT THE QUESTION (2026-09-27). The band holds EVERY
+  // event between radius and cap for this origin and window; the query or
+  // filter is matched against it below, client-side, like the in-range pool.
+  // So a new keystroke or filter reuses the rows instead of re-reading them,
+  // and matching title-or-category here cannot drift from matching it there.
+  // The window is in the key since 0031 (a result fetched under another date
+  // range would be a stale answer that looks fresh); the origin is in it now
+  // too, so a location change cannot reuse the old place's band.
+  const overflowKey = `${place?.lat},${place?.lng}|${radius}|${dateWindow.from}|${dateWindow.to}`;
   const overflowCurrent =
     overflowNeeded && overflowState.key === overflowKey ? overflowState : null;
-  const overflow = overflowCurrent?.rows ?? [];
+  /** The band's matches — the same question asked of the in-range pool,
+   *  nearest first (the reference's ordering for the band). */
+  const overflowMatches = useMemo(() => {
+    const rows = overflowCurrent?.rows ?? [];
+    const hits = applied
+      ? rows.filter((e) => matchesFilter(applied, e))
+      : searchEvents(query, rows, labelOf);
+    return [...hits].sort((a, b) => (a.distance_miles ?? 0) - (b.distance_miles ?? 0));
+  }, [overflowCurrent, applied, query, labelOf]);
+  // The overflow band, filtered the same way. TWO STRIKES (2026-09-27): with
+  // reveal OFF, a band match that is also blocked is DROPPED — it goes
+  // nowhere, not to the dropdown. With reveal ON `isHidden` is undefined, so
+  // blocked band matches stay in the band and carry their chip.
+  const overflow = useMemo(
+    () => partitionHidden(overflowMatches, isHidden).shown,
+    [overflowMatches, isHidden],
+  );
+
+  // --- The blocked-matches dropdown ----------------------------------------
+  // In-range blocked matches ONLY (two strikes), in the order search found
+  // them. Grouping, the cap of 3 and the top line are pure
+  // (lib/eventFilters.ts); this only holds the two pieces of UI state.
+  const hiddenMatches = hiddenInRange;
+  /** ALWAYS collapsed by default (RULING 2026-09-27) — even when it is the
+   *  only thing to show. It exists only with reveal OFF, so there is no
+   *  "revealed ⇒ start open" case left. Session state of this panel only. */
+  const [hiddenOpen, setHiddenOpen] = useState(false);
+  /** "+N more" is keyed to the question it answered, so a new query or filter
+   *  starts capped again without an effect resetting it. */
+  const resultKey = `${applied ? `f:${applied.id}` : `q:${lowerQuery}`}`;
+  const [showAllFor, setShowAllFor] = useState<string | null>(null);
+  const showAllHidden = showAllFor === resultKey;
+  const hiddenGroups = useMemo(
+    () =>
+      groupHiddenMatches(hiddenMatches, {
+        blocked,
+        order: categoryOrder,
+        labelOf,
+        limit: showAllHidden ? Infinity : 3,
+      }),
+    [hiddenMatches, blocked, categoryOrder, labelOf, showAllHidden],
+  );
   const overflowFetched = overflowCurrent?.fetched ?? false;
   /** DERIVED, not stored: a widening is wanted and its answer is not in yet.
    *  A second source of truth for "in flight" is a second thing to get wrong. */
@@ -458,13 +587,8 @@ export default function ExploreSearch({
               typeof r.distance_miles === 'number' &&
               r.distance_miles > radius &&
               r.distance_miles <= cap,
-          )
-          .filter((r: FeedEvent) => titleContains(r, lowerQuery))
-          // Nearest first — the reference's ordering for the overflow band.
-          .sort(
-            (a: FeedEvent, b: FeedEvent) =>
-              (a.distance_miles ?? 0) - (b.distance_miles ?? 0),
           );
+        // No query filter here: the band is matched in `overflowMatches`.
         setOverflowState({ key: overflowKey, rows, fetched: true });
       });
 
@@ -479,7 +603,7 @@ export default function ExploreSearch({
     // so a window change re-runs through the key rather than through a second
     // dependency that could disagree with it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [overflowNeeded, overflowKey, lowerQuery, place?.lat, place?.lng, radius, cap]);
+  }, [overflowNeeded, overflowKey, place?.lat, place?.lng, radius, cap]);
 
   const apply = useCallback((filter: SearchFilter) => {
     setApplied(filter);
@@ -498,15 +622,31 @@ export default function ExploreSearch({
   // HELD UNTIL OVERFLOW SETTLES, so a sparse search announces its final count
   // once instead of announcing an in-radius count and then correcting itself a
   // round trip later.
+  //
+  // EVERY MATCH BLOCKED (2026-09-27, replacing 2026-09-26's line, which
+  // appeared three times on one screen): the headline is the plain
+  // ALL_BLOCKED_HEADLINE with no body, the visible status line is only "No
+  // matches shown", and the explanation lives ONLY in the dropdown. Screen
+  // readers get one extra clause in the live region — the dropdown's count —
+  // because they cannot glance down to see it. Same for query and filter.
+  const someBlocked = hiddenMatches.length > 0;
   let announce: string | null = null;
-  if (applied) {
+  /** True when the status line is the every-match-blocked one — its tail is
+   *  rendered screen-reader-only. */
+  let allBlocked = false;
+  if (applied && !overflowPending) {
     const n = appliedResults.length;
-    announce = `${n} ${n === 1 ? 'event' : 'events'} for ${applied.label}`;
-  } else if (query && !overflowPending) {
+    if (n === 0 && overflow.length === 0 && someBlocked) allBlocked = true;
+    else {
+      announce = `${n} ${n === 1 ? 'event' : 'events'} for ${applied.label}`;
+      if (overflow.length > 0) announce += `, ${overflow.length} just past your radius`;
+    }
+  } else if (!applied && query && !overflowPending) {
     const nF = filterMatches.length;
-    const nE = titleMatches.length;
+    const nE = eventMatches.length;
     if (nF === 0 && nE === 0 && overflow.length === 0) {
-      announce = 'No matches';
+      if (someBlocked) allBlocked = true;
+      else announce = 'No matches';
     } else {
       const parts: string[] = [];
       if (nF > 0) parts.push(`${nF} ${nF === 1 ? 'filter' : 'filters'}`);
@@ -521,10 +661,20 @@ export default function ExploreSearch({
     query.length > 0 &&
     !overflowPending &&
     filterMatches.length === 0 &&
-    titleMatches.length === 0 &&
+    eventMatches.length === 0 &&
     overflow.length === 0;
+  /** The applied filter's empty state — only once the band has settled, so it
+   *  cannot flash "Nothing tagged" and then be contradicted by the band. */
+  const appliedEmpty =
+    !!applied && !overflowPending && appliedResults.length === 0 && overflow.length === 0;
 
   const capLabel = Math.round(cap * 10) / 10;
+
+  const statusStyle = {
+    fontFamily: theme.fonts.bodyMedium,
+    fontSize: theme.fontSizes.caption,
+    color: theme.colors.textMuted,
+  } as const;
 
   const eyebrowStyle = {
     fontFamily: theme.fonts.bodySemiBold,
@@ -694,19 +844,21 @@ export default function ExploreSearch({
             aria-live="polite"
             style={{
               paddingHorizontal: 20,
-              paddingBottom: announce ? 10 : 0,
+              paddingBottom: announce || allBlocked ? 10 : 0,
             }}
           >
-            {announce ? (
-              <Text
-                style={{
-                  fontFamily: theme.fonts.bodyMedium,
-                  fontSize: theme.fontSizes.caption,
-                  color: theme.colors.textMuted,
-                }}
-              >
-                {announce}
-              </Text>
+            {allBlocked ? (
+              <>
+                {/* Sighted users read the short line; the region's text is
+                    the srOnly sentence, which carries the dropdown's count.
+                    The visible copy is aria-hidden so it is not read twice. */}
+                <Text aria-hidden style={statusStyle}>
+                  {ALL_BLOCKED_STATUS}
+                </Text>
+                <Text style={srOnly}>{allBlockedAnnouncement(hiddenMatches.length)}</Text>
+              </>
+            ) : announce ? (
+              <Text style={statusStyle}>{announce}</Text>
             ) : null}
           </View>
 
@@ -771,13 +923,15 @@ export default function ExploreSearch({
                   </Pressable>
                 </View>
 
-                {appliedResults.length > 0 ? (
-                  <View style={{ gap: 14 }}>
+                {appliedResults.length > 0 && (
+                  <View style={{ gap: 14, marginBottom: 18 }}>
                     {appliedResults.map((e) => (
-                      <View key={e.id}>{renderEvent(e)}</View>
+                      <View key={e.id}>{renderEvent(e, undefined, chipFor(e))}</View>
                     ))}
                   </View>
-                ) : (
+                )}
+                {appliedEmpty && someBlocked && <NoResults headline={ALL_BLOCKED_HEADLINE} />}
+                {appliedEmpty && !someBlocked && (
                   <NoResults
                     headline={`Nothing tagged ${applied.label} within ${radius} mi`}
                     body="Clear the filter to see everything nearby, or widen your radius."
@@ -797,6 +951,7 @@ export default function ExploreSearch({
                         filter={m.item}
                         query={query}
                         count={counts.get(m.item.id) ?? 0}
+                        hidden={hiddenCounts.get(m.item.id) ?? 0}
                         radius={radius}
                         onApply={() => apply(m.item)}
                       />
@@ -804,20 +959,40 @@ export default function ExploreSearch({
                   </View>
                 )}
 
-                {/* TIER 2, in-radius. */}
-                {titleMatches.length > 0 && (
+                {/* TIER 2, in-radius — title OR category matches, shown at
+                    once. With reveal ON a blocked match is here too, with its
+                    chip + dashed border (chipFor is undefined otherwise). */}
+                {eventMatches.length > 0 && (
                   <View style={{ marginBottom: 18 }}>
                     <SectionHeading>Events</SectionHeading>
                     <View style={{ gap: 14 }}>
-                      {titleMatches.map((e) => (
-                        <View key={e.id}>{renderEvent(e)}</View>
+                      {eventMatches.map((e) => (
+                        <View key={e.id}>{renderEvent(e, undefined, chipFor(e))}</View>
                       ))}
                     </View>
                   </View>
                 )}
 
-                {/* TIER 2, overflow. */}
-                {overflow.length > 0 && (
+                {showNoResults && someBlocked && <NoResults headline={ALL_BLOCKED_HEADLINE} />}
+                {showNoResults && !someBlocked && (
+                  <NoResults
+                    headline={`No matches within ${radius} mi`}
+                    // THE {cap} CLAIM IS ASSERTED, NOT ASSUMED. It is only made
+                    // when the widened read actually completed; if it failed or
+                    // never ran, the copy says only what the search can prove.
+                    body={
+                      overflowFetched
+                        ? `We looked at every event title and interest out to ${capLabel} mi. Try a shorter word, or widen your radius.`
+                        : `We looked at every event title and interest within ${radius} mi. Try a shorter word, or widen your radius.`
+                    }
+                  />
+                )}
+              </>
+            )}
+
+            {/* TIER 2, overflow — shared by typed matches and applied filters
+                (2026-09-27), so it sits outside the branch. */}
+            {overflow.length > 0 && (
                   <View>
                     <View
                       style={{
@@ -871,15 +1046,14 @@ export default function ExploreSearch({
                         {/* The zero branch is the reference's own
                             (Screens.jsx:797) and it earns its place: "Only 0
                             within 25 mi" is technically true and reads like a
-                            bug. */}
-                        {titleMatches.length === 0 ? (
-                          <>
-                            Nothing within {radius} mi — but {overflow.length === 1 ? 'there is' : 'there are'}{' '}
-                            {overflow.length} just past it, so you don&apos;t miss something good.
-                          </>
+                            bug. With blocked matches in range, "Nothing
+                            within" would itself be false — see
+                            nothingWithinLine. */}
+                        {inRangeResults.length === 0 ? (
+                          nothingWithinLine(radius, overflow.length, hiddenInRange.length)
                         ) : (
                           <>
-                            Only {titleMatches.length} within {radius} mi. Here{' '}
+                            Only {inRangeResults.length} within {radius} mi. Here{' '}
                             {overflow.length === 1 ? 'is' : 'are'} {overflow.length} more a little
                             farther out, so you don&apos;t miss something good.
                           </>
@@ -890,27 +1064,28 @@ export default function ExploreSearch({
                     <View style={{ gap: 14 }}>
                       {overflow.map((e) => (
                         <View key={e.id}>
-                          {renderEvent(e, (e.distance_miles ?? radius) - radius)}
+                          {renderEvent(e, (e.distance_miles ?? radius) - radius, chipFor(e))}
                         </View>
                       ))}
                     </View>
                   </View>
                 )}
 
-                {showNoResults && (
-                  <NoResults
-                    headline={`No matches within ${radius} mi`}
-                    // THE {cap} CLAIM IS ASSERTED, NOT ASSUMED. It is only made
-                    // when the widened read actually completed; if it failed or
-                    // never ran, the copy says only what the search can prove.
-                    body={
-                      overflowFetched
-                        ? `We looked at every filter name and every event title out to ${capLabel} mi. Try a shorter word, or widen your radius.`
-                        : `We looked at every filter name and every event title within ${radius} mi. Try a shorter word, or widen your radius.`
-                    }
-                  />
-                )}
-              </>
+            {/* BLOCKED MATCHES — the very bottom, below every result and the
+                distance band, in both branches (query and applied filter). */}
+            {hiddenMatches.length > 0 && (
+              <BlockedMatches
+                grouped={hiddenGroups}
+                chipFor={chipFor}
+                open={hiddenOpen}
+                onToggle={() => setHiddenOpen((o) => !o)}
+                onShowAll={() => setShowAllFor(resultKey)}
+                renderEvent={renderEvent}
+                onEditBlocks={() => {
+                  onClose();
+                  router.push('/settings/interests');
+                }}
+              />
             )}
           </ScrollView>
         </View>
@@ -919,10 +1094,182 @@ export default function ExploreSearch({
   );
 }
 
+/**
+ * "N matches hidden by your blocks" — ONE collapsed row at the bottom of
+ * search, styled like the distance hint (card surface, icon, text), plus what
+ * it opens. Viewing the events is the main action: they are ordinary tappable
+ * cards, carrying the blocked treatment. "Edit blocks" is deliberately QUIET —
+ * the point is to make the choice visible, not to funnel anyone into Settings.
+ *
+ * ACCESSIBILITY: the row, "+N more" and "Edit blocks" are all Pressables —
+ * `Text.onPress` has no keyboard activation on rnw (docs/STACK_FACTS.md). The
+ * row carries `aria-expanded`; its accessible name is its visible text, which
+ * includes the count.
+ */
+function BlockedMatches({
+  grouped,
+  chipFor,
+  open,
+  onToggle,
+  onShowAll,
+  renderEvent,
+  onEditBlocks,
+}: {
+  grouped: GroupedHiddenMatches;
+  /** The card chip's label, from the panel's own blocked set. */
+  chipFor: (event: FeedEvent) => string | undefined;
+  open: boolean;
+  onToggle: () => void;
+  onShowAll: () => void;
+  renderEvent: (event: FeedEvent, pastRadiusMi?: number, blockedBy?: string) => ReactNode;
+  onEditBlocks: () => void;
+}) {
+  const theme = useTheme();
+  const label = hiddenMatchesLabel(grouped.total);
+  // Inside the border, less the border itself — so the row's fill meets it.
+  const inner = theme.radii.lg - 1;
+  return (
+    // CONTAINMENT (2026-09-27): ONE bordered panel holds the row AND, when
+    // open, everything it discloses — so the hidden set reads as a unit apart
+    // from the real results. Only the ROW carries the card fill; the body sits
+    // on the bare panel background, which keeps the textMuted headings and
+    // "Edit blocks" at their measured contrast (Entry 2: textMuted fails ON a
+    // card) and keeps the cards inside from dissolving into a same-colour
+    // fill. No `overflow: hidden` for the corners: it would clip the row's
+    // focus ring — the row rounds its own top (and, closed, bottom) corners.
+    // marginTop 24, up from 18: clear air between the last real result and
+    // the panel, so the border does not read as belonging to that card.
+    <View
+      style={{
+        marginTop: 24,
+        borderRadius: theme.radii.lg,
+        borderWidth: 1,
+        borderColor: theme.colors.cardBorder,
+      }}
+    >
+      <Pressable
+        onPress={onToggle}
+        role="button"
+        aria-expanded={open}
+        aria-label={label}
+        style={({ pressed }) => ({
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 11,
+          minHeight: TARGET,
+          paddingHorizontal: 13,
+          paddingVertical: 10,
+          borderTopLeftRadius: inner,
+          borderTopRightRadius: inner,
+          borderBottomLeftRadius: open ? 0 : inner,
+          borderBottomRightRadius: open ? 0 : inner,
+          // The distance hint's surface (see the overflow band above).
+          backgroundColor: pressed ? theme.colors.surfaceHover : theme.colors.cardBg,
+        })}
+      >
+        <Ionicons name="eye-off-outline" size={16} color={theme.colors.text} />
+        <Text
+          style={{
+            flex: 1,
+            fontFamily: theme.fonts.bodyMedium,
+            fontSize: theme.fontSizes.caption,
+            lineHeight: 19,
+            // `text`, not textMuted: this sits ON A CARD (Entry 2: textMuted
+            // is 4.32:1 there). Same call as the distance hint.
+            color: theme.colors.text,
+          }}
+        >
+          {label}
+        </Text>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={theme.colors.text} />
+      </Pressable>
+
+      {open && (
+        <View
+          style={{
+            gap: 14,
+            paddingHorizontal: 13,
+            paddingTop: 14,
+            paddingBottom: 4,
+            borderTopWidth: 1,
+            borderTopColor: theme.colors.cardBorder,
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: theme.fonts.bodyMedium,
+              fontSize: theme.fontSizes.caption,
+              lineHeight: 19,
+              color: theme.colors.text,
+            }}
+          >
+            {hiddenMatchesTopLine(grouped.total)}
+          </Text>
+
+          {grouped.groups.map((g) => (
+            <View key={g.categoryId}>
+              <SectionHeading>{g.label}</SectionHeading>
+              <View style={{ gap: 14 }}>
+                {g.items.map((event) => (
+                  <View key={event.id}>{renderEvent(event, undefined, chipFor(event))}</View>
+                ))}
+              </View>
+            </View>
+          ))}
+
+          {grouped.remaining > 0 && (
+            <Pressable
+              onPress={onShowAll}
+              role="button"
+              aria-label={`Show ${grouped.remaining} more hidden ${grouped.remaining === 1 ? 'match' : 'matches'}`}
+              style={{ alignSelf: 'flex-start', minHeight: TARGET, minWidth: TARGET, justifyContent: 'center' }}
+            >
+              <Text
+                style={{
+                  fontFamily: theme.fonts.bodySemiBold,
+                  fontWeight: '800',
+                  fontSize: theme.fontSizes.caption,
+                  color: theme.colors.text,
+                  textDecorationLine: 'underline',
+                }}
+              >
+                +{grouped.remaining} more
+              </Text>
+            </Pressable>
+          )}
+
+          {/* QUIET by design: small, muted, underlined, last. A link to a
+              screen — role="link" — not a promoted action. */}
+          <Pressable
+            onPress={onEditBlocks}
+            role="link"
+            aria-label="Edit blocks in Settings"
+            style={{ alignSelf: 'flex-start', minHeight: TARGET, minWidth: TARGET, justifyContent: 'center' }}
+          >
+            <Text
+              style={{
+                fontFamily: theme.fonts.bodyMedium,
+                fontSize: 11.5,
+                // Bare panel background: 4.57:1 dark; the known light-mode
+                // textMuted shortfall (3.43:1) applies, parked for the
+                // light-mode sweep (docs/ACCESSIBILITY.md Entry 12).
+                color: theme.colors.textMuted,
+                textDecorationLine: 'underline',
+              }}
+            >
+              Edit blocks
+            </Text>
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
+
 /** Inline empty state. NOT components/EmptyState — that one owns its own live
  *  region, and a second region inside this panel would double-announce against
  *  the one above. This is plain text; the announcement is the panel's. */
-function NoResults({ headline, body }: { headline: string; body: string }) {
+function NoResults({ headline, body }: { headline: string; body?: string }) {
   const theme = useTheme();
   return (
     <View style={{ paddingVertical: 30, alignItems: 'center' }}>
@@ -938,20 +1285,22 @@ function NoResults({ headline, body }: { headline: string; body: string }) {
       >
         {headline}
       </Text>
-      <Text
-        style={{
-          fontFamily: theme.fonts.bodyMedium,
-          fontSize: 12.5,
-          lineHeight: 19,
-          // Bare panel background, not a card — see FilterRow's note.
-          color: theme.colors.textMuted,
-          textAlign: 'center',
-          marginTop: 6,
-          maxWidth: 320,
-        }}
-      >
-        {body}
-      </Text>
+      {body ? (
+        <Text
+          style={{
+            fontFamily: theme.fonts.bodyMedium,
+            fontSize: 12.5,
+            lineHeight: 19,
+            // Bare panel background, not a card — see FilterRow's note.
+            color: theme.colors.textMuted,
+            textAlign: 'center',
+            marginTop: 6,
+            maxWidth: 320,
+          }}
+        >
+          {body}
+        </Text>
+      ) : null}
     </View>
   );
 }

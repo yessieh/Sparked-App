@@ -29,7 +29,10 @@
 //     Undecided tile:   ✓  −
 //     Not for me tile:  ✓  ✕
 // The tile body is not a control. I'm into ↔ Not for me is the provider's
-// UPDATE path (0034: `update (stance)`).
+// UPDATE path (0034: `update (stance)`). Response behaviour VERIFIED
+// 2026-09-25 by fetch-wrapper capture in the browser: PATCH 200 returns the
+// updated row, DELETE 200 returns the deleted row, and a PATCH matching no row
+// returns [] and triggers a re-read — details in lib/interests.tsx.
 //
 // AFTER A MOVE the category leaves the visible tab, so focus goes to the NEXT
 // tile's first button in the same tab, else the previous one, else — tab now

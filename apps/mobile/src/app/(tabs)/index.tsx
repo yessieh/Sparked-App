@@ -33,6 +33,7 @@ import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   FlatList,
+  Pressable,
   RefreshControl,
   Text,
   View,
@@ -45,12 +46,20 @@ import EventStub, { type FeedEvent } from '../../components/EventStub';
 import ExploreSearch, { SearchTrigger } from '../../components/ExploreSearch';
 import InterestPills from '../../components/InterestPills';
 import LocationControl from '../../components/LocationControl';
+import Pill from '../../components/Pill';
 import SparkedLogo from '../../components/SparkedLogo';
 import ViewSwitcher, { type ViewMode } from '../../components/ViewSwitcher';
 import { useAuth } from '../../lib/auth';
 import { useEngagement } from '../../lib/engagement';
 import { useCategories } from '../../lib/categories';
-import { buildFilterCounts, matchesFilter, type SearchFilter } from '../../lib/eventFilters';
+import {
+  applyBlocks,
+  blockedByLabel,
+  buildFilterCounts,
+  canAutoJoinCurbside,
+  type SearchFilter,
+} from '../../lib/eventFilters';
+import { useInterests } from '../../lib/interests';
 import { dayLabel, localDayKey } from '../../lib/eventTime';
 import { MAX_RADIUS, useOrigin } from '../../lib/origin';
 import { supabase } from '../../lib/supabase';
@@ -146,65 +155,83 @@ function defaultWindow(): { from: string; to: string } {
   };
 }
 
-/**
- * How the filtered-empty state names what the user picked.
- *
- * Two pills are named outright; three or more collapse to "those filters",
- * because a headline listing five categories stops being a headline. Ordered by
- * the row's own order (taxonomy `sort_order`) rather than tap order, so the
- * sentence matches what the eye sees above it.
- */
-function describeSelection(labels: string[]): string {
-  if (labels.length === 1) return `Nothing tagged ${labels[0]} right now`;
-  if (labels.length === 2) return `Nothing tagged ${labels[0]} or ${labels[1]} right now`;
-  return 'Nothing matches those filters right now';
-}
+/** Nothing hidden — the blocked set for signed out, or when the read failed. */
+const NO_BLOCKS: ReadonlySet<string> = new Set();
 
-/** How the empty state names a PICKED window. `windowLabel` is the short range
- *  ("Sep 20–22") from formatWindowLabel; `pillsLit` adds the filter clause. */
-function describeWindow(windowLabel: string, pillsLit: boolean): string {
-  return pillsLit
-    ? `Nothing on ${windowLabel} matches your filters`
-    : `Nothing on ${windowLabel}`;
-}
+/** Every empty-state button: full width up to 300, CENTRED by EmptyState's
+ *  `alignItems: 'center'` — no alignSelf, which would override it. */
+const EMPTY_BUTTON = { minHeight: 44, width: '100%', maxWidth: 300 } as const;
 
 /**
- * The empty state's headline and body across its FOUR cells, so the JSX below
- * is one element with props rather than a ternary four deep.
+ * The empty state's headline and body, so the JSX below is one element with
+ * props rather than a ternary four deep (Entry 2: one EmptyState element, its
+ * node survives every branch).
  *
- *   A. no pills, default window — the genuine empty; widen is offered elsewhere.
- *   B. pills, default window    — the filter emptied it; the remedy is a clear.
- *   C. no pills, picked window  — the dates emptied it; the remedy is a reset.
- *   D. pills AND picked window  — either could have; one tap removes both.
+ * TWO CAUSES, IN PRIORITY ORDER (Explore-blocks arc, 2026-09-23):
  *
- * The status line's "of m" and the pill headlines keep their existing
- * conditions; only C and D are new.
+ *   1. SERVER-EMPTY — the RPC returned nothing for this radius and window.
+ *      Headline "Nothing within your radius or dates"; each window cell keeps
+ *      its existing body (and, in the JSX, its existing buttons):
+ *        A. default window — the radius sentence, widen offered;
+ *        C. picked window, no pills — "the dates are what's narrowing this";
+ *        D. picked window + pills — "both the dates and the filters …".
+ *   2. FILTERED-EMPTY — events came back, and blocks and/or pills hid every
+ *      one. Headline "Nothing matches your filters"; body LOCKED by Jas
+ *      2026-09-25 — "Nothing nearby matches your filters." when any filter
+ *      is on, "Everything nearby is in interests you've blocked." when blocks
+ *      alone did it. The Blocked pill stays visible above it.
+ *
+ * The headlines no longer name the pills or the window: with blocks as a
+ * second cause, "Nothing tagged Music" could be false (Music events exist;
+ * all are blocked). The status line still names both.
  */
+/** A window instant as a US short date — "Dec 27". Local time: `to` is a
+ *  millisecond before the next local midnight, so it reads the last picked
+ *  day, not the one after. Same shape as DateControl's `shortDate`. */
+const usShortDate = (iso: string): string =>
+  new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
 function emptyCopy(o: {
   filteredEmpty: boolean;
+  blocksEmptied: boolean;
   pillsLit: boolean;
   windowNarrow: boolean;
-  windowLabel: string;
-  selectedLabels: string[];
+  window: { from: string; to: string };
   radius: number;
   canWiden: boolean;
 }): { headline: string; body: string } {
-  if (o.windowNarrow) {
+  if (o.filteredEmpty) {
+    // Body copy LOCKED by Jas (2026-09-25); the headline is unchanged. The
+    // ACTUAL CAUSE decides the sentence and the button (2026-09-26):
+    //   nothing survived BLOCKS (server returned events, after-blocks list is
+    //   empty) → blocks body + Show blocked events — EVEN WITH filters on,
+    //   because clearing filters could not bring anything back;
+    //   otherwise the filters emptied it → filters body + Clear filters.
     return {
-      headline: describeWindow(o.windowLabel, o.pillsLit),
-      body: o.pillsLit
-        ? `Everything else within ${o.radius} mi is still here — both the dates and the filters are narrowing this.`
-        : `Everything else within ${o.radius} mi is still here — the dates are what's narrowing this.`,
+      headline: 'Nothing matches your filters',
+      body: o.blocksEmptied
+        ? 'Everything nearby is in interests you’ve blocked.'
+        : 'Nothing nearby matches your filters.',
     };
   }
-  if (o.filteredEmpty) {
+  if (o.windowNarrow) {
     return {
-      headline: describeSelection(o.selectedLabels),
-      body: `Everything else within ${o.radius} mi is still here — clearing your filters brings it back.`,
+      headline: 'Nothing within your radius or dates',
+      // Cell C's body (PROVISIONAL, 2026-09-23) names the actual dates and
+      // radius and says what to do. Cell D's is unchanged — listed as unclear
+      // in the arc report, not changed here.
+      // One picked day reads "on Sep 28", not "between Sep 28 and Sep 28"
+      // (2026-09-26). Compared as LOCAL calendar days, the same way the
+      // window was built.
+      body: o.pillsLit
+        ? `Everything else within ${o.radius} mi is still here — both the dates and the filters are narrowing this.`
+        : new Date(o.window.from).toDateString() === new Date(o.window.to).toDateString()
+          ? `No events on ${usShortDate(o.window.from)} within ${o.radius} mi. Try different dates.`
+          : `No events between ${usShortDate(o.window.from)} and ${usShortDate(o.window.to)} within ${o.radius} mi. Try different dates.`,
     };
   }
   return {
-    headline: 'Nothing nearby right now',
+    headline: 'Nothing within your radius or dates',
     // The second sentence is dropped at MAX_RADIUS: there is no further
     // control behind it, and an instruction with nothing to act on is a dead
     // end. The condition used to be "has already widened once"; with a
@@ -319,13 +346,73 @@ export default function Explore() {
   const { place, radius, loaded, setRadius } = useOrigin();
   const canWiden = radius < MAX_RADIUS;
 
-  // --- Derived: counts, the pill set, and the filtered view ----------------
+  // --- Category blocks (Explore-blocks arc; AD 7 RULINGS as amended) ------
   //
-  // OVER `events`, THE UNFILTERED FEED — never over `visibleEvents`. Counting
-  // the filtered view would zero every unselected category on first tap, and
-  // since a pill exists only when its count is > 0, the rest of the row would
-  // disappear the moment anyone used it.
-  const counts = useMemo(() => buildFilterCounts(events ?? []), [events]);
+  // Signed out there are no blocks at all. Signed in, a FAILED read shows the
+  // feed unfiltered (with a line saying so where the Blocked pill would be)
+  // rather than hiding everything or nothing silently.
+  const {
+    blocked,
+    loaded: interestsLoaded,
+    readFailed: blocksFailed,
+    reveal,
+    setReveal,
+    refresh: refreshInterests,
+  } = useInterests();
+  const blocksOn = !!session && !blocksFailed;
+  const activeBlocked = blocksOn ? blocked : NO_BLOCKS;
+  /**
+   * THE FEED HOLDS ITS LOADING STATE until the blocks have loaded, signed in —
+   * otherwise blocked cards render from the RPC, then vanish when the blocks
+   * land. `null` is already the EmptyState pending phase. Signed out the
+   * provider reports loaded immediately, so nothing waits.
+   */
+  const feedEvents = session && !interestsLoaded ? null : events;
+
+  /** Taxonomy order + labels, for the blocked chip ("Music +1"). */
+  const categoryOrder = useMemo(() => new Map(categories.map((c, i) => [c.id, i])), [categories]);
+  const labelOf = useCallback(
+    (id: string) => categories.find((c) => c.id === id)?.label ?? id,
+    [categories],
+  );
+
+  // --- Derived: blocks, counts, the pill set, and the filtered view --------
+
+  /** Selected ids as filters, so the feed runs the SAME predicate the search
+   *  panel runs (lib/eventFilters.ts) rather than a second inline `includes`. */
+  const activeFilters = useMemo<SearchFilter[]>(
+    () => selected.map((id) => ({ id, label: id, kind: 'category' as const })),
+    [selected],
+  );
+
+  /**
+   * Blocks, then pills — lib/eventFilters.ts `applyBlocks`, pure and tested.
+   *   base    = the feed after blocks (every event if revealed) — the status
+   *             line's "m", and what the pill counts are built from;
+   *   visible = base narrowed by the pills (OR) — what is on screen, "n";
+   *   blockedCategoryCount = the Blocked pill's N (distinct CATEGORIES).
+   *
+   * KNOWN AND ACCEPTED (recorded in the tracker, not fixed here): an event with
+   * NO categories matches no pill and therefore leaves the feed whenever any
+   * pill is active. Categories are optional at publish — create/event.tsx's
+   * `missing` list requires only a title and an address — so such events exist.
+   * It is also never blocked (NULL categories block nothing).
+   */
+  const blockedFeed = useMemo(
+    () =>
+      feedEvents === null
+        ? null
+        : applyBlocks(feedEvents, { blocked: activeBlocked, reveal, filters: activeFilters }),
+    [feedEvents, activeBlocked, reveal, activeFilters],
+  );
+
+  // OVER `base`, THE FEED BEFORE PILLS — never over `visible`. Counting the
+  // filtered view would zero every unselected category on first tap, and since
+  // a pill exists only when its count is > 0, the rest of the row would
+  // disappear the moment anyone used it. Base is AFTER blocks (unless
+  // revealed), so a blocked category's pill disappears with its events.
+  const counts = useMemo(() => buildFilterCounts(blockedFeed?.base ?? []), [blockedFeed]);
+  const blockedN = blockedFeed?.blockedCategoryCount ?? 0;
 
   /**
    * Which pills exist: a category with at least one event in the current feed,
@@ -343,28 +430,8 @@ export default function Explore() {
     [categories, counts, selected],
   );
 
-  /** Selected ids as filters, so the feed runs the SAME predicate the search
-   *  panel runs (lib/eventFilters.ts) rather than a second inline `includes`. */
-  const activeFilters = useMemo<SearchFilter[]>(
-    () => selected.map((id) => ({ id, label: id, kind: 'category' as const })),
-    [selected],
-  );
-
-  /**
-   * OR, not AND: Music + Food shows events tagged either.
-   *
-   * KNOWN AND ACCEPTED (recorded in the tracker, not fixed here): an event with
-   * NO categories matches nothing and therefore leaves the feed whenever any
-   * pill is active. Categories are optional at publish — create/event.tsx's
-   * `missing` list requires only a title and an address — so such events exist.
-   * The fix is upstream in the wizard; a fallback here would put unmatched
-   * events into a filtered view, which contradicts what the filter says.
-   */
-  const visibleEvents = useMemo(() => {
-    if (events === null) return null;
-    if (activeFilters.length === 0) return events;
-    return events.filter((e) => activeFilters.some((f) => matchesFilter(f, e)));
-  }, [events, activeFilters]);
+  /** OR, not AND: Music + Food shows events tagged either. After blocks. */
+  const visibleEvents = blockedFeed?.visible ?? null;
 
   /** Labels of the active pills, in row order (taxonomy sort_order). */
   const selectedLabels = useMemo(
@@ -373,18 +440,18 @@ export default function Explore() {
   );
 
   /**
-   * The feed has events, and the pills excluded all of them.
+   * The server returned events, and blocks and/or pills hid every one.
    *
-   * THIS IS RARE BY CONSTRUCTION, and the reason is worth stating so nobody
-   * reads it as dead code. A pill only exists when its count is > 0, so tapping
-   * one can never empty the feed on its own, and OR-ing more pills only ever
-   * widens the result. It fires when the feed CHANGES UNDERNEATH an active
-   * filter — a focus refetch, a pull-to-refresh, a radius or location change,
-   * or the ENDED filter retiring the last matching event — which is also
-   * exactly the case the zero-count pill exception above keeps releasable.
+   * Pills alone make this RARE BY CONSTRUCTION: a pill only exists when its
+   * count is > 0, so tapping one can never empty the feed on its own. It fires
+   * when the feed changes underneath an active filter — or, since the blocks
+   * arc, whenever blocks hide everything in range, which is NOT rare.
    */
   const filteredEmpty =
-    events !== null && events.length > 0 && (visibleEvents?.length ?? 0) === 0;
+    feedEvents !== null && feedEvents.length > 0 && (visibleEvents?.length ?? 0) === 0;
+  /** Of those: BLOCKS are the cause — nothing survived them, before any
+   *  filter. (Revealed, `base` holds every event, so this is false.) */
+  const blocksEmptied = filteredEmpty && (blockedFeed?.base.length ?? 0) === 0;
 
   const pillsLit = selected.length > 0;
   const windowNarrow = !windowIsDefault;
@@ -392,29 +459,37 @@ export default function Explore() {
   const windowLabel = useMemo(() => formatWindowLabel(dateWindow), [dateWindow]);
 
   /**
-   * The filter-status line. "of ${m}" appears ONLY when pills are lit: `events`
-   * is the server response, already windowed, and `visibleEvents` is that
-   * filtered by pills. With no pills n === m and "Showing 4 of 4" reads as a
-   * broken partition.
+   * The filter-status line. "of ${m}" appears ONLY when pills are lit.
+   *   m = the feed AFTER blocks (every event if revealed), BEFORE pills;
+   *   n = what is actually on screen.
+   * Revealing changes both. With no pills n === m and "Showing 4 of 4" reads
+   * as a broken partition.
+   *
+   * "No events on <range>" is said ONLY when the SERVER returned nothing for
+   * the window (2026-09-25). When events came back and blocks and/or filters
+   * hid them all, the line says "Showing 0 · <range>" — the range did not come
+   * up empty; the feed's own filters emptied it, and the empty state explains
+   * which.
    */
   const statusVisible = (pillsLit || windowNarrow) && visibleEvents !== null;
+  const serverEmpty = (feedEvents?.length ?? 0) === 0;
   const statusText = (() => {
     if (!visibleEvents) return '';
     const n = visibleEvents.length;
-    const m = events?.length ?? 0;
+    const m = blockedFeed?.base.length ?? 0;
     const pills = selectedLabels.join(', ');
     if (pillsLit && windowNarrow) {
-      return n === 0
-        ? `No events on ${windowLabel} match ${pills}`
+      return serverEmpty
+        ? `No events on ${windowLabel}`
         : `Showing ${n} of ${m} · ${pills} · ${windowLabel}`;
     }
     if (pillsLit) {
       return n === 0 ? `No events match ${pills}` : `Showing ${n} of ${m} · ${pills}`;
     }
-    return n === 0 ? `No events on ${windowLabel}` : `Showing ${n} · ${windowLabel}`;
+    return serverEmpty ? `No events on ${windowLabel}` : `Showing ${n} · ${windowLabel}`;
   })();
 
-  const empty = emptyCopy({ filteredEmpty, pillsLit, windowNarrow, windowLabel, selectedLabels, radius, canWiden });
+  const empty = emptyCopy({ filteredEmpty, blocksEmptied, pillsLit, windowNarrow, window: dateWindow, radius, canWiden });
 
   const togglePill = useCallback(
     (id: string) => {
@@ -429,13 +504,17 @@ export default function Explore() {
 
       let next = adding ? [...selected, id] : selected.filter((x) => x !== id);
       // THE AUTO-JOIN. Fires at most once, because firing sets the flag.
-      if (adding && !curbsideDecided) {
+      // GUARDED: never while Curbside is blocked and hidden (reveal off) — it
+      // would light a pill for a category the feed is hiding. The flag is NOT
+      // set when the guard stops it: the question was not settled, only
+      // deferred, so a later topical tap after revealing still auto-joins.
+      if (adding && !curbsideDecided && canAutoJoinCurbside(activeBlocked, reveal)) {
         setCurbsideDecided(true);
         if (!next.includes(CURBSIDE)) next = [...next, CURBSIDE];
       }
       setSelected(next);
     },
-    [selected, curbsideDecided],
+    [selected, curbsideDecided, activeBlocked, reveal],
   );
 
   /** Filtered-empty's one action. Releases the pills but NOT `curbsideDecided`:
@@ -617,6 +696,17 @@ export default function Explore() {
   );
 
   /**
+   * The blocked chip's label for a card — ONLY while revealed (a hidden event
+   * is not on screen to label). `undefined` for every unblocked card and
+   * whenever blocks are off, which leaves EventStub rendering as it always has.
+   */
+  const blockedByFor = useCallback(
+    (item: FeedEvent) =>
+      reveal ? blockedByLabel(item, activeBlocked, categoryOrder, labelOf) : undefined,
+    [reveal, activeBlocked, categoryOrder, labelOf],
+  );
+
+  /**
    * One card, rendered identically wherever it appears. Search results get the
    * same save/going wiring, the same anonymous gating and the same rsvp delta
    * as feed cards because they come through here — rather than ExploreSearch
@@ -624,9 +714,14 @@ export default function Explore() {
    *
    * A tap CLOSES the panel before navigating, so returning from a detail screen
    * lands on the feed rather than under a stale overlay.
+   *
+   * `blockedBy` — computed by search from its own blocked set — draws the
+   * blocked treatment. It is set for a blocked card in the dropdown (reveal
+   * off) or inline in the results (reveal on), and undefined for every
+   * unblocked card.
    */
   const renderSearchEvent = useCallback(
-    (item: FeedEvent, pastRadiusMi?: number) => (
+    (item: FeedEvent, pastRadiusMi?: number, blockedBy?: string) => (
       <EventStub
         event={
           typeof item.rsvp_count === 'number'
@@ -636,6 +731,7 @@ export default function Explore() {
         saved={savedIds.has(item.id)}
         going={goingIds.has(item.id)}
         pastRadiusMi={pastRadiusMi}
+        blockedBy={blockedBy}
         onToggleSave={gated(() => toggleSave(item.id))}
         onToggleGoing={gated(() => toggleRsvp(item.id))}
         onTap={() => {
@@ -672,9 +768,10 @@ export default function Explore() {
         onToggleSave={gated(() => toggleSave(item.id))}
         onToggleGoing={gated(() => toggleRsvp(item.id))}
         onTap={() => router.push({ pathname: '/event/[id]', params: { id: item.id } })}
+        blockedBy={blockedByFor(item)}
       />
     ),
-    [savedIds, goingIds, rsvpDelta, gated, toggleSave, toggleRsvp],
+    [savedIds, goingIds, rsvpDelta, gated, toggleSave, toggleRsvp, blockedByFor],
   );
 
   /**
@@ -684,7 +781,59 @@ export default function Explore() {
    * empty state's four cells render exactly as before; `viewMode` itself is
    * left alone, so a feed that refills comes back in the view the user chose.
    */
-  const hasFeed = events !== null && events.length > 0;
+  const hasFeed = feedEvents !== null && feedEvents.length > 0;
+
+  /**
+   * The end of the pill row. Three states, and `undefined` in the common one
+   * (signed out, or nothing hidden) so the row renders exactly as before:
+   *   • BLOCKED PILL — whenever N > 0. Off: dashed, "Blocked (N)"; on: solid,
+   *     "Showing blocked (N)". Never gradient (Pill's `outline` variant).
+   *     N counts CATEGORIES hiding something the current pills would show.
+   *   • READ FAILED — the feed is shown unfiltered, and this line says why
+   *     (PROVISIONAL copy). `colors.text`, not textMuted: light-mode textMuted
+   *     is 3.43:1 (Entry 12).
+   */
+  const blockedNoun = blockedN === 1 ? 'category' : 'categories';
+  const blocksTrailing: React.ReactNode =
+    blocksOn && blockedN > 0 ? (
+      <Pill
+        label={reveal ? `Showing blocked (${blockedN})` : `Blocked (${blockedN})`}
+        selected={reveal}
+        outline={reveal ? 'solid' : 'dashed'}
+        // The name STARTS WITH the visible label (WCAG 2.5.3 Label in Name —
+        // a voice-control user says what they see), then names the result.
+        ariaLabel={
+          reveal
+            ? `Showing blocked (${blockedN}), hide ${blockedN} blocked ${blockedNoun}`
+            : `Blocked (${blockedN}), show ${blockedN} blocked ${blockedNoun}`
+        }
+        onPress={() => setReveal(!reveal)}
+      />
+    ) : session && blocksFailed ? (
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+        <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: theme.fontSizes.caption, color: theme.colors.text }}>
+          Couldn’t load your blocks ·
+        </Text>
+        <Pressable
+          onPress={() => refreshInterests()}
+          role="button"
+          aria-label="Retry loading your blocks"
+          style={{ minHeight: 44, minWidth: 44, justifyContent: 'center', paddingHorizontal: 4 }}
+        >
+          <Text
+            style={{
+              fontFamily: theme.fonts.bodySemiBold,
+              fontWeight: '800',
+              fontSize: theme.fontSizes.caption,
+              color: theme.colors.text,
+              textDecorationLine: 'underline',
+            }}
+          >
+            Retry
+          </Text>
+        </Pressable>
+      </View>
+    ) : undefined;
   const effectiveView: ViewMode = hasFeed ? viewMode : 'list';
 
   /**
@@ -838,14 +987,20 @@ export default function Explore() {
           The residual, recorded rather than hidden: the taxonomy read is a tiny
           indexed table select and the feed read is a PostGIS radius query, so
           categories normally win and the row appears in the same frame as the
-          cards. If that order ever inverts, the row lands one frame late. */}
-      {categories.length > 0 && events !== null && pillCategories.length > 0 && (
-        <InterestPills
-          categories={pillCategories}
-          selected={selected}
-          onToggle={togglePill}
-        />
-      )}
+          cards. If that order ever inverts, the row lands one frame late.
+          SINCE THE BLOCKS ARC the row also renders when it holds ONLY the
+          Blocked pill (or the read-failed line) — blocks can hide every
+          category, and the pill is the one way back. */}
+      {categories.length > 0 &&
+        feedEvents !== null &&
+        (pillCategories.length > 0 || blocksTrailing !== undefined) && (
+          <InterestPills
+            categories={pillCategories}
+            selected={selected}
+            onToggle={togglePill}
+            trailing={blocksTrailing}
+          />
+        )}
     </View>
   );
 
@@ -966,42 +1121,62 @@ export default function Explore() {
             // no way to know which constraint is responsible — making them
             // guess hands them an action that may not help, the same failure
             // as offering a widen that cannot.
+            //
+            // BLOCKS ARC — the buttons follow the empty-state PRIORITY
+            // (emptyCopy): FILTERED-EMPTY first (events exist; pills and/or
+            // blocks hid them) — any filter on → Clear filters (gradient, as
+            // before); blocks alone → a SECONDARY "Show blocked events" that
+            // turns reveal on (2026-09-25). Otherwise SERVER-EMPTY, exactly as
+            // before: C/D reset, A widens.
             <EmptyState
-              pending={events === null}
+              pending={feedEvents === null}
               headline={empty.headline}
               body={empty.body}
             >
-              {windowNarrow ? (
-                <GradientButton
+              {/* CTA HIERARCHY (locked 2026-09-26): every RECOVERY button
+                  here — Clear filters, Reset dates, Widen, Show everything
+                  nearby, Show blocked events — is SECONDARY; the gradient is
+                  for primary / host actions only, so "Post something
+                  yourself" is the one gradient in this state.
+                  CENTRED: `width: '100%', maxWidth: 300` with NO alignSelf —
+                  EmptyState's row is `alignItems: 'center'`, and the
+                  `alignSelf: 'stretch'` that used to sit here overrode it and
+                  pinned each 300-wide button to the left edge of a wider
+                  column (off-centre on desktop). */}
+              {filteredEmpty ? (
+                blocksEmptied ? (
+                  // BLOCKS emptied it — even with filters on, clearing them
+                  // could not bring anything back (nothing survived blocks).
+                  <SecondaryButton onPress={() => setReveal(true)} style={EMPTY_BUTTON}>
+                    Show blocked events
+                  </SecondaryButton>
+                ) : (
+                  <SecondaryButton onPress={clearFilters} style={EMPTY_BUTTON}>
+                    Clear filters
+                  </SecondaryButton>
+                )
+              ) : windowNarrow ? (
+                <SecondaryButton
                   onPress={pillsLit ? showEverythingNearby : onWindowReset}
-                  style={{ minHeight: 44, alignSelf: 'stretch', maxWidth: 300 }}
+                  style={EMPTY_BUTTON}
                 >
                   {pillsLit ? 'Show everything nearby' : 'Reset dates'}
-                </GradientButton>
-              ) : filteredEmpty ? (
-                <GradientButton
-                  onPress={clearFilters}
-                  style={{ minHeight: 44, alignSelf: 'stretch', maxWidth: 300 }}
-                >
-                  Clear filters
-                </GradientButton>
+                </SecondaryButton>
               ) : (
                 <>
                   {canWiden && (
-                    <GradientButton onPress={onWiden} style={{ minHeight: 44, alignSelf: 'stretch', maxWidth: 300 }}>
+                    <SecondaryButton onPress={onWiden} style={EMPTY_BUTTON}>
                       Widen to {widenTargetFor(radius)} miles
-                    </GradientButton>
+                    </SecondaryButton>
                   )}
-                  {/* Host path, secondary. gated() rather than letting /create
-                      self-gate with router.replace: someone who taps from an
-                      empty feed and decides not to sign up lands back HERE, not
-                      stranded with no back path. */}
-                  <SecondaryButton
-                    onPress={gated(() => router.push('/create'))}
-                    style={{ minHeight: 44, alignSelf: 'stretch', maxWidth: 300 }}
-                  >
+                  {/* Host path — the one gradient (a host action, not a
+                      recovery). gated() rather than letting /create self-gate
+                      with router.replace: someone who taps from an empty feed
+                      and decides not to sign up lands back HERE, not stranded
+                      with no back path. */}
+                  <GradientButton onPress={gated(() => router.push('/create'))} style={EMPTY_BUTTON}>
                     Post something yourself
-                  </SecondaryButton>
+                  </GradientButton>
                   <Text
                     style={{
                       fontFamily: theme.fonts.bodyMedium,
@@ -1027,12 +1202,17 @@ export default function Explore() {
           would have meant an early return before its hooks. */}
       {searchOpen && (
         <ExploreSearch
-          // The UNFILTERED feed and the counts built from it. Search is not
-          // narrowed by the header pills, deliberately: its Tier-1 rows offer
-          // filters, so showing them counts already reduced by another filter
-          // would state a number that is true of neither surface.
-          events={events ?? []}
-          counts={counts}
+          // The feed BEFORE PILLS AND BEFORE BLOCKS. Search is not narrowed by
+          // the header pills, deliberately: its Tier-1 rows offer filters, so
+          // counts already reduced by another filter would state a number
+          // true of neither surface. BLOCKS it applies ITSELF, on every path
+          // (RULING 2026-09-27): reveal OFF sends blocked matches to one
+          // collapsed dropdown at the bottom; reveal ON shows them inline with
+          // the blocked treatment — so it needs the unblocked list to find
+          // them, the blocked set to split it, and `reveal` to choose.
+          events={feedEvents ?? []}
+          blocked={activeBlocked}
+          reveal={reveal}
           radius={radius}
           place={place}
           dateWindow={dateWindow}

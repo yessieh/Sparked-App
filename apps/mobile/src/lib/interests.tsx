@@ -26,6 +26,13 @@
 // both mean "re-pull, don't revert": a 23505 on insert (a row already exists),
 // or an update/delete that matched 0 rows (the row is gone). Any other error is
 // a real failure and the optimistic change is reverted.
+//
+// VERIFIED 2026-09-25 by fetch-wrapper capture in the browser (signed in, dev):
+// PATCH 200 returns the updated row (`[{"category_id":"food"}]`), DELETE 200
+// returns the deleted row, and a PATCH matching no row (a second tab acting on
+// a row the first had already deleted) returns `[]` and triggers a re-read
+// (the GET that follows). So `data.length === 0` below is a reliable "stale"
+// signal for both update and delete.
 
 import React, {
   createContext,
@@ -63,6 +70,14 @@ interface InterestsContextValue {
    * "we could not ask".
    */
   readFailed: boolean;
+  /**
+   * Explore's "Showing blocked" toggle. SESSION-ONLY: in memory here, never
+   * persisted — false after a reload, and false again whenever the user
+   * changes (it is tagged with the user who turned it on). Always false signed
+   * out, where there are no blocks to reveal.
+   */
+  reveal: boolean;
+  setReveal: (on: boolean) => void;
   /** Re-pull both sets (screens call this on focus). No-op when signed out. */
   refresh: () => Promise<void>;
   /** Move a category to a bucket; `null` = back to Undecided. */
@@ -74,6 +89,8 @@ const InterestsContext = createContext<InterestsContextValue>({
   blocked: new Set(),
   loaded: false,
   readFailed: false,
+  reveal: false,
+  setReveal: () => {},
   refresh: async () => {},
   setStance: async () => {},
 });
@@ -127,6 +144,13 @@ export function InterestsProvider({ children }: { children: ReactNode }) {
   const blocked = snapIsMine ? snap.blocked : EMPTY;
   const loaded = userId === null || snap.user === userId;
   const readFailed = snapIsMine && snap.failed;
+
+  // Reveal, tagged with the user who turned it on — the same derive-don't-
+  // reset move as `Snapshot`: a user change makes the tag stale, so reveal
+  // reads false without an effect setting it.
+  const [revealFor, setRevealFor] = useState<string | null>(null);
+  const reveal = userId !== null && revealFor === userId;
+  const setReveal = useCallback((on: boolean) => setRevealFor(on ? userId : null), [userId]);
 
   /** Land one read's answer for `uid`, unless a newer read (or a sign-out)
    *  has started since generation `gen` was taken. */
@@ -238,8 +262,8 @@ export function InterestsProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<InterestsContextValue>(
-    () => ({ into, blocked, loaded, readFailed, refresh, setStance }),
-    [into, blocked, loaded, readFailed, refresh, setStance],
+    () => ({ into, blocked, loaded, readFailed, reveal, setReveal, refresh, setStance }),
+    [into, blocked, loaded, readFailed, reveal, setReveal, refresh, setStance],
   );
 
   return <InterestsContext.Provider value={value}>{children}</InterestsContext.Provider>;

@@ -30,9 +30,12 @@ export interface InterestPillsProps {
   categories: Category[];
   selected: string[];
   onToggle: (id: string) => void;
+  /** Rendered at the END of the row, inside the group — Explore's Blocked
+   *  pill (or its read-failed line). Absent ⇒ the row is unchanged. */
+  trailing?: React.ReactNode;
 }
 
-export default function InterestPills({ categories, selected, onToggle }: InterestPillsProps) {
+export default function InterestPills({ categories, selected, onToggle, trailing }: InterestPillsProps) {
   return (
     <View
       // Without this a screen reader meets a bare run of toggle buttons with no
@@ -51,6 +54,7 @@ export default function InterestPills({ categories, selected, onToggle }: Intere
           onPress={() => onToggle(c.id)}
         />
       ))}
+      {trailing}
     </View>
   );
 }

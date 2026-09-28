@@ -61,10 +61,73 @@ export interface PillProps {
   onPress: () => void;
   /** Merged ON TOP of the base style, never replacing it. */
   style?: StyleProp<ViewStyle>;
+  /**
+   * OPT-IN OUTLINE VARIANT — Explore's Blocked pill, and nothing else yet.
+   * Absent (every existing consumer) ⇒ the component renders exactly as it
+   * always has: the early return below is the only path that reads this.
+   *
+   * Set ⇒ NEVER gradient, whatever `selected` says: the Blocked pill reveals
+   * hidden events, it is not a promoted action (AD 7 RULINGS). `selected`
+   * still drives `aria-pressed`; the visual state is the outline instead:
+   *   'dashed' — off: IDENTICAL to an unselected sibling pill — 1px
+   *              `cardBorder` border, `textMuted` 800 label — except
+   *              `borderStyle: 'dashed'` (Jas's call, 2026-09-23/25: a
+   *              heavier dashed line read as a thicker border). The boundary
+   *              is decorative, as on the siblings (1.26 / 1.16:1); the LABEL
+   *              ("Blocked (N)") carries the meaning. It inherits the
+   *              siblings' known light-mode shortfall (textMuted 3.43:1,
+   *              docs/ACCESSIBILITY.md Entry 12), parked for the light-mode
+   *              sweep: consistency over a one-off fix;
+   *   'solid'  — on:  solid `colors.text` outline (14.11 / 13.50) and a
+   *              `colors.text` label.
+   */
+  outline?: 'dashed' | 'solid';
+  /** Accessible name when the visible label is not enough (outline variant
+   *  only). E.g. "Show 2 blocked categories". */
+  ariaLabel?: string;
 }
 
-export default function Pill({ label, selected, onPress, style }: PillProps) {
+export default function Pill({ label, selected, onPress, style, outline, ariaLabel }: PillProps) {
   const theme = useTheme();
+  if (outline) {
+    return (
+      <Pressable
+        onPress={onPress}
+        role="button"
+        aria-label={ariaLabel}
+        {...ariaPressed(selected)}
+        style={[
+          {
+            borderRadius: theme.radii.pill,
+            paddingHorizontal: 16,
+            minHeight: TARGET,
+            minWidth: TARGET,
+            alignItems: 'center',
+            justifyContent: 'center',
+            // Off ('dashed'): the unselected sibling's EXACT border — 1px
+            // cardBorder — differing ONLY in borderStyle. On ('solid'): 1.5px
+            // colors.text, unchanged.
+            borderWidth: outline === 'solid' ? 1.5 : 1,
+            borderStyle: outline,
+            borderColor: outline === 'solid' ? theme.colors.text : theme.colors.cardBorder,
+          },
+          style,
+        ]}
+      >
+        <Text
+          style={{
+            fontFamily: theme.fonts.bodySemiBold,
+            fontWeight: '800',
+            fontSize: theme.fontSizes.caption,
+            // At rest: exactly the unselected sibling's label. On: colors.text.
+            color: outline === 'solid' ? theme.colors.text : theme.colors.textMuted,
+          }}
+        >
+          {label}
+        </Text>
+      </Pressable>
+    );
+  }
   return (
     <Pressable
       onPress={onPress}

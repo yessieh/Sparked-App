@@ -116,6 +116,62 @@ export interface EventStubProps {
    * token, and dimming the card already dims the stripe with it.
    */
   pastRadiusMi?: number;
+  /**
+   * EXPLORE ONLY, and only while the user has revealed blocked events: the
+   * label of the first category blocking this event by taxonomy order, with
+   * "+N" when more than one does ("Music +1" — lib/eventFilters.ts
+   * blockedByLabel). Absent everywhere else, so every other consumer renders
+   * exactly as before.
+   *
+   * WHAT IT DOES: a DASHED card border (matching the Blocked pill's off state)
+   * and a neutral outlined chip "Blocked · <Label>". NOT reduced opacity —
+   * dimming already means "deleted, inert" on Saved and stepped-back overflow
+   * in search, and it drags text contrast down. No green, gold or gradient.
+   * The card stays fully tappable; the title link (Arc G) is unchanged.
+   * Contrast in docs/ACCESSIBILITY.md Entry 13.
+   *
+   * UNVERIFIED: that `borderStyle: 'dashed'` renders on iOS/Android. Web
+   * renders it; native was not run. If native draws it solid, the chip still
+   * carries the state in words.
+   */
+  blockedBy?: string;
+}
+
+/**
+ * "Blocked · Music". Two surfaces, two colourings:
+ *   • on the PHOTO header — dark in BOTH themes — fixed light text on the
+ *     badge's dark backing: 11.93:1 worst case (dark theme, free-lane stripe);
+ *   • on a CARD (compact variant) — themed `colors.text` on the card surface:
+ *     12.63 dark / 14.72 light.
+ * Outline only; never filled with colour, never gradient.
+ */
+function BlockedChip({ label, onPhoto }: { label: string; onPhoto: boolean }) {
+  const theme = useTheme();
+  return (
+    <View
+      style={
+        onPhoto
+          ? [styles.badge, { borderColor: 'rgba(238,240,255,0.60)' }]
+          : {
+              alignSelf: 'flex-start',
+              paddingHorizontal: 8,
+              paddingVertical: 3,
+              borderRadius: 9999,
+              borderWidth: 1,
+              borderColor: theme.colors.textMuted,
+            }
+      }
+    >
+      <Text
+        style={[
+          styles.badgeText,
+          { letterSpacing: 0.6, color: onPhoto ? '#eef0ff' : theme.colors.text },
+        ]}
+      >
+        {`BLOCKED · ${label.toUpperCase()}`}
+      </Text>
+    </View>
+  );
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -499,6 +555,7 @@ export default function EventStub({
   onTap,
   showDistance = false,
   pastRadiusMi,
+  blockedBy,
 }: EventStubProps) {
   const theme = useTheme();
   // Minute tick so the countdown stays current — local re-render only, never
@@ -514,6 +571,14 @@ export default function EventStub({
   const cd = eventCountdown(event.starts_at, event.ends_at);
   // PRESENCE, not truthiness — 0.4 mi past the radius is still overflow.
   const stepped = pastRadiusMi != null;
+  // Spread LAST into the shell style, and `null` when absent — so an
+  // unblocked card's style object has exactly the keys and values it always
+  // had. textMuted as a border: 4.32:1 on the dark card, 3.74:1 on the light
+  // card, 4.55 / 3.43 against the page (1.4.11 needs 3:1).
+  const blockedBorder =
+    blockedBy != null
+      ? { borderStyle: 'dashed' as const, borderWidth: 1.5, borderColor: theme.colors.textMuted }
+      : null;
 
   const actionButtons = (onToggleSave || onToggleGoing) && (
     <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -543,6 +608,7 @@ export default function EventStub({
           borderRadius: theme.radii.xl,
           overflow: 'hidden',
           boxShadow: theme.shadows.card,
+          ...blockedBorder,
         }}
       >
         {/* Decorative: the lane is stated in words by the CURBSIDE badge, so
@@ -586,6 +652,7 @@ export default function EventStub({
               count chips, each zero-suppressed independently — a listing with
               no engagement yet says nothing rather than "0". */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 10 }}>
+            {blockedBy != null && <BlockedChip label={blockedBy} onPhoto={false} />}
             <StatusChip going={going} saved={saved} />
             {counts ? (
               <>
@@ -670,6 +737,7 @@ export default function EventStub({
         // only; the reference's companion `filter: saturate()` has no React
         // Native equivalent.
         opacity: stepped ? 0.82 : 1,
+        ...blockedBorder,
       }}
     >
       {/* lane stripe — free community post vs paid listing, ALL variants.
@@ -716,6 +784,7 @@ export default function EventStub({
                 </Text>
               </View>
             )}
+            {blockedBy != null && <BlockedChip label={blockedBy} onPhoto />}
           </View>
         </View>
 

@@ -1243,6 +1243,8 @@ have held `select` on since 0002 — it CONSUMES an existing grant and adds none
 The widened read calls the existing `events_within_radius` with a different
 `radius_miles`; no argument was added, so no DROP, so no ACL reset.
 
+> **Corrected 2026-09-28:** the just-past band now also covers interest matches and applied filters (Explore-blocks arc). ("Tier 2 only" above is as of this entry.)
+
 ## THE HEADLINE: the live-region rule was APPLIED, not re-derived — first time
 
 Entry 5 wrote the rule down after four consecutive arcs re-discovered the same
@@ -2815,3 +2817,296 @@ after each amendment (direct moves; tabs): invitation rendered with its headline
 "Make your feed yours" as `role="heading"` `aria-level="1"`, no bucket content, **no request to any Supabase endpoint**
 (resource timing list empty for `supabase`), console clean. `npx tsc
 --noEmit` exits 0; `npx expo lint` 64 problems, unchanged from before this arc.
+
+---
+
+# Entry 13 — 2026-09-23 — Explore honours category blocks
+
+**The arc:** a signed-in user's blocked categories now hide events from
+Explore (list + timeline) and Explore search, including its overflow read.
+Four new surfaces: the **Blocked pill** at the end of the filter row, the
+**blocked card treatment** shown while blocked events are revealed, the
+**status line's** redefined numbers, and the **filtered-empty headline**. Plus
+one error line. Nothing on Saved, Organizer Profile or Event Detail changed.
+
+Contrast by this file's method (tokens from `theme/colors.ts`, translucent dark
+values composited; dark card `#1d2a45`).
+
+## The Blocked pill — `Pill`'s new opt-in `outline` variant
+
+| Part | Colour | Dark page `#14213D` | Light page `#f4f5f8` | Requirement |
+| ---- | ------ | ------------------- | -------------------- | ----------- |
+| Off: label ("Blocked (N)") | `textMuted`, weight 800 — IDENTICAL to an unselected sibling pill | **4.57 ✅** | **3.43 ❌** | 1.4.3, 4.5:1 |
+| On: label ("Showing blocked (N)") | `colors.text` | **14.11 ✅** | **13.50 ✅** | 1.4.3, 4.5:1 |
+| Off: dashed border, 1px | `cardBorder` — IDENTICAL to the siblings' border except the dashes | 1.26 | 1.16 | decorative — see below |
+| On: solid border, 1.5px (renders 1px, below) | `colors.text` | **14.11 ✅** | **13.50 ✅** | 1.4.11, 3:1 |
+
+- **THE OFF STATE IS THE SIBLINGS' EXACT PILL, DASHED (amended 2026-09-25,
+  Jas: a 1.5px `textMuted` dash read as a thicker line).** Before: 1.5px
+  dashed `textMuted` border. After: 1px dashed `cardBorder` — the unselected
+  sibling's width and token, `borderStyle` the only difference. Measured in
+  the DOM, signed in: `1px dashed rgba(255, 255, 255, 0.08)`, label
+  `rgba(238, 240, 255, 0.5)` weight 800.
+- **The boundary is NOT the sole identifier, so its 1.26 / 1.16:1 does not
+  fail 1.4.11.** The label text ("Blocked (1)") carries the meaning, exactly
+  as the sibling pills' labels do against the same decorative border. The
+  dashes are a secondary cue.
+- **1.5px renders as 1px.** Measured: the on-state border and the blocked
+  card's dashed border both compute to `1px` in Chrome at device pixel ratio
+  1 — Chrome floors border widths to whole device pixels. Widths are as
+  specified in code; a 2× screen draws 1.5 as specified.
+
+- **AT REST THE LABEL MATCHES ITS SIBLINGS EXACTLY (Jas's call, amended
+  2026-09-23 before commit).** Same token and weight as an unselected
+  category pill; only the dashed outline distinguishes it. It therefore
+  **inherits the siblings' known light-mode shortfall — `textMuted` 3.43:1 on
+  the light page (Entry 12) — parked for the light-mode sweep: consistency
+  over a one-off exception.** The first draft used `colors.text` here; it
+  passed, and it made the Blocked pill the one pill in the row that looked
+  different at rest.
+- **Never gradient** — revealing widens the feed, it is not a promoted action.
+- **State is carried three ways, none of them colour:** the outline (dashed
+  vs solid), the words ("Blocked (2)" vs "Showing blocked (2)"), and
+  `aria-pressed` (inherited from `Pill`, Entry 6).
+- **Accessible name starts with the visible label, then names the result:**
+  `"Blocked (2), show 2 blocked categories"` / `"Showing blocked (2), hide 2
+  blocked categories"`. The brief's example ("Show 2 blocked categories") was
+  adjusted because a name that does not contain the visible text fails **WCAG
+  2.5.3 Label in Name** — a voice-control user says "click Blocked" and nothing
+  matches.
+- **Target 44 × 44 is inherited** from `Pill`'s `minHeight` / `minWidth` —
+  the reason the variant lives on `Pill` rather than as a new component.
+- **Blast radius of the `Pill` change: three consumers** —
+  `components/InterestPills.tsx` (Explore), `(tabs)/saved.tsx:338-339` (All /
+  Going), `create/event.tsx:357` (category picker). None passes `outline`, and
+  the variant is an early return, so their render path is the unchanged one.
+  **Measured for Explore:** the signed-out pill row's `outerHTML` is
+  byte-identical before and after this arc (below). Saved and the wizard are
+  behind sign-in and were not rendered; identical by code path.
+- The pill sits INSIDE the row's `role="group"` "Filter the feed by
+  interest", at the end.
+
+## The blocked card — dashed border + "Blocked · <Category>" chip
+
+Shown only while blocked events are revealed. **NOT reduced opacity** —
+dimming already means "deleted, inert" on Saved (0.55) and "stepped back" on
+search overflow (0.82), and it pulls every line on the card down.
+
+| Part | Colour | Against | Dark | Light | Requirement |
+| ---- | ------ | ------- | ---- | ----- | ----------- |
+| Dashed card border, 1.5px | `textMuted` | card | **4.32 ✅** | **3.74 ✅** | 1.4.11 |
+| same | `textMuted` | page | **4.55 ✅** | **3.43 ✅** | 1.4.11 |
+| Chip text, compact card | `colors.text` | card | **12.63 ✅** | **14.72 ✅** | 1.4.3 |
+| Chip text, photo header | `#eef0ff` on the badge's dark backing | header's LIGHTEST point | **11.93 ✅** (free lane) / 12.61 (paid) | **12.79 ✅** / 13.63 | 1.4.3 |
+
+- **The photo header is dark in BOTH themes** (deep navy → lane stripe at
+  55%), so the photo-variant chip uses fixed light text on the existing
+  badge backing rather than theme tokens. Worst case computed at the header's
+  lightest point: stripe over `#0f1a30`, then the 0.72 badge backing.
+- The chip text says it in words ("BLOCKED · MUSIC", "+1" when more than one
+  category blocks it), so the dashed border is reinforcement, never the only
+  carrier.
+- **Card semantics unchanged** — the title is still the link (Entry 11), the
+  shell still tap-navigates, Save / Going still work.
+- **Byte-identical when absent:** the prop adds a style spread that is `null`
+  when unset and a chip that renders `false`. Measured: the signed-out Explore
+  card's `outerHTML` matches the pre-arc capture exactly except the countdown
+  digits ("27m" → "19m", the minute tick).
+- **UNVERIFIED: `borderStyle: 'dashed'` on iOS / Android.** Web renders it;
+  native was not run. If native draws it solid, the chip still carries the
+  state.
+
+## The status line — same node, redefined numbers
+
+`"Showing n of m · …"`: **m** = the feed after blocks (every event if
+revealed), before pills; **n** = what is on screen. Revealing changes both.
+**"No events on <range>" is said only when the server returned nothing**
+(2026-09-25); when blocks and/or filters hid everything the line reads
+**"Showing 0 · <range>"** — measured, signed in: "Showing 0 · Sep 27", then
+"Showing 1 · Sep 27" after revealing.
+The live region itself is untouched — same unconditional node, same children
+logic (Entries 7, 9, 10). Its colour is unchanged `textMuted` (4.57 on the dark
+page; **3.43 on the light page — the pre-existing light-mode failure recorded
+in Entry 12, not introduced here**).
+
+## The empty state — one element, new headlines
+
+Still ONE `EmptyState` element (Entry 2); only props change. Priority:
+
+1. **Server-empty** (the RPC returned nothing): headline **"Nothing within your
+   radius or dates"**; each window cell keeps its buttons. The picked-window
+   cell's body now names the dates and radius (PROVISIONAL): "No events
+   between Dec 27 and Dec 31 within 25 mi. Try different dates." — US short
+   dates, local time.
+2. **Filtered-empty** (events exist; blocks and/or pills hid them all):
+   headline **"Nothing matches your filters"**; body LOCKED by Jas
+   2026-09-25:
+   - the cause decides (amended 2026-09-26): if NOTHING survived blocks
+     (the server returned events; the after-blocks list is empty) →
+     "Everything nearby is in interests you've blocked." + **Show blocked
+     events**, EVEN WITH filters on — clearing them could not help. Measured,
+     signed in: it revealed Green Valley Art Walk with its dashed border and
+     "BLOCKED · COMMUNITY" chip;
+   - otherwise the filters emptied it → "Nothing nearby matches your
+     filters." + **Clear filters**.
+   **CTA hierarchy (locked 2026-09-26): every recovery button — Clear
+   filters, Reset dates, Widen, Show everything nearby, Show blocked events —
+   is a `SecondaryButton`; the gradient is for primary / host actions only,
+   so "Post something yourself" is the one gradient in the empty state.**
+   **Centred at every width:** the buttons are `width: '100%', maxWidth: 300`
+   with no `alignSelf` (a leftover `alignSelf: 'stretch'` pinned them left on
+   wide columns). Measured on localhost:8081: at 375, 768, 1024 and 1280 px
+   wide, each button's centre equals the headline's, body's and caption's
+   centre exactly (delta 0) — Widen + Post in the radius cell at all four
+   widths, Reset dates in the picked-date cell at 1280.
+   The Blocked pill stays in the row above in both cases (the row renders
+   whenever the pill does, even with no category pills). The earlier body
+   named "pills" — internal vocabulary, retired from user-facing copy.
+
+## Search — blocks applied on every path, inside search
+
+Search filters its OWN results through one predicate
+(`lib/eventFilters.ts` `hiddenFromExplore`) on all three paths an event can
+reach them by: in-radius title matches, applied-filter results, and the
+overflow read. The first draft filtered only the overflow and trusted Explore
+to pass an already-blocked list for the other two. A signed-in walk (Jas,
+2026-09-23) saw a blocked event ("Lakeside Songwriters Night") under EVENTS
+with "Blocked (1)" showing. That could not be reproduced here — forcing a
+Music block signed out, search hid the blocked event both in radius (radius
+50) and past it (radius 25) — so the fix removes the SHAPE rather than a
+confirmed cause: search no longer depends on its caller remembering.
+
+**Second report, 2026-09-25 — also not reproduced.** Jas's exact repro
+(Community blocked, radius 5, reveal off, "green valley") was driven signed
+in on the live build: the overflow read returned Green Valley Art Walk
+(`["art","community"]`, 7.5 mi) and search showed "No matches" — no band.
+Search now PARTITIONS every path into `shown` and `hidden`
+(`lib/eventFilters.ts` `partitionHidden`), renders only `shown`, and keeps
+`hidden` for a later change that says what was held back.
+
+### Blocked matches in search — final behaviour (2026-09-28)
+
+Shaped over prompts 6e–6i (2026-09-26..28); earlier designs — reveal-independent search, past-radius matches in the panel — were reversed by Jas during testing.
+
+Search takes the feed's list BEFORE blocks and splits every path itself
+(in-range matches, applied-filter results, the just-past read) with the
+feed's own predicate, `hiddenFromExplore(blocked, reveal)` — so search and
+the feed cannot disagree about what "revealed" means.
+
+- **Reveal OFF — in-range blocked matches go to ONE panel** at the very
+  bottom of search: a row reading "N match(es) hidden by your blocks" +
+  chevron, **always collapsed by default**, even when it is the only thing
+  on screen. Expanded, a top line (PROVISIONAL), then cards grouped under
+  their first blocking interest (heading, e.g. COMMUNITY), up to 3 cards
+  with "+N more" for the rest, then a small muted "Edit blocks" link — quiet
+  on purpose: it makes the choice visible, it does not funnel anyone into
+  Settings.
+- **Reveal OFF — blocked AND past the radius appears NOWHERE ("two
+  strikes").** The just-past band holds only unblocked events that miss on
+  distance; the panel holds only blocked events inside the radius. So every
+  card in the panel is in range: **no "+X MI PAST" cards in the panel.**
+- **Reveal ON — no panel.** Blocked matches render inline in their normal
+  place (in range, or in the just-past band) with the dashed border +
+  "Blocked · <interest>" chip, exactly like revealed feed cards.
+- **Top line is count-only:** "This matches your search, but it's in an
+  interest you've blocked." (1) / "These match your search, but they're in
+  interests you've blocked." (2+). No distance clause — under two strikes it
+  could never be true.
+- **Containment:** when open, the top line, group headings, cards and "Edit
+  blocks" sit INSIDE the same bordered panel as the row, so the hidden set
+  reads as one unit apart from the real results; 24 above it separates it
+  from the last real result.
+
+| Control | Role / state | Target | Measured (debug-forced block, signed out) |
+| ------- | ------------ | ------ | -------- |
+| The row | `role="button"`, `aria-expanded`, name = its visible text ("1 match hidden by your blocks") | `minHeight: 44` | 518 × 44, `tabindex="0"`, `aria-expanded="false"` → **Enter** opened it (`"true"`); on a fresh render **Space** opened it too |
+| "+N more" | `role="button"`, name "Show N more hidden matches" | 44 × 44 min | set in code (the forced case had one match) |
+| "Edit blocks" | `role="link"` (it navigates), name "Edit blocks in Settings" — contains the visible text (2.5.3) | 44 × 44 min | 60 × 44, `tabindex="0"` |
+| Cards | ordinary tappable cards, dashed border + chip | — | dashed border, "BLOCKED · COMMUNITY" |
+
+(The measurements predate the containment and two-strikes changes; the
+controls' roles, names and target sizes were not changed by them.)
+
+- All three controls are **Pressables**, never `Text` with `onPress` — rnw
+  gives Text no keyboard activation (docs/STACK_FACTS.md).
+- **Contrast:** only the ROW carries the card fill; the panel body sits on
+  the bare panel background inside the border. The row's label, icon and
+  chevron are `colors.text` (on a card, Entry 2: `textMuted` is 4.32:1
+  there). The top line is `colors.text`. Group headings reuse search's
+  `SectionHeading` (`textMuted` on the bare panel: 4.57 dark) — which is why
+  the body is NOT filled: a filled body would drop them to 4.32:1. "Edit
+  blocks" is `textMuted` by request ("small muted link") — 4.57:1 dark;
+  **the known light-mode `textMuted` shortfall (3.43:1) applies, parked for
+  the light-mode sweep.** No `overflow: hidden` on the panel: it would clip
+  the row's focus ring; the row rounds its own corners instead.
+- **The chip label is computed by search from its own blocked set** and passed
+  to the card, so hiding a card and labelling it can never use two different
+  sets. (Found in verification: an earlier draft computed the label in the
+  feed from the feed's set; with the two sets different the card rendered
+  unlabelled.)
+- **Filter rows count what search can show**, not the feed's counts, and say
+  what blocks hold back: "N events match within X mi · M hidden by your
+  blocks" (the clause omitted when M = 0; always 0 with reveal on).
+
+**Everything blocked — RESOLVED.** The earlier finding (every match blocked,
+yet the main results read "No matches within 25 mi … Try a shorter word, or
+widen your radius." — advice that cannot help) is resolved: the headline is
+now "Nothing matches your criteria" with no body; the visible status line is
+"No matches shown"; the explanation lives only in the panel. The live region
+carries one extra clause for screen readers, who cannot glance down: "No
+matches shown. N match(es) hidden by your blocks, below." — the visible text
+is `aria-hidden` and the full sentence is visually-hidden text in the same
+`role="status"` node, so it is read once.
+
+**The distance hint is honest:** when at least one blocked match is inside
+the radius, "Nothing within X mi" becomes "Nothing within X mi except what
+you've blocked — but there's N just past it, so you don't miss something
+good." (PROVISIONAL). Only IN-RANGE blocked matches feed that clause.
+
+- **Not observed in a live DOM by the builder** (the build pane was signed
+  out): reveal-on inline cards, two strikes, "+N more". Covered by the pure
+  cases (throwaway `check-blocked-copy.ts`, 41/41 on 2026-09-28) and by Jas's
+  signed-in re-test (14/14, 2026-09-28, as reported by Jas). No screen
+  reader was run — whether "expanded / collapsed" is announced on toggle,
+  and that the all-blocked sentence is read once, are for the SR pass.
+
+## Read failed — a line, not a pill
+
+When the blocks read fails, the feed shows UNFILTERED and the pill's slot
+holds "Couldn't load your blocks · Retry" (PROVISIONAL): `colors.text`
+(14.11 / 13.50), Retry a `role="button"` with a 44 × 44 target set in code and
+the name "Retry loading your blocks".
+
+## Loading
+
+Signed in, the feed holds its pending state (the EmptyState spinner phase)
+until the blocks have loaded, so blocked cards never render and then vanish.
+Signed out nothing waits — measured: the feed rendered with no request to
+`category_preferences`.
+
+## What this entry does NOT establish
+
+- **THE SIGNED-IN BRANCH WAS NOT RENDERED** — no Blocked pill, blocked card,
+  filtered-empty headline or error line was observed in a DOM. Contrast is
+  computed from tokens; targets and names are read from source. The human
+  verification list covers them.
+- **No screen reader was run** — the pill's name and pressed state, the
+  chip's reading order on the card, and whether a reveal (which changes the
+  card list) should announce.
+- **Revealing does not announce.** The status line changes only when pills or
+  a picked window are active; with neither, a reveal changes the feed with no
+  announcement. Recorded for the screen-reader pass, not fixed.
+- **The photo-variant badge row can overflow** a narrow card when an event has
+  two category badges, a "+N", and the Blocked chip. Not observed; possible
+  by arithmetic.
+- **Nothing about native** beyond the dashed-border note above.
+
+**Baseline:** `main` @ `400c931` plus this arc's working tree. Pre-arc
+signed-out capture taken on `localhost:8081` at 1024 wide before any edit
+(card `outerHTML` 5892 chars, pill row 1194), compared after: pill row
+byte-identical; card identical but for the countdown digits; one card
+("Lakeside Songwriters Night"); pills Music, Community; no Blocked pill; REST
+requests `categories` and `rpc/events_within_radius` only; search ("lake")
+returns the same card and "1 event"; fresh-tab console clean. `npx tsc
+--noEmit` exits 0; `npx expo lint` 64, unchanged. Pure logic: 26 / 26 cases
+pass (throwaway `npx tsx` script, not committed).

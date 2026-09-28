@@ -139,7 +139,7 @@ export default function LocationControl() {
             ) : (
               <Pressable
                 role="button"
-                accessibilityLabel={`Change search radius. Currently ${radius} miles`}
+                accessibilityLabel={`Change search radius. Currently ${radius} ${radius === 1 ? 'mile' : 'miles'}`}
                 onPress={() => {
                   setDraftRadius(String(radius));
                   setPhase('radius');
