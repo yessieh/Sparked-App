@@ -60,6 +60,27 @@ Every arc runs: **pre-arc audit → build → QA suite → post-arc audit → co
 - **QA SUITE.** Every arc ships a behavioral SQL suite in `scripts/`, following the `scripts/qa-0018-quota-ledger.sql` pattern, plus a human verification list with exact URLs and named test data.
 - **POST-ARC.** Re-run the same audit, save as `YYYY-MM-DD-post-<arc-name>.md`, and DIFF it against the pre-arc baseline. Every added or changed grant, function, policy or default privilege must be named in the arc summary with the reason it exists. **An unexplained delta blocks the commit.**
 
+**Three baseline-file rules (added 2026-09-28):**
+
+1. **The 1A and 5A count(*) RESULTS are saved IN the baseline file itself** —
+   the numbers, beside the section totals they check, not a note that the
+   queries were run. A baseline without them cannot prove sections 1 and 5
+   were not truncated at the SQL Editor's 100-row cap. As of 2026-09-28 only
+   the 2026-09-22/23 Interests & blocks pair records them; the August
+   baselines check totals against PREDICTED counts instead, and every
+   baseline from 2026-09-02 to 2026-09-21 records neither.
+2. **Baseline section headings copy the audit file's section names
+   EXACTLY** (`1. TABLE- AND COLUMN-LEVEL GRANTS TO CLIENT ROLES`, …). The
+   2026-09-22 pre-arc file heads Section 1 "GRANTS" and the 2026-09-23
+   post-arc file heads it "ROLES" — a diff between them then shows a heading
+   change nobody made, and a reader cannot map either back to the query.
+3. **An applied migration file is committed as soon as it is applied.** The
+   ARC commit still waits for the post-arc audit; the migration does not. An
+   applied migration is history (**Migrations are immutable once applied**),
+   and history that exists only in a working tree can be lost or edited.
+   Precedent: 0034 committed (`4a8ec6a`) before its post-arc audit
+   (`e2762fe`).
+
 **N/A FOR SQL-FREE ARCS — STATED, NEVER OMITTED.** An arc that writes no SQL and
 touches no schema object has no grant surface to diff. The pre/post audit and the
 `qa-NNNN` suite are N/A, and the arc report must say so explicitly — stating that

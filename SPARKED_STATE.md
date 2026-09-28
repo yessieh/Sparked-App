@@ -901,24 +901,113 @@ confirmation, published events in Workspace.
   decision the user loses track of. **Dashed outline when off; solid outline
   reading "Showing blocked (N)" when on. NEVER gradient:** revealing widens the
   feed, it is not a promoted action.
-- **N = events hidden by blocks within the CURRENT radius, date range, filters
-  and view** — so the count always equals what the tap reveals.
+- ~~**N = events hidden by blocks within the CURRENT radius, date range, filters
+  and view** — so the count always equals what the tap reveals.~~
+  **SUPERSEDED (2026-09-23..28) → N counts blocked INTERESTS, not events. See
+  "AMENDED 2026-09-23..28" below.**
 - **Tapping reveals blocked events for the SESSION only** — in-memory, same as
   the Past collapse state. Nothing is persisted and Settings is untouched.
 - **Revealed cards: a dashed card border matching the pill, plus a
   "Blocked · <Category>" chip naming the blocking category. NOT reduced
-  opacity** — dimming already means "deleted, inert" in Saved, and reduced
+  opacity** — ~~dimming already means "deleted, inert" in Saved, and reduced
   opacity fails text contrast (the same WCAG failure that retired the category
-  stripe hues). Revealed cards stay fully tappable.
+  stripe hues).~~ **RATIONALE CORRECTED 2026-09-28 — the ruling stands, the
+  reason was wrong: see "AMENDED 2026-09-23..28" below.** Revealed cards stay
+  fully tappable.
 - **Empty state: when blocks hide every in-radius event, say so in the radius
-  empty-state pattern** ("All N nearby events are in categories you've
-  blocked") with the Blocked pill beside it — **never the cold-start copy.**
-  Filtering by a blocked category lands here too; no special rule.
+  empty-state pattern** ~~("All N nearby events are in categories you've
+  blocked") with the Blocked pill beside it~~ **COPY SUPERSEDED 2026-09-25 →
+  as shipped, see "AMENDED 2026-09-23..28" below** — **never the cold-start
+  copy.** Filtering by a blocked category lands here too; no special rule.
 - **"I'm into" never changes feed order** (the no-algorithm promise). It exists
   to feed the Notifications fit-gate (Architecture Decision 6).
 - **This arc does NOT exercise `categories.show_in_onboarding`:** Settings
   shows the full list per this decision. Schema lock 4 stays half-open until
   Onboarding ships.
+
+#### AMENDED 2026-09-23..28 (Interests & blocks arc, as built and re-tested by Jas)
+
+Where a 09-22 line above is struck, this block is the ruling. Shipped in
+`78a920d`, `400c931` and `b3a7b1d`; accessibility record in
+`docs/ACCESSIBILITY.md` Entries 12 and 13.
+
+- **Blocked (N) counts blocked INTERESTS, not events** — how many distinct
+  blocked interests are hiding ≥1 event in the current view (radius, dates,
+  filters). Supersedes "N = events".
+  **Off:** styled exactly like the sibling filters — same size, type and
+  fill — with a DASHED outline as the only difference, "Blocked (N)".
+  **On:** "Showing blocked (N)", SOLID outline. **Never gradient** (revealing
+  widens the feed; it is not a promoted action).
+- **Reveal is session-only** (in-memory; nothing persisted, Settings
+  untouched). Revealed cards: DASHED card border + a "Blocked · <Interest>"
+  chip naming the first blocking interest by taxonomy order, "+N" when more
+  than one blocks it. **Full opacity. RATIONALE, CORRECTED:** reduced opacity
+  risks **WCAG 1.4.3** (text contrast) — every line on the card dims with it.
+  The 09-22 text called that "the same failure that retired the stripe hues";
+  it was not — the stripe retirement was **1.4.11** (non-text contrast,
+  `docs/ACCESSIBILITY.md`, OPEN WORK 1.1). And dimming already means two other
+  things in this app: deleted/inert in Saved (`opacity 0.55`,
+  `(tabs)/saved.tsx:488`) and stepped-back past-radius overflow in search
+  (`0.82`, `EventStub.tsx:739`).
+- **Status line:** "Showing n of m", with **m counted AFTER blocks** (m is what
+  the feed is built from). When events exist but blocks and/or filters hide
+  them all: "Showing 0 · <range>". **"No events on <range>" ONLY when the
+  server returned none** — otherwise the range did not come up empty; the
+  feed's own filters emptied it, and the empty state explains which
+  (`(tabs)/index.tsx`, status-line note, 2026-09-25).
+- **Empty states: the body is chosen by the ACTUAL cause.** Filtered-empty
+  keeps the headline "Nothing matches your filters"; the body is "Everything
+  nearby is in interests you've blocked." when nothing survived BLOCKS (even
+  with filters on — clearing them could bring nothing back) with a "Show
+  blocked events" button, else "Nothing nearby matches your filters." with
+  "Clear filters" (copy locked by Jas 2026-09-25). A single-day window reads
+  "on Sep 28", never "between Sep 28 and Sep 28". **Every recovery button is
+  SECONDARY; "Post something yourself" is the one gradient** (CTA hierarchy
+  lock — a host action, not a recovery); all buttons **centred at every
+  width**.
+- **Search:**
+  - Typed words match event **titles AND interests** and show matching events
+    **at once** — the Filters suggestion row above them is an optional
+    shortcut, never a required step.
+  - **"Just past your radius" covers title matches, interest matches and
+    applied filters.** Reach unchanged: `min(radius × 1.5, radius + 15 mi)`.
+  - Filter rows read **"N events match within X mi · M hidden by your
+    blocks"** (singular "1 event matches"; the blocks clause omitted when
+    M = 0).
+  - **Reveal OFF:** in-range blocked matches go to ONE panel at the bottom,
+    **always collapsed by default** — grouped by first blocking interest,
+    3-card cap, "+N more", and a quiet "Edit blocks" link that is **never a
+    funnel into Settings** (it makes the choice visible; Entry 13).
+  - **Blocked AND past the radius → nowhere ("two strikes").** The just-past
+    band holds only unblocked events that miss on distance; the panel holds
+    only blocked events inside the radius.
+  - **Reveal ON:** blocked matches render inline in their normal place (in
+    range, or in the just-past band) with their dashed border + chip; no
+    panel. Search follows the feed's reveal state (reverses 2026-09-26's
+    "whatever the reveal state").
+  - **Everything blocked:** headline "Nothing matches your criteria", said
+    ONCE — no body, the status line reads only "No matches shown", the
+    explanation lives in the panel.
+  - **Honest distance hint:** when a blocked match sits inside the radius,
+    "Nothing within X mi" becomes "Nothing within X mi except what you've
+    blocked — but there's N just past it…" — "nothing" would be false.
+- **Settings → Interests & blocks:** tabs **Undecided (default) / I'm into /
+  Not for me**, each with its count; ✓ − ✕ on every tile, so any move is one
+  tap; signed out, an in-place invitation "Make your feed yours"; after a
+  move, **focus goes to the next tile** (the moved tile leaves the visible
+  tab) — else the previous tile, else the now-empty tab itself — and the
+  live region announces the move (Entry 12).
+- **STANDING COPY RULE: no "pill" in any user-facing text** (includes
+  accessible names and announcements).
+- **ONBOARDING REQUIREMENTS — PARKED for the Onboarding arc, recorded so it
+  inherits them:**
+  - Onboarding taps write STRAIGHT to into / blocked — **never Undecided**.
+  - **Two distinct lists**: popular interests (for "I'm into") vs commonly
+    blocked (for "Not for me"). `show_in_onboarding` is one boolean and cannot
+    express two lists, so this needs a **second column beside it — shape
+    decided in that arc**, not here.
+  - Draft lists: **into** = Markets, Music, Food, Art, Community, Outdoors,
+    Pop-Ups; **not for me** = Nightlife, Sports, Family, Curbside, Tech.
 
 ### 8. Data lifecycle — delete / archive / quota ledger (LOCKED 2026-07-30)
 
@@ -1398,8 +1487,14 @@ Create Event's tier step (per-day model is DEAD everywhere):
    - **The 9-vs-13 divergence cannot recur — confirmed structurally.** There is
      ONE table, and the onboarding subset is a COLUMN on it
      (`show_in_onboarding`: 9 true, 4 false — Wellness/Nightlife/Sports/Tech).
-     There is no hardcoded category list anywhere in production for a second
-     list to drift from. 0001's own comment states the intent: "subset survives
+     ~~There is no hardcoded category list anywhere in production for a second
+     list to drift from.~~ **CORRECTED 2026-09-28 — FALSE: `EventStub.tsx`
+     carries a hardcoded 13-entry id→label map, `CATEGORY_LABELS`
+     (`:177-191` as of `b3a7b1d`; it was `:121-135` before that arc), which
+     the card badges read instead of `public.categories`. It is exactly the
+     second list this lock forbids; a relabel in the table would not reach
+     the cards. Retirement tracked in the tracker under INTERESTS & BLOCKS.**
+     0001's own comment states the intent: "subset survives
      only as `show_in_onboarding`".
    - **CAVEAT, stated rather than glossed: nothing reads that column yet.** Both
      consumers — Onboarding and the Settings "Interests & blocks" screen — are
@@ -2207,6 +2302,42 @@ meaningful rather than NULL-user artefacts. One suite fix on first run:
 (committed with the close-out). The false comment at `(tabs)/event/[id].tsx:105`
 was replaced in the same commit as the migration with one that cites 0033, the
 suite and STACK_FACTS entry 1.
+0034 `public.category_preferences` — the storage behind Settings → Interests &
+blocks (**APPLIED 2026-09-22**, `20260922000034_category_preferences.sql`,
+committed `4a8ec6a`). One row per (user, category) the user HAS an opinion on:
+`stance` is `'into'` or `'blocked'` (check constraint), and **Undecided is the
+absence of a row** — there is no third value. PK `(user_id, category_id)`;
+`user_id` → `profiles(id)` and `category_id` → `categories(id)`, **both ON
+DELETE CASCADE** (account deletion takes the preferences; a category row is
+never deleted in practice — retirement is `categories.active = false` — but a
+stance on a deleted category would mean nothing). No extra index: every read
+is user-keyed and the PK's leading column covers it (0006's reasoning for
+`saves`). RLS on, **four
+own-rows policies** (`category_preferences_{select,insert,update,delete}_own`,
+`user_id = auth.uid()`) that reference the **own table only** — no cross-table
+subquery, no helper function, so 0033's defect class cannot occur. **Grant
+surface: `authenticated` gains SELECT, INSERT, DELETE and UPDATE (`stance`)
+only; `anon` gains nothing.** UPDATE is column-scoped because the key columns
+are identity, not state — changing either is a delete plus an insert. **No
+defensive revokes, deliberately:** a stray default grant must surface in the
+post-arc diff as an unexplained delta (which blocks the commit); a revoke
+would make it vanish. **Ownership VERIFIED 2026-09-22** — by Jas in the SQL
+Editor, and by qa-0034 case 1a ("table exists and is owned by postgres").
+**Suite `scripts/qa-0034-category-preferences.sql`: Section 1 12/12, Section 2
+30/30, rollback confirmed** (run 2026-09-22 by Jas; result recorded in the
+post-arc baseline). **Post-arc diff** against
+`2026-09-22-pre-interests-blocks.md` → `2026-09-23-post-interests-blocks.md`
+(committed `e2762fe`): deltas **exactly as predicted** — Section 1 114 → 118
+(the four new grants), Section 2 13 → 14 (the new table), Section 8 29 → 33
+(the four policies), Section 5 268 unchanged, **no `anon` row for the table
+anywhere**. Checked 2026-09-28 by counting each section's table rows in both
+files (header rows excluded). **ORDER, deliberate: 0034 was committed
+(`4a8ec6a`) BEFORE the post-arc audit** — an applied migration must not sit
+uncommitted, while the ARC commit still waited for the audit (now a CLAUDE.md
+rule). **Client write-path premise SETTLED 2026-09-25:** PostgREST PATCH and
+DELETE with `.select()` return the affected rows, and a PATCH matching no row
+returns `[]` — which the provider treats as "stale: re-pull, don't revert"
+(verified by fetch-wrapper capture, signed in, dev; `lib/interests.tsx:26-35`).
 
 **Auth backend configured (2026-07-09, dashboard only — no app code):**
 email confirmations ON; Google OAuth provider ENABLED (GCP web client,
@@ -2339,9 +2470,15 @@ cold-start empty state at 2 while it was already in flight.*
       FIXTURES procedure.
    6. **Map — ITS OWN ARC.** Needs a mapping dependency and a provider decision;
       does not ride along with the rest.
-2. **Interests persistence** — the "Interests & blocks" screen is a "Coming
+2. ~~**Interests persistence** — the "Interests & blocks" screen is a "Coming
    soon" stub today, and it is the first real consumer of
-   `categories.show_in_onboarding` (schema lock 4).
+   `categories.show_in_onboarding` (schema lock 4).~~ **✅ DONE 2026-09-28** —
+   migration 0034 (`4a8ec6a`), post-arc baseline (`e2762fe`), provider
+   (`78a920d`), Settings screen (`400c931`), Explore feed + search honour
+   blocks (`b3a7b1d`). Rulings in Architecture Decision 7, "AMENDED
+   2026-09-23..28". **Correction to the struck text:** Settings shows the FULL
+   list (AD 7 ruling), so it did NOT consume `show_in_onboarding` —
+   Onboarding (item 4) remains that column's first consumer.
 3. **Notifications** — channel/category/frequency + fit-gate (Architecture
    Decision 6). Depends on 2: the fit-gate locks until ≥1 interest exists.
 4. **Onboarding** — the second consumer of `show_in_onboarding`, and where the

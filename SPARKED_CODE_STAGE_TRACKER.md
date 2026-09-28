@@ -276,17 +276,30 @@ and verified in Cursor/Claude Code.
 
 ## INTERESTS & BLOCKS
 
-- [ ] **Persist interests/blocks** to real storage (currently app-state only).
+- [x] **Persist interests/blocks** to real storage (currently app-state only).
       This is the source of truth the fit-gate + fit-based matching read from.
-- [ ] **Interest taxonomy = canonical event-category list.** Enforce ONE shared
+      **✅ DONE 2026-09-28** — `public.category_preferences` (migration 0034,
+      `4a8ec6a`; QA 12/12 + 30/30; post-arc baseline `e2762fe`), provider
+      `lib/interests.tsx` (`78a920d`), Settings screen (`400c931`), Explore
+      feed + search (`b3a7b1d`). Rulings: SPARKED_STATE AD 7, "AMENDED
+      2026-09-23..28".
+- [x] **Interest taxonomy = canonical event-category list.** Enforce ONE shared
       vocabulary across onboarding, Settings interests, Create Event categories,
       and Explore filters. Divergence breaks fit-matching.
+      **✅ DONE 2026-09-28 for every surface that reads categories** — Settings,
+      the Explore filters and search all read `public.categories`, and stances
+      key on its ids (FK). **ONE EXCEPTION, not hidden:** `EventStub`'s
+      hardcoded `CATEGORY_LABELS` map still labels the card badges — see
+      "Retire EventStub's hardcoded category map" below. Onboarding is unbuilt.
 - [ ] **Custom interests decision** (PARKED — decide here). Per-user-private
       tags (safe) vs. joining the shared taxonomy (pollutes matching/filtering,
       needs moderation + blocklist). Same concern as Create Event custom
       categories. Not built until decided.
 - [ ] **Fit-matching logic.** "Fit" = user interests ∩ event categories. Feeds
       nearby/push relevance. Needs the shared taxonomy above to function.
+      **STAYS OPEN (2026-09-28) — moves with Notifications.** Stances are
+      stored now; nothing reads "into" yet, by design ("I'm into" never changes
+      feed order, AD 7). Its consumer is the Notifications fit-gate.
 - [ ] **Blocking a PERSON — PARKED, post-MVP.** Today's blocks are CATEGORY
       blocks: a filter over a taxonomy this user controls. Blocking a person is
       a different kind of thing — a social graph — and it is a whole surface,
@@ -300,6 +313,40 @@ and verified in Cursor/Claude Code.
       already in place, a person-block is speculative infrastructure — and the
       wrong moment to add a fourth axis to event visibility is before there is
       anyone to hide from.
+
+#### Carried out of the Interests & blocks arc (2026-09-22..28)
+
+- [ ] **NEXT ARC — screen focus on navigation.** Old screens stay mounted and
+      keep focus, so `aria-hidden` on them is blocked and NVDA reads / Tab
+      walks the PREVIOUS screens; Explore card titles are not reached by Tab.
+      *Why next:* it breaks keyboard and screen-reader use of every navigation,
+      not one screen. Found by Jas with NVDA, 2026-09-23.
+- [ ] **SubHeader back chip + crumb.** 36×36 back chip with no `role`; the
+      `brightOrange` crumb is 1.85:1 in light mode; `components/SubHeader.tsx`
+      is shared by 6 screens (create ×4, `workspace/edit`, `settings/interests`
+      — Entry 12 counted five before the Interests screen adopted it).
+      *Why:* below the 44×44 target and unnamed as a control, on every
+      sub-screen at once.
+- [ ] **Category loader has no error signal.** `lib/categories.ts`
+      `useCategories` returns `[]` on a failed read, indistinguishable from
+      loading, so a consumer waiting on categories shows its placeholder
+      forever. *Why:* a failed read should say so, not spin.
+- [ ] **Retire EventStub's hardcoded category map** (`CATEGORY_LABELS`,
+      `EventStub.tsx:177-191` as of `b3a7b1d`) — read labels from
+      `public.categories`. *Why:* it is the second list schema lock 4 forbids;
+      a relabel in the table never reaches the cards.
+- [ ] **Commit real tests for `lib/eventFilters.ts`'s pure functions.** *Why:*
+      the throwaway scripts drifted — `blocks-check.ts` reads 51/55 after two
+      strikes removed the API four of its cases test — and it exits 0 on
+      failure, so its exit code proves nothing (`check-blocked-copy.ts` does
+      exit 1). Uncommitted scripts rot silently; committed tests fail loudly.
+- [ ] **Screen-reader pass (none existed in this tracker; this item starts
+      it).** First entry: **the reveal toggle is not announced when no filters
+      are active** — the status line only changes when filters or a picked
+      window are on (`docs/ACCESSIBILITY.md` Entry 13, "Revealing does not
+      announce"). Also owed from Entry 13: whether search's panel row
+      announces expanded/collapsed, and that the all-blocked sentence is read
+      once. *Why:* none of this can be checked without a real screen reader.
 
 ---
 
@@ -1000,6 +1047,10 @@ migration lands between, the NAME is the anchor, not the number.
       after that and the remaining ~34 become a tractable list.
       Confirmed still accurate 2026-08-02: lint runs, 55 errors, none introduced
       by the 0018–0022 work.
+      **BASELINE NOW 64 problems (59 errors, 5 warnings)** — `npx expo lint`,
+      2026-09-27, after `b3a7b1d`; unchanged across the Interests & blocks arc
+      (64 → 64). The by-rule breakdown above is the 2026-07-30 figure and has
+      not been re-counted.
 - [ ] **`useWorkspaceStats` double-fetches on Workspace open.** The hook has its
       own mount effect AND the screen's focus effect calls `refresh`, so opening
       Workspace fires two `workspace_stats` calls back to back. Harmless — it is
@@ -1043,6 +1094,11 @@ migration lands between, the NAME is the anchor, not the number.
 - [ ] **Feedback form backend** (Supabase table).
 - [ ] **Light-mode QA sweep** on real devices — token conversion was 3-pass;
       expect stragglers.
+      **ADDED 2026-09-28 — `textMuted` is 3.43:1 on the light background, an
+      APP-WIDE 1.4.3 failure (needs 4.5:1).** Every muted caption, hint and
+      eyebrow in light mode inherits it; Entries 12 and 13 recorded it and
+      parked it here rather than fixing one screen at a time. Fix the TOKEN,
+      then re-measure.
 - [ ] **Cold-start empty state — FEED HALF DONE 2026-08-19, FUNNELS HALF
       OPEN.** Deliberately left unticked: this item always covered two
       surfaces and only one shipped.
@@ -1558,6 +1614,13 @@ migration lands between, the NAME is the anchor, not the number.
       cycles, ~1.1s, must SETTLE — never loop), the unselected-pin dim level,
       and callout placement at real phone widths, where the surface is far
       narrower than desktop and collisions get tighter.
+      **Blocks add to this list (2026-09-28): `borderStyle: 'dashed'` on iOS
+      and Android is UNVERIFIED** — the Blocked filter's off state and every
+      revealed card's border. Web renders it; native was never run
+      (`EventStub.tsx`, `blockedBy` note). If native draws it solid, the
+      "Blocked · <Interest>" chip still carries the state in words, and the
+      filter's off/on states differ only by label ("Blocked" / "Showing
+      blocked").
 - [ ] **Gallery counter ↔ bookmark collision check at ALL scroll offsets.**
       Event Detail floats the back/bookmark chips ABSOLUTELY over the hero
       gallery, which also carries its own "1/3" counter and dot indicators.
@@ -1899,6 +1962,13 @@ migration lands between, the NAME is the anchor, not the number.
 ---
 
 ## STANDING PROCEDURES (not TODOs — how this project operates)
+
+- [x] **WEB DEV SERVER — how to start it, and what "refused to connect"
+      means (recorded 2026-09-28).** Start it from `apps/mobile` with
+      `npm run web` (Expo, port 8081 → `http://localhost:8081`). **"localhost
+      refused to connect" means the server has STOPPED** — not a code or
+      network fault; restart it. **Keep that terminal open** for the whole
+      session: closing it stops the server.
 
 - [x] **CURBSIDE FIXTURES — THE QUOTA QUESTION IS CLOSED. No new ledger write is
       needed, now or in any future arc.** Recorded 2026-09-02 so nobody
