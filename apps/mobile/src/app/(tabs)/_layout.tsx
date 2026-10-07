@@ -5,12 +5,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 
+import ScreenFocus from '../../components/ScreenFocus';
 import { brand, useTheme } from '../../theme';
 
 export default function TabsLayout() {
   const theme = useTheme();
   return (
     <Tabs
+      // Web only, in effect: every non-focused screen renders inside an
+      // `inert` subtree so Tab and screen readers stop walking it. Screens
+      // stay mounted — see components/ScreenFocus.tsx.
+      screenLayout={({ children }) => <ScreenFocus>{children}</ScreenFocus>}
       screenOptions={{
         headerShown: false,
         sceneStyle: { backgroundColor: theme.colors.bg },
