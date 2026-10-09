@@ -46,6 +46,7 @@ import MarkdownText from '../../components/MarkdownText';
 import Pill from '../../components/Pill';
 import SiteMap from '../../components/SiteMap';
 import { FormExitHeader } from '../../components/FormExitHeader';
+import { LeaveConfirm, useEdited } from '../../components/LeaveConfirm';
 import { DateField, TimeField, format12h } from '../../components/pickers';
 import { useAuth } from '../../lib/auth';
 import { geocode, toWktPoint } from '../../lib/geocode';
@@ -887,6 +888,21 @@ export default function EventWizard() {
    * trimming, NEVER silently drop). */
   const [pendingDowngrade, setPendingDowngrade] = useState<TierId | null>(null);
 
+  // ---- leaving with input asks first (LeaveConfirm) ----
+  // Every field the host can enter, compared to its value at mount. Untouched
+  // defaults (today, 19:00/22:00, Standard) are the baseline, not "entered".
+  const edited = useEdited({
+    title, desc, cats, startDate, endDate, startTime, endTime, venueName,
+    address, photos, siteMap, vendors, entryFeeOn, entryFee, tier,
+  });
+  /** The exit waiting on the dialog. Each exit keeps its OWN navigation —
+   *  the header and the footer fall back to different routes. */
+  const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
+  const requestLeave = (leave: () => void) => {
+    if (edited) setPendingLeave(() => leave);
+    else leave();
+  };
+
   // Creating events is account territory (architecture lock #2: browsing is
   // anonymous, creating is not).
   //
@@ -1087,7 +1103,8 @@ export default function EventWizard() {
 
   const back = () => {
     if (step === 0) {
-      router.canGoBack() ? router.back() : router.replace('/create');
+      // "Cancel" on Basics leaves the wizard — the same ask as the header.
+      requestLeave(() => (router.canGoBack() ? router.back() : router.replace('/create')));
     } else {
       setStep((s) => s - 1);
     }
@@ -1226,9 +1243,20 @@ export default function EventWizard() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: theme.colors.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      {/* Leave = escape hatch, navigating exactly as SubHeader's chip did. The
-          footer button is the step-back control. */}
-      <FormExitHeader onLeave={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/me'))} />
+      {/* Leave = escape hatch, navigating exactly as SubHeader's chip did —
+          after asking, if anything was entered. The footer button is the
+          step-back control. */}
+      <FormExitHeader onLeave={() => requestLeave(() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/me')))} />
+      <LeaveConfirm
+        visible={pendingLeave !== null}
+        title="Leave this event?"
+        onKeepEditing={() => setPendingLeave(null)}
+        onLeave={() => {
+          const leave = pendingLeave;
+          setPendingLeave(null);
+          leave?.();
+        }}
+      />
       <ScrollView
         contentContainerStyle={{ paddingBottom: 40, maxWidth: 640, width: '100%', alignSelf: 'center' }}
         keyboardShouldPersistTaps="handled"

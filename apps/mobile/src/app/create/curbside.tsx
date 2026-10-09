@@ -35,6 +35,7 @@ import {
 
 import { FormField, GradientButton, SecondaryButton } from '../../components/AuthControls';
 import { FormExitHeader } from '../../components/FormExitHeader';
+import { LeaveConfirm, useEdited } from '../../components/LeaveConfirm';
 import { SubHeader } from '../../components/SubHeader';
 import { DateField, TimeField, format12h } from '../../components/pickers';
 import { useAuth } from '../../lib/auth';
@@ -216,6 +217,13 @@ export default function CurbsideForm() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ---- leaving with input asks first (LeaveConfirm) ----
+  // Every field the poster can enter, compared to its value at mount. Above
+  // the quota / loading early returns, so the hook order never changes.
+  const edited = useEdited({ photo, title, desc, address, date, endDate, timeOn, time, anonPost });
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const leaveNow = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/me'));
+
   // Signed-in territory. READ-ONLY setup: this no longer creates a workspace —
   // opening the form must not make anyone a host (that happens at "Post it").
   //
@@ -355,9 +363,19 @@ export default function CurbsideForm() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: 24 }}>
-          {/* Leave = escape hatch, navigating exactly as SubHeader's chip did.
-              The quota screen above keeps SubHeader: it holds no input. */}
-          <FormExitHeader onLeave={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/me'))} />
+          {/* Leave = escape hatch, navigating exactly as SubHeader's chip did —
+              after asking, if anything was entered. The quota screen above
+              keeps SubHeader: it holds no input. */}
+          <FormExitHeader onLeave={() => (edited ? setConfirmLeave(true) : leaveNow())} />
+          <LeaveConfirm
+            visible={confirmLeave}
+            title="Leave this post?"
+            onKeepEditing={() => setConfirmLeave(false)}
+            onLeave={() => {
+              setConfirmLeave(false);
+              leaveNow();
+            }}
+          />
           <View
             style={{
               paddingHorizontal: 8,
