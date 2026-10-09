@@ -16,6 +16,13 @@ export default function TabsLayout() {
       // `inert` subtree so Tab and screen readers stop walking it. Screens
       // stay mounted — see components/ScreenFocus.tsx.
       screenLayout={({ children }) => <ScreenFocus>{children}</ScreenFocus>}
+      // In-app Back returns to the screen the user came from. The library
+      // default, 'firstRoute' (react-navigation/routers/TabRouter.js:96 in
+      // expo-router 57.0.4), sent Back from every href:null route — Event,
+      // Organizer, Workspace, the create fork — to Explore. 'history'
+      // de-duplicates (TabRouter.js:63-65): revisiting a route drops its
+      // earlier entry, and event/[id] is ONE route reused with new params.
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
         sceneStyle: { backgroundColor: theme.colors.bg },
