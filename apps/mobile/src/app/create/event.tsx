@@ -45,7 +45,7 @@ import EventStub, { type FeedEvent } from '../../components/EventStub';
 import MarkdownText from '../../components/MarkdownText';
 import Pill from '../../components/Pill';
 import SiteMap from '../../components/SiteMap';
-import { SubHeader } from '../../components/SubHeader';
+import { FormExitHeader } from '../../components/FormExitHeader';
 import { DateField, TimeField, format12h } from '../../components/pickers';
 import { useAuth } from '../../lib/auth';
 import { geocode, toWktPoint } from '../../lib/geocode';
@@ -1226,19 +1226,38 @@ export default function EventWizard() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: theme.colors.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <SubHeader crumb={`Create · Step ${step + 1} of ${STEPS.length}`} />
+      {/* Leave = escape hatch, navigating exactly as SubHeader's chip did. The
+          footer button is the step-back control. */}
+      <FormExitHeader onLeave={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/me'))} />
       <ScrollView
         contentContainerStyle={{ paddingBottom: 40, maxWidth: 640, width: '100%', alignSelf: 'center' }}
         keyboardShouldPersistTaps="handled"
       >
         <View style={{ paddingHorizontal: 24 }}>
+          {/* Step label, centred over the bars. Type style is SubHeader's
+              crumb (components/SubHeader.tsx:37-46), which this replaces. The
+              name reads STEPS, the same constant the step headings read. */}
+          <Text
+            style={{
+              fontFamily: theme.fonts.bodySemiBold,
+              fontSize: theme.fontSizes.eyebrow,
+              fontWeight: '900',
+              letterSpacing: 2,
+              textTransform: 'uppercase',
+              color: brand.brightOrange,
+              textAlign: 'center',
+              marginBottom: 8,
+            }}
+          >
+            {`${STEPS[step]} · Step ${step + 1} of ${STEPS.length}`}
+          </Text>
           <StepBar step={step} />
           {step < REVIEW_STEP && <PreviewRail event={preview} />}
 
           {/* ---- STEP 0: BASICS ---- */}
           {step === 0 && (
             <View style={{ marginTop: 8 }}>
-              <Text style={styles(theme).h2}>Basics</Text>
+              <Text style={styles(theme).h2}>{STEPS[0]}</Text>
               <FormField label="Event title" value={title} onChangeText={setTitle} placeholder="e.g. Sunset Songwriters Round" />
               <Text style={styles(theme).fieldLabel}>Description</Text>
               <View style={{ marginBottom: 14 }}>
@@ -1254,7 +1273,7 @@ export default function EventWizard() {
           {/* ---- STEP 1: WHEN & WHERE ---- */}
           {step === WHEN_WHERE_STEP && (
             <View style={{ marginTop: 8 }}>
-              <Text style={styles(theme).h2}>When & Where</Text>
+              <Text style={styles(theme).h2}>{STEPS[WHEN_WHERE_STEP]}</Text>
 
               <Text style={styles(theme).fieldLabel}>Date range · {bandLabel(days)}</Text>
               <View style={{ marginBottom: 6 }}>
@@ -1320,7 +1339,7 @@ export default function EventWizard() {
                dates behind it, and Details' photo cap needs the tier ahead) */}
           {step === TIER_STEP && (
             <View style={{ marginTop: 8 }}>
-              <Text style={styles(theme).h2}>Tier</Text>
+              <Text style={styles(theme).h2}>{STEPS[TIER_STEP]}</Text>
               <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 12.5, lineHeight: 19, color: theme.colors.textMuted, marginBottom: 16 }}>
                 Per-event · pay once · not a subscription. Priced by how long your event runs —
                 switching keeps everything you've entered.
@@ -1384,7 +1403,7 @@ export default function EventWizard() {
           {/* ---- STEP 3: DETAILS ---- */}
           {step === DETAILS_STEP && (
             <View style={{ marginTop: 8 }}>
-              <Text style={styles(theme).h2}>Details</Text>
+              <Text style={styles(theme).h2}>{STEPS[DETAILS_STEP]}</Text>
               <Text style={styles(theme).fieldLabel}>
                 Photos · first is your cover · up to {photoCap} on {tierRow?.label ?? 'Standard'}
               </Text>
@@ -1446,7 +1465,7 @@ export default function EventWizard() {
           {/* ---- STEP 4: REVIEW ---- */}
           {step === REVIEW_STEP && (
             <View style={{ marginTop: 8 }}>
-              <Text style={styles(theme).h2}>Review</Text>
+              <Text style={styles(theme).h2}>{STEPS[REVIEW_STEP]}</Text>
               <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 9, fontWeight: '900', letterSpacing: 1.6, textTransform: 'uppercase', color: theme.colors.textFaint, marginBottom: 10 }}>
                 Live preview
               </Text>

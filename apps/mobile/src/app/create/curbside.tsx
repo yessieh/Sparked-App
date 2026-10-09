@@ -34,6 +34,7 @@ import {
 } from 'react-native';
 
 import { FormField, GradientButton, SecondaryButton } from '../../components/AuthControls';
+import { FormExitHeader } from '../../components/FormExitHeader';
 import { SubHeader } from '../../components/SubHeader';
 import { DateField, TimeField, format12h } from '../../components/pickers';
 import { useAuth } from '../../lib/auth';
@@ -354,7 +355,9 @@ export default function CurbsideForm() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: 24 }}>
-          <SubHeader crumb="New Curbside post" />
+          {/* Leave = escape hatch, navigating exactly as SubHeader's chip did.
+              The quota screen above keeps SubHeader: it holds no input. */}
+          <FormExitHeader onLeave={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/me'))} />
           <View
             style={{
               paddingHorizontal: 8,
