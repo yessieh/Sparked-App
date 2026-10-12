@@ -72,6 +72,9 @@ function SignedOutSaved() {
       <View style={{ maxWidth: 320, width: '100%', alignItems: 'center', gap: 12 }}>
         <Ionicons name="bookmark-outline" size={26} color={theme.colors.textFaint} />
         <Text
+          role="heading"
+          aria-level={1}
+          accessibilityRole="header"
           style={{
             fontFamily: theme.fonts.displayBlack,
             fontWeight: '900',
@@ -307,6 +310,9 @@ export default function Saved() {
         <SparkedLogo mode={theme.mode} variant="lockup" size={22} />
       </View>
       <Text
+        role="heading"
+        aria-level={1}
+        accessibilityRole="header"
         style={{
           fontFamily: theme.fonts.displayBlack,
           fontWeight: '900',

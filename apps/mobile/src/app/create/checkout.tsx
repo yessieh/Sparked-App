@@ -212,7 +212,7 @@ export default function CheckoutScreen() {
       <SubHeader crumb="Checkout · Secure payment" />
       <ScrollView contentContainerStyle={{ paddingBottom: 28, maxWidth: 560, width: '100%', alignSelf: 'center' }} keyboardShouldPersistTaps="handled">
         <View style={{ paddingHorizontal: 24 }}>
-          <Text style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 26, letterSpacing: -0.26, color: theme.colors.text, marginBottom: 18 }}>
+          <Text role="heading" aria-level={1} accessibilityRole="header" style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 26, letterSpacing: -0.26, color: theme.colors.text, marginBottom: 18 }}>
             Pay to publish
           </Text>
 

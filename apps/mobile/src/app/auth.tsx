@@ -173,6 +173,9 @@ export default function AuthScreen() {
 
         <SparkedLogo mode={theme.mode} variant="lockup" size={26} />
         <Text
+          role="heading"
+          aria-level={1}
+          accessibilityRole="header"
           style={{
             fontFamily: theme.fonts.displayBlack,
             fontWeight: '900',

@@ -126,6 +126,9 @@ function Header({ theme, title, onBack }: { theme: Theme; title: string; onBack:
           Workspace
         </Text>
         <Text
+          role="heading"
+          aria-level={1}
+          accessibilityRole="header"
           numberOfLines={1}
           style={{
             fontFamily: theme.fonts.displayBlack,

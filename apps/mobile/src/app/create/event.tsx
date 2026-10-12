@@ -1285,7 +1285,7 @@ export default function EventWizard() {
           {/* ---- STEP 0: BASICS ---- */}
           {step === 0 && (
             <View style={{ marginTop: 8 }}>
-              <Text style={styles(theme).h2}>{STEPS[0]}</Text>
+              <Text role="heading" aria-level={1} accessibilityRole="header" style={styles(theme).h2}>{STEPS[0]}</Text>
               <FormField label="Event title" value={title} onChangeText={setTitle} placeholder="e.g. Sunset Songwriters Round" />
               <Text style={styles(theme).fieldLabel}>Description</Text>
               <View style={{ marginBottom: 14 }}>
@@ -1301,7 +1301,7 @@ export default function EventWizard() {
           {/* ---- STEP 1: WHEN & WHERE ---- */}
           {step === WHEN_WHERE_STEP && (
             <View style={{ marginTop: 8 }}>
-              <Text style={styles(theme).h2}>{STEPS[WHEN_WHERE_STEP]}</Text>
+              <Text role="heading" aria-level={1} accessibilityRole="header" style={styles(theme).h2}>{STEPS[WHEN_WHERE_STEP]}</Text>
 
               <Text style={styles(theme).fieldLabel}>Date range · {bandLabel(days)}</Text>
               <View style={{ marginBottom: 6 }}>
@@ -1367,7 +1367,7 @@ export default function EventWizard() {
                dates behind it, and Details' photo cap needs the tier ahead) */}
           {step === TIER_STEP && (
             <View style={{ marginTop: 8 }}>
-              <Text style={styles(theme).h2}>{STEPS[TIER_STEP]}</Text>
+              <Text role="heading" aria-level={1} accessibilityRole="header" style={styles(theme).h2}>{STEPS[TIER_STEP]}</Text>
               <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 12.5, lineHeight: 19, color: theme.colors.textMuted, marginBottom: 16 }}>
                 Per-event · pay once · not a subscription. Priced by how long your event runs —
                 switching keeps everything you've entered.
@@ -1431,7 +1431,7 @@ export default function EventWizard() {
           {/* ---- STEP 3: DETAILS ---- */}
           {step === DETAILS_STEP && (
             <View style={{ marginTop: 8 }}>
-              <Text style={styles(theme).h2}>{STEPS[DETAILS_STEP]}</Text>
+              <Text role="heading" aria-level={1} accessibilityRole="header" style={styles(theme).h2}>{STEPS[DETAILS_STEP]}</Text>
               <Text style={styles(theme).fieldLabel}>
                 Photos · first is your cover · up to {photoCap} on {tierRow?.label ?? 'Standard'}
               </Text>
@@ -1493,7 +1493,7 @@ export default function EventWizard() {
           {/* ---- STEP 4: REVIEW ---- */}
           {step === REVIEW_STEP && (
             <View style={{ marginTop: 8 }}>
-              <Text style={styles(theme).h2}>{STEPS[REVIEW_STEP]}</Text>
+              <Text role="heading" aria-level={1} accessibilityRole="header" style={styles(theme).h2}>{STEPS[REVIEW_STEP]}</Text>
               <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 9, fontWeight: '900', letterSpacing: 1.6, textTransform: 'uppercase', color: theme.colors.textFaint, marginBottom: 10 }}>
                 Live preview
               </Text>

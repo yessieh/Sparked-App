@@ -256,6 +256,9 @@ function ProfileHeader({ theme, profile }: { theme: Theme; profile: OrganizerPro
             Organizer
           </Text>
           <Text
+            role="heading"
+            aria-level={1}
+            accessibilityRole="header"
             style={{
               fontFamily: theme.fonts.displayBlack,
               fontWeight: '900',

@@ -176,7 +176,7 @@ function ConversionScreen() {
           >
             <Ionicons name="checkmark-done" size={22} color={theme.colors.green} />
           </View>
-          <Text style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 24, lineHeight: 27, letterSpacing: -0.24, color: theme.colors.text }}>
+          <Text role="heading" aria-level={1} accessibilityRole="header" style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 24, lineHeight: 27, letterSpacing: -0.24, color: theme.colors.text }}>
             You've used your free post
           </Text>
           <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: theme.fontSizes.bodySm, lineHeight: 21, color: theme.colors.textMuted, marginBottom: 10 }}>
@@ -393,7 +393,7 @@ export default function CurbsideForm() {
         </View>
 
         <View style={{ paddingHorizontal: 24 }}>
-          <Text style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 20, letterSpacing: -0.2, color: theme.colors.text, marginBottom: 4 }}>
+          <Text role="heading" aria-level={1} accessibilityRole="header" style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 20, letterSpacing: -0.2, color: theme.colors.text, marginBottom: 4 }}>
             Quick post
           </Text>
           <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 12.5, lineHeight: 19, color: theme.colors.textMuted, marginBottom: 6 }}>

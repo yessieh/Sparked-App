@@ -246,6 +246,9 @@ export default function EventDetailView({
             <CategoryBadges categories={cats} max={3} />
 
             <Text
+              role="heading"
+              aria-level={1}
+              accessibilityRole="header"
               style={{
                 fontFamily: theme.fonts.displayBlack,
                 fontWeight: '900',

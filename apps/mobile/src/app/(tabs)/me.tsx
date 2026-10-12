@@ -95,6 +95,9 @@ function SignedOutMe() {
           <Ionicons name="bookmark" size={24} color={brand.navy} />
         </View>
         <Text
+          role="heading"
+          aria-level={1}
+          accessibilityRole="header"
           style={{
             fontFamily: theme.fonts.displayBlack,
             fontWeight: '900',
@@ -704,6 +707,9 @@ function SignedInMe() {
         </View>
         <View style={{ flex: 1 }}>
           <Text
+            role="heading"
+            aria-level={1}
+            accessibilityRole="header"
             numberOfLines={1}
             style={{
               fontFamily: theme.fonts.displayBlack,

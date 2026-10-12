@@ -41,9 +41,13 @@ interface Props {
   body: string;
   /** CTAs. Rendered outside the live region — see the header note. */
   children?: ReactNode;
+  /** Mark the headline as the screen's level-1 heading. OFF by default: only
+   *  a caller whose whole screen IS this state passes it (Event Detail's
+   *  not-found). Explore's empty states sit under Explore's own h1. */
+  asHeading?: boolean;
 }
 
-export default function EmptyState({ pending, headline, body, children }: Props) {
+export default function EmptyState({ pending, headline, body, children, asHeading = false }: Props) {
   const theme = useTheme();
 
   // iOS only — see the header note on double announcements.
@@ -67,6 +71,7 @@ export default function EmptyState({ pending, headline, body, children }: Props)
         ) : (
           <>
             <Text
+              {...(asHeading ? { role: 'heading', 'aria-level': 1, accessibilityRole: 'header' } as const : {})}
               style={{
                 fontFamily: theme.fonts.displayBlack,
                 fontWeight: '900',

@@ -56,6 +56,9 @@ export default function SettingsStub({ title }: { title: string }) {
             Settings
           </Text>
           <Text
+            role="heading"
+            aria-level={1}
+            accessibilityRole="header"
             numberOfLines={1}
             style={{
               fontFamily: theme.fonts.displayBlack,

@@ -147,6 +147,9 @@ export default function CreateFork() {
         />
         <View style={{ paddingHorizontal: 24 }}>
           <Text
+            role="heading"
+            aria-level={1}
+            accessibilityRole="header"
             style={{
               fontFamily: theme.fonts.displayBlack,
               fontWeight: '900',

@@ -185,7 +185,7 @@ export default function EventDetailScreen() {
   if (state === 'error') {
     return (
       <View style={{ flex: 1, backgroundColor: theme.colors.bg, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-        <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 13, color: theme.colors.danger, textAlign: 'center' }}>
+        <Text role="heading" aria-level={1} accessibilityRole="header" style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 13, color: theme.colors.danger, textAlign: 'center' }}>
           Couldn't load this event: {error}
         </Text>
       </View>
@@ -203,6 +203,7 @@ export default function EventDetailScreen() {
       <View style={{ flex: 1, backgroundColor: theme.colors.bg, alignItems: 'center', justifyContent: 'center' }}>
         <EmptyState
           pending={state === 'loading'}
+          asHeading
           headline="This event isn't available"
           // Deliberately disjunctive and deliberately incomplete. It must not
           // resolve to archived / deleted / private / never-existed — naming

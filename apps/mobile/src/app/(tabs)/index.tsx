@@ -892,6 +892,9 @@ export default function Explore() {
           Soonest first · nothing from other cities
         </Text>
         <Text
+          role="heading"
+          aria-level={1}
+          accessibilityRole="header"
           style={{
             fontFamily: theme.fonts.displayBlack,
             fontWeight: '900',
