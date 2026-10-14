@@ -28,7 +28,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { GradientFill } from '../../../components/AuthControls';
@@ -381,11 +381,27 @@ export default function OrganizerProfileScreen() {
   // Workspace's Past sections.
   const [pastOpen, setPastOpen] = useState(false);
 
+  // WHICH id `profile` / `notFound` / `error` belong to. Same shape as
+  // event/[id]: ONE (tabs) route reused with new params, so on an id change
+  // the previous organizer is still in state until the new read lands —
+  // rendering it would put organizer A's name (and h1) under B's URL. Until
+  // the read for THIS id completes, the screen shows its spinner.
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  const currentId = useRef(id);
+  useEffect(() => {
+    currentId.current = id;
+  }, [id]);
+  const stale = loadedFor !== (id ?? null);
+
   const load = useCallback(async () => {
     if (!id) return;
+    const forId = id;
     const { data, error: rpcError } = await supabase.rpc('organizer_profile', {
       workspace_id: id,
     });
+    // Moved on to another organizer while this read was in flight.
+    if (forId !== currentId.current) return;
+    setLoadedFor(forId);
     if (rpcError) {
       setError(rpcError.message);
       return;
@@ -563,7 +579,12 @@ export default function OrganizerProfileScreen() {
           alignSelf: 'center',
         }}
       >
-        {error ? (
+        {stale ? (
+          // The previous organizer's content must not show under this id.
+          <View style={{ paddingVertical: 48, alignItems: 'center' }}>
+            <ActivityIndicator color={brand.brightOrange} />
+          </View>
+        ) : error ? (
           <Text
             style={{
               fontFamily: theme.fonts.bodyMedium,

@@ -11,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as Linking from 'expo-linking';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Platform, Text, View } from 'react-native';
 
 import { SecondaryButton } from '../../../components/AuthControls';
@@ -57,6 +57,21 @@ export default function EventDetailScreen() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [state, setState] = useState<LoadState>('loading');
+  // WHICH id `event` / `state` belong to. This screen is ONE (tabs) route
+  // reused with new params (event A → organizer → event B), so on an id
+  // change the previous event is still in state until the new read lands.
+  // Rendering it would show — and the focus controller would focus and a
+  // screen reader announce — the PREVIOUS event's title under the new URL
+  // (measured 2026-10-14: ~550ms of A's h1 at B's URL). Until the read for
+  // THIS id completes, the screen is loading.
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  const currentId = useRef(id);
+  /** Which event `vendors` belong to. */
+  const vendorsFor = useRef<string | null>(null);
+  useEffect(() => {
+    currentId.current = id;
+  }, [id]);
+  const stale = loadedFor !== (id ?? null);
   const [toast, setToast] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastOpacity = useRef(new Animated.Value(1)).current;
@@ -74,14 +89,20 @@ export default function EventDetailScreen() {
       setEvent(null);
       setVendors([]);
       setState('missing');
+      setLoadedFor(id ?? null);
       return;
     }
     if (!place) return; // held by the focus effect's gate; see below.
+    const forId = id;
     const { data, error: rpcError } = await supabase.rpc('event_detail', {
       event_id: id,
       origin_lat: place.lat,
       origin_lng: place.lng,
     });
+    // The person moved on to another event while this read was in flight —
+    // a late answer for A must never land on B's screen.
+    if (forId !== currentId.current) return;
+    setLoadedFor(forId);
     if (rpcError) {
       // 22P02 = invalid text representation. Unreachable behind the shape
       // check above, kept so a future param change cannot leak the raw
@@ -113,15 +134,19 @@ export default function EventDetailScreen() {
       // scripts/qa-0033-event-member-predicate.sql (anon, published Plus event
       // → rows) on the date 0033 was applied; see docs/STACK_FACTS.md entry 1.
       if (ev && ev.tier_id === 'plus') {
+        // Another event's vendors must not show while this one's load.
+        if (vendorsFor.current !== forId) setVendors([]);
         const { data: vRows } = await supabase
           .from('event_vendors')
           .select('id,name,vendor_type,logo_path,pin_x,pin_y,sort_order')
           .eq('event_id', id)
           .order('sort_order');
+        if (forId !== currentId.current) return;
         setVendors(((vRows ?? []) as VendorRow[]).map(vendorFromRow));
       } else {
         setVendors([]);
       }
+      vendorsFor.current = forId;
     }
   }, [id, place]);
 
@@ -182,7 +207,7 @@ export default function EventDetailScreen() {
     else router.replace('/(tabs)');
   };
 
-  if (state === 'error') {
+  if (state === 'error' && !stale) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.colors.bg, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
         <Text role="heading" aria-level={1} accessibilityRole="header" style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 13, color: theme.colors.danger, textAlign: 'center' }}>
@@ -198,11 +223,13 @@ export default function EventDetailScreen() {
   // its text, and a region that arrives with its content does not reliably
   // announce. This is the reason the spinner moved inside EmptyState instead
   // of staying a branch of its own.
-  if (state !== 'found' || !event) {
+  // `stale` counts as loading: the previous id's event, not-found or error
+  // must not show under this id (see `loadedFor`).
+  if (stale || state !== 'found' || !event) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.colors.bg, alignItems: 'center', justifyContent: 'center' }}>
         <EmptyState
-          pending={state === 'loading'}
+          pending={stale || state === 'loading'}
           asHeading
           headline="This event isn't available"
           // Deliberately disjunctive and deliberately incomplete. It must not

@@ -47,6 +47,7 @@ import Pill from '../../components/Pill';
 import SiteMap from '../../components/SiteMap';
 import { FormExitHeader } from '../../components/FormExitHeader';
 import { LeaveConfirm, useEdited } from '../../components/LeaveConfirm';
+import { useFocusHeadingOnChange } from '../../components/ScreenFocus';
 import { DateField, TimeField, format12h } from '../../components/pickers';
 import { useAuth } from '../../lib/auth';
 import { geocode, toWktPoint } from '../../lib/geocode';
@@ -845,6 +846,9 @@ export default function EventWizard() {
   const theme = useTheme();
   const { session, loading } = useAuth();
   const [step, setStep] = useState(0);
+  // A step change replaces the screen's heading without navigating — move
+  // focus to the new step's heading (web; see components/ScreenFocus.tsx).
+  useFocusHeadingOnChange(step);
 
   // ---- form state (persists across steps, back-nav, AND tier switches) ----
   const [title, setTitle] = useState('');

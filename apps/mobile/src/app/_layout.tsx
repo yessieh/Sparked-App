@@ -15,6 +15,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
 
+import ScreenFocus from '../components/ScreenFocus';
 import { AuthProvider, createSessionFromUrl } from '../lib/auth';
 import { EngagementProvider } from '../lib/engagement';
 import { InterestsProvider } from '../lib/interests';
@@ -42,6 +43,11 @@ function ThemedStack() {
   const theme = useTheme();
   return (
     <Stack
+      // Same wrapper as the (tabs) navigator: inert when not focused, and
+      // focus-on-navigation for every root-Stack screen (settings/*,
+      // create/*, auth, reset-password, workspace/edit). Web only — see
+      // components/ScreenFocus.tsx.
+      screenLayout={({ children }) => <ScreenFocus>{children}</ScreenFocus>}
       screenOptions={{
         headerShown: false,
         contentStyle: { backgroundColor: theme.colors.bg },
