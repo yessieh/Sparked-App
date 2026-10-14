@@ -277,3 +277,97 @@ policy that reaches into another table may only name columns EVERY role that
 policy admits can read, or it must reach through a SECURITY DEFINER helper.
 0029 revoked a column that two cross-table policies named, and nothing in the
 gate could see it: the catalog showed every grant and policy intact.
+
+---
+
+## RN Web forwards `inert` as a plain prop
+
+**Evidence, react-native-web 0.21.2 + react-dom 19.2.3** (read 2026-09-28,
+screen-focus recon C2): `inert` is in RNW's forwarded accessibility props
+(`dist/modules/forwardedProps/index.js:58`), `View` forwards that list
+(`dist/exports/View/index.js:26`), `createDOMProps` passes it through in the
+rest props (`dist/modules/createDOMProps/index.js:148`), and React 19 treats it
+as a boolean attribute (`react-dom/cjs/react-dom-client.development.js:20218`).
+Observed live (`ac14fac`): `inert` present on every non-focused tab screen,
+absent on the focused one.
+
+**Consequence.** No ref or DOM mutation is needed — `<View inert>` works. RN
+0.86's `ViewProps` does not TYPE it, so it is passed as an untyped spread
+(`components/ScreenFocus.tsx`, the same shim as `Pill.tsx`'s `aria-pressed`).
+
+---
+
+## On web, BottomTabView never hides unfocused tab screens — `aria-hidden` only
+
+**Evidence, expo-router 57.0.4's vendored React Navigation** (read 2026-09-28):
+`BottomTabView` wraps each screen in `MaybeScreen`, which renders
+react-native-screens' `Screen` only when `screensEnabled()` is true and a plain
+`View` otherwise (`build/react-navigation/bottom-tabs/views/ScreenFallback.js:21-26`).
+`screensEnabled()` is false off-native (`react-native-screens/src/core.ts:10,36`)
+and nothing in expo-router or `src/` calls `enableScreens`, so the
+`display:none` branch (`react-native-screens/src/components/Screen.web.tsx:24-32`)
+is never reached. `detachInactiveScreens` defaults true on web and has no effect.
+Measured live (against `6eb3da3`): unfocused tab screens `display:flex`,
+`z-index:-1`, `aria-hidden="true"`, still tabbable — 13 to 39 tabbable elements
+across hidden screens. The root Stack is different: unfocused screens get
+`display:none` (`build/react-navigation/native-stack/views/NativeStackView.js:88-93`).
+
+**Consequence.** On web, `aria-hidden` on a tab screen hides nothing from Tab.
+Hidden tab screens need `inert` (entry above) — not unmounting, which would
+lose session state.
+
+---
+
+## TabRouter `backBehavior: 'history'` de-duplicates a revisited route
+
+**Evidence, expo-router 57.0.4's vendored React Navigation** (read 2026-10-09):
+the default is `'firstRoute'` (`build/react-navigation/routers/TabRouter.js:96`),
+which sends Back from any href:null tab route to the first tab. Under
+`'history'`, `changeIndex` removes the revisited route's earlier entry before
+appending it (`TabRouter.js:63-65`). Observed live (`9376036`): Event A →
+Organizer → Event B → Back → Back lands on Organizer, then **Explore** — not
+Event B, because every event is the one `event/[id]` route.
+
+**Consequence.** Two levels deep inside a reused route, Back skips to the
+first route. Expo-router's linking mirrors this in the URL: opening Event B
+REPLACED Organizer's browser-history entry, so Chrome ← from B goes to A while
+in-app Back goes to Organizer. Fixing either needs per-tab stacks, not an
+option.
+
+---
+
+## Expo-router answers `popstate` with a RESET, and echoes in-app Back into `history.go`
+
+**Evidence, expo-router 57.0.4** (read and observed 2026-10-12): on a browser
+traversal, expo-router's linking applies the remembered state with
+`resetRoot()` (`build/fork/useLinking.js:148-222`), and `resetRoot` DISPATCHES
+a `RESET` action (`build/react-navigation/core/BaseNavigationContainer.js:135-145`)
+— so Chrome ← does produce a navigation action, contrary to a first reading.
+An in-app `GO_BACK` goes the other way: the state changes first, then linking
+syncs the URL with `history.go(...)` (`build/fork/useLinking.js:342, :348`),
+which fires a `popstate` of the app's own AFTER the screen changed. The
+container's `__unsafe_action__` event fires before the new state is applied
+(`build/react-navigation/core/useOnAction.js:72-79`).
+
+**Consequence.** Code that classifies navigation must treat a `RESET` just
+after a `popstate` as a back traversal, and a `popstate` just after an action as
+an echo — the focus controller's 1-second windows
+(`components/ScreenFocus.tsx`). Also observed: Chrome ← back to `/` REMOUNTS
+Explore (a new screen instance), confirmed on `8c870fe` before any focus code.
+
+---
+
+## Fast Refresh keeps an old module version's DOM listeners attached
+
+**Observed, 2026-10-14.** A module that adds `document` / `window` /
+navigation-container listeners at install time keeps them after Fast Refresh
+loads a new version: the new copy gets fresh module state and installs again,
+and the old copy's listeners never come off. A mid-edit version of
+`components/ScreenFocus.tsx` — an assignment to `lastActionAt` saved one edit
+before its `let` — threw "lastActionAt is not defined" on every navigation in a
+tab left open, though the file on disk was correct; a hard refresh cleared it.
+
+**Consequence.** A module-level installer must tear down its predecessor. The
+controller keeps its teardown on `globalThis` and calls the previous one first;
+verified with two real Fast Refreshes: the old style tag removed, a new one
+added, one controller, no error. Dev only — production loads the module once.

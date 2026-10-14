@@ -3110,3 +3110,123 @@ requests `categories` and `rpc/events_within_radius` only; search ("lake")
 returns the same card and "1 event"; fresh-tab console clean. `npx tsc
 --noEmit` exits 0; `npx expo lint` 64, unchanged. Pure logic: 26 / 26 cases
 pass (throwaway `npx tsx` script, not committed).
+
+---
+
+# Entry 14 — 2026-10-14 — Screen focus on navigation
+
+**The arc:** on web, a screen you navigated away from stayed mounted, visible
+to Tab and to screen readers, and kept focus. Every navigation in the app
+carried the defect, not one screen. Closed across six commits; focus now
+follows navigation by one set of rules (SPARKED_STATE.md → NAVIGATION &
+ENGAGEMENT SURFACES → SCREEN FOCUS).
+
+## Findings — Jas, NVDA + keyboard, 2026-09-23
+
+- Old screens stayed mounted and kept focus; Chrome logged "Blocked
+  aria-hidden"; NVDA read, and Tab walked, the PREVIOUS screens.
+- Explore card titles were not reached by Tab.
+
+## Recon evidence (prompt 0, against `6eb3da3`, 2026-09-28)
+
+- **Why hidden tab screens stayed reachable (recon C).** On web the tabs
+  navigator's `BottomTabView` renders inactive screens through a plain `View`
+  — react-native-screens is disabled off-native, so its `display:none` branch
+  never runs. Unfocused tab screens stayed `display:flex`, `z-index:-1`, with
+  only `aria-hidden` (which hides nothing from Tab). The root Stack was already
+  correct (`display:none`). Library facts and citations: `docs/STACK_FACTS.md`,
+  the entries dated 2026-10-14.
+- **Live matrix (recon D), signed out.** "Outside" = tabbable elements inside
+  hidden screens: **13 on the first tab switch, rising to 39** after Event →
+  Organizer → Back. After every in-content navigation, focus stayed on the
+  activated element inside the now-hidden screen; Stack push and pop both
+  dropped focus to `<body>`.
+- **The card-title defect was CAUSED BY the mount problem.** The titles were
+  already links with `tabindex=0` (Entry 11, 2026-09-18). After Event → Back,
+  the first 21 Tab stops were in hidden screens, so Tab reached the cards only
+  after wrapping. Ruling 4 needed no code.
+
+## Before → after
+
+| | Before | After |
+|---|---|---|
+| "Outside" (tabbable in hidden screens) | 13 → 39 | **0** on every driven row |
+| Focus after content navigation | the activated element, inside the hidden screen | the new screen's level-1 heading |
+| Focus after Back | `<body>` or the hidden screen | the element that opened the screen, else the heading |
+| Focus after a tab-bar press | the tab | the tab (unchanged) |
+| Back from an href:null tab screen | always Explore (`firstRoute`) | the previous screen (`history`) |
+| Level-1 headings | 2 screens | every screen but `workspace/edit` (ruled) |
+
+## Commits, in order
+
+1. **`ac14fac`** — non-focused screens render inside an `inert` subtree
+   (`components/ScreenFocus.tsx`, injected via the tabs navigator's
+   `screenLayout`). Screens stay mounted: session state survives.
+2. **`9376036`** — `(tabs)` `backBehavior="history"`: in-app Back returns to
+   the screen you came from instead of Explore.
+3. **`f8ab34c`** (detour A) — `FormExitHeader`: on the event wizard and the
+   Curbside form the top-left control is an escape hatch, one borderless
+   button (mirrored exit icon + "leave", accessible name "Leave", ≥44 tall);
+   the wizard's step label moves centred above the progress bars.
+4. **`b917475`** (detour B) — `LeaveConfirm`: leaving a create form with input
+   asks first (custom Modal; Escape = Keep editing; focus trapped, restored).
+5. **`8c870fe`** (prompt 3) — one level-1 heading per screen on its existing
+   visible title; no visual change (computed styles and boxes identical
+   before/after, `DIV` → `H1` only).
+6. **`243d146`** (prompt 4) — the focus controller: content nav → heading,
+   tab press → stays, Back → opener else heading, params change → heading,
+   wizard step → step heading, cold load never moves focus, no ring on
+   programmatically focused headings. Also fixes the stale-title defect below
+   and tears down old controllers under Fast Refresh.
+
+## The stale-title defect — found by Jas with NVDA, fixed before commit
+
+Signed out, incognito: opening one event and then another, NVDA announced the
+PREVIOUS event's title. Proven before fixing by sampling every frame: at the
+new event's URL, the previous event's h1 rendered for ~550ms, the controller
+focused it 5ms after it appeared, and the text then changed in place without
+being re-announced. Root cause: `event/[id]` (and `organizer/[id]`) are ONE
+tabs route reused with new params, and `load()` kept the previous item in state
+until the new read landed. Both screens now track which id their data belongs
+to and show their loading state until it matches, and drop late responses.
+After: three events in a row (click and Enter) and Event → Organizer → Event
+land on the activated title with **0 frames** of a previous event.
+
+## Human verification — Jas, NVDA + keyboard (as reported, 2026-10-14)
+
+- Heading navigation (NVDA `H`) finds one level-1 heading per screen.
+- Content navigation lands on the new screen's heading.
+- Back returns focus to the element that opened the screen.
+- The tab bar keeps focus on the tab.
+- Wizard step changes announce the new step's heading.
+- Signed out, in incognito.
+- The stale-title defect above was found in this pass and fixed before commit.
+
+## What this entry does NOT establish
+
+- **Nothing about native iOS / Android.** Every change is web-only;
+  `ScreenFocus` renders its children unchanged off web.
+- **Checkout, `published` and the Curbside form were not driven live.**
+  Reaching them writes data (payment, publish) or needs an account under its
+  Curbside quota; their headings and exit/confirm wiring are code-checked only.
+- **Chrome → (forward) is treated like ←** — opener if recorded, else the
+  heading. The browser does not tell the page which button was pressed.
+- **Chrome ← and in-app Back disagree after Event A → Organizer → Event B**
+  (one event route, so B replaced Organizer's history entry), and **Chrome ←
+  back to Explore remounts Explore** — pre-existing, confirmed on `8c870fe`;
+  focus falls back to the heading. Both are tracker items.
+- **Rows not driven:** Saved card → event → Back (the test account's Saved list
+  was empty, and saving is a data write); the signed-out auth row; Organizer
+  A → B (the seed has one organizer).
+
+## Privilege gate — N/A, stated
+
+Every commit in this arc is client-only: no SQL, no migration, no schema
+object, nothing reachable from PostgREST. The grant surface is provably
+untouched — no file under `supabase/` changed in `ac14fac..243d146`.
+
+**Baseline:** `main` @ `243d146`, driven on the Expo web dev server at
+`localhost:8081` (in-app browser, 1024-wide and 390-wide), signed in and
+signed out, 2026-09-28 → 2026-10-14. `npx tsc --noEmit` exits 0;
+`npx expo lint` **63** (was 64; `b917475` removed one `no-unused-expressions`
+warning by turning a bare ternary into an arrow body).

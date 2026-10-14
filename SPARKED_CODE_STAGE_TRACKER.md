@@ -316,15 +316,81 @@ and verified in Cursor/Claude Code.
 
 #### Carried out of the Interests & blocks arc (2026-09-22..28)
 
-- [ ] **NEXT ARC — screen focus on navigation.** Old screens stay mounted and
-      keep focus, so `aria-hidden` on them is blocked and NVDA reads / Tab
-      walks the PREVIOUS screens; Explore card titles are not reached by Tab.
-      *Why next:* it breaks keyboard and screen-reader use of every navigation,
-      not one screen. Found by Jas with NVDA, 2026-09-23.
+- [x] **Screen focus on navigation — CLOSED 2026-10-14, `ac14fac`..`243d146`,
+      `docs/ACCESSIBILITY.md` Entry 14.** Hidden screens are `inert`
+      ("Outside" 13–39 → 0), `(tabs)` Back follows history, every screen has
+      one level-1 heading, and focus follows navigation by the rules locked in
+      SPARKED_STATE.md (NAVIGATION & ENGAGEMENT SURFACES → SCREEN FOCUS).
+      **Explore card titles not reached by Tab was CAUSED BY the mount
+      problem**: the titles were already links (Entry 11); after Event → Back
+      the first 21 Tab stops were in hidden screens. Ruling 4 needed no code.
+      Found by Jas with NVDA, 2026-09-23.
+
+#### Carried out of the screen-focus arc (2026-09-28..10-14)
+
+- [ ] **PER-TAB STACKS arc.** Jas's spec: "Back walks the trail step by step;
+      going to a main page (Explore/Saved/Me) clears it." *Why:* fixes Back
+      two levels deep skipping to Explore, and Chrome ← disagreeing with in-app
+      Back after Event A → Organizer → Event B — both because `event/[id]` is
+      one tabs route (`docs/STACK_FACTS.md`, TabRouter `'history'` entry).
+      **OPEN QUESTION for that arc:** re-tapping a tab shows (a) its main page
+      or (b) the screen left open — Claude recommended (a).
+- [ ] **Interests & blocks (and `settings/*`) hide the tab bar** despite having
+      no unsaved input. *Why:* contradicts the chrome rule (chrome goes away
+      only when there is input to lose); a route move — fold into per-tab
+      stacks.
+- [ ] **EDIT & DRAFTS arc** — editing for upcoming events, plus a "Save draft"
+      button beside Back/Continue on the wizard AND Curbside, with drafts
+      listed in Workspace. *Why:* a host cannot fix a published event or park
+      a half-made one. Collides with: the workspace being created at publish,
+      the Curbside quota, no image storage, and draft-row constraints — an SQL
+      arc with the full privilege gate.
+- [ ] **Saved / Workspace "Past" toggles lack `aria-expanded`.** *Why:* a
+      screen reader cannot tell whether the section is open (WCAG 4.1.2).
+- [ ] **Explore search scrim takes a Tab stop**
+      (`components/ExploreSearch.tsx:692-696` as of `243d146`) — `aria-hidden`
+      but RNW still gives the Pressable `tabindex="0"`. *Why:* a focusable
+      element hidden from assistive tech, the shape this arc removed elsewhere.
+- [ ] **Back from `published` untested under `backBehavior="history"`.** *Why:*
+      reachable only by a real publish, so no run has covered it since
+      `9376036`.
+- [ ] **Secondary-button border token fails WCAG 1.4.11:** `borderStrong`
+      measured 1.90:1 dark / 1.28:1 light against the page (need 3:1),
+      app-wide. *Why:* every secondary button's boundary is below the
+      non-text contrast floor.
+- [ ] **Wizard step label light-mode contrast 1.85:1** (`brand.brightOrange` on
+      `#f4f5f8`). *Why:* the crumb colour it inherited fails 4.5:1 — pair with
+      the SubHeader crumb item above.
+- [ ] **Curbside form `FormExitHeader` + `LeaveConfirm` not verified live** —
+      the test account is at its Curbside quota, so the form never rendered.
+      *Why:* shipped on code inspection only.
+- [ ] **Chrome ← leaves the create forms without the confirmation.** *Why:*
+      half-entered input can still be lost by the browser's own Back
+      (no `beforeRemove` interception, by scope).
+- [ ] **Event Detail's floating Back / Save chips are LAST in the Tab order**
+      though first visually (WCAG 2.4.3). *Why:* a keyboard user meets the
+      screen's top-left controls after everything else.
+- [ ] **Chrome ← back to Explore REMOUNTS Explore** — pre-existing, confirmed
+      on `8c870fe` before any focus code. *Why:* Explore's session state
+      (filters, date window, search) is likely lost on that path — verify,
+      then fold into per-tab stacks.
+- [ ] **`workspace/edit` has no heading** (by ruling) — deferred to the
+      SubHeader arc. *Why:* heading navigation finds nothing there; focus
+      falls back to the screen container.
+- [ ] **Branded focus-ring token.** *Why:* Chrome's default ring is used
+      today; `theme.colors.focusRing` exists but only `pickers.tsx` reads it.
+- [ ] **`workspace/edit` and checkout hold input but have no leave
+      confirmation** — decide whether they get the create-form escape-hatch
+      treatment (`FormExitHeader` + `LeaveConfirm`). *Why:* the escape-hatch
+      rule is "confirm when there is input to lose", and both have input — a
+      profile form and payment details.
 - [ ] **SubHeader back chip + crumb.** 36×36 back chip with no `role`; the
       `brightOrange` crumb is 1.85:1 in light mode; `components/SubHeader.tsx`
-      is shared by 6 screens (create ×4, `workspace/edit`, `settings/interests`
-      — Entry 12 counted five before the Interests screen adopted it).
+      is shared by 5 screens (as of `243d146`): the create fork, checkout,
+      Curbside's quota screen, `workspace/edit`, `settings/interests`. The
+      event wizard and the Curbside form left it for `FormExitHeader` in
+      `f8ab34c` (previously 6: create ×4, `workspace/edit`,
+      `settings/interests`).
       *Why:* below the 44×44 target and unnamed as a control, on every
       sub-screen at once.
 - [ ] **Category loader has no error signal.** `lib/categories.ts`
@@ -511,7 +577,13 @@ and verified in Cursor/Claude Code.
       phones is not aligned. Chip STYLE stays different on purpose — Event
       Detail's is translucent dark for legibility over a photograph, which would
       be a dark blob on a plain background.
-- [ ] **Wizard exit affordance** — persistent X/close on all wizard + checkout
+- [x] **Wizard exit affordance — CLOSED 2026-10-14, `f8ab34c` + `b917475`.**
+      The event wizard and Curbside form carry a "Leave" escape hatch
+      (`FormExitHeader`), and leaving with input confirms (`LeaveConfirm`);
+      the footer Cancel on Basics confirms too. Checkout keeps SubHeader by
+      ruling (nothing to lose). Open edges are carried in the screen-focus
+      arc list (Chrome ← bypasses the confirm; Curbside not verified live).
+      Original item: persistent X/close on all wizard + checkout
       steps with a discard-draft confirmation. Pairs with the in-tabs success
       screen restructure (round-2 walk): the create flow is a focused,
       chrome-less stack, so leaving it mid-way currently relies on Back/Cancel
@@ -1051,6 +1123,11 @@ migration lands between, the NAME is the anchor, not the number.
       2026-09-27, after `b3a7b1d`; unchanged across the Interests & blocks arc
       (64 → 64). The by-rule breakdown above is the 2026-07-30 figure and has
       not been re-counted.
+      **BASELINE NOW 63 problems (59 errors, 4 warnings)** — `npx expo lint`,
+      2026-10-14, at `243d146`. The one removed finding is a
+      `no-unused-expressions` warning in `create/event.tsx` `back()`, whose
+      bare ternary became an arrow body in `b917475`. Unchanged through the
+      rest of the screen-focus arc.
 - [ ] **`useWorkspaceStats` double-fetches on Workspace open.** The hook has its
       own mount effect AND the screen's focus effect calls `refresh`, so opening
       Workspace fires two `workspace_stats` calls back to back. Harmless — it is

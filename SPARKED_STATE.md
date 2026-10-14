@@ -406,6 +406,53 @@ Entry 8.
   2.74:1 — both are `pickers.tsx` work, tracked as one arc in the tracker, and
   neither was patched here by the scope fence.
 
+### SCREEN FOCUS, HEADINGS & CREATE-FORM EXIT (LOCKED 2026-10-14)
+
+Screen-focus arc, `ac14fac`..`243d146`; evidence in `docs/ACCESSIBILITY.md`
+Entry 14. Web only — native is unchanged.
+
+- **Focus rules.**
+  - Content navigation (a card, row, link or button) → focus the new
+    screen's level-1 heading.
+  - Tab-bar press → focus STAYS on the tab button.
+  - Back (in-app chip, Leave, footer Back/Cancel leaving a screen, Chrome ←)
+    → the element that opened the screen, if still live; else the heading.
+  - No visible ring on a programmatically focused heading (tabindex -1, never
+    a Tab stop). Real controls keep their rings.
+  - Same route with new params (event A → event B) = a new screen → heading.
+    The screen shows its loading state until its data matches the new id —
+    focus never lands on the previous item's heading.
+  - Wizard step change (Continue / footer Back between steps) → the new
+    step's heading.
+  - First load, refresh and cold deep links never move focus.
+  - A screen with no heading (`workspace/edit`, by ruling) → its main
+    content container.
+- **Heading rule.** Exactly one level-1 heading per screen = the most
+  prominent visible text at the top of the screen. No invented heading text,
+  no visually hidden headings, no visual change from marking one.
+- **`(tabs)` `backBehavior = "history"`.** In-app Back returns to the
+  previous screen, not Explore. Known limit: two levels deep inside a reused
+  route (Event A → Organizer → Event B) the second Back reaches Explore — the
+  per-tab stacks arc.
+- **Create forms (event wizard, Curbside form) — the top-left exit is an
+  ESCAPE HATCH, not step-back.**
+  - One borderless button: mirrored exit icon + the word "leave"; accessible
+    name "Leave"; ≥44 tall; pressed fill only. Stepping back is the footer
+    button's job.
+  - The wizard's step label reads "<STEP NAME> · STEP n OF 5", centred above the
+    progress bars (the crumb's type style).
+  - Leaving with input confirms: "Leave this event?" / "Leave this post?",
+    "What you've entered won't be saved.", buttons "Keep editing" (secondary)
+    and "Leave" (muted destructive, never gradient). Nothing entered → leave
+    instantly. The footer "Cancel" on Basics confirms too.
+  - Five screens keep the SubHeader arrow chip FOR NOW: the create fork,
+    `settings/interests` and Curbside's quota screen hold no input (the other
+    four `settings/*` screens hold none either, and carry `SettingsStub`'s
+    own arrow chip); `workspace/edit`
+    (a profile form) and checkout (payment details) DO hold input, and
+    whether they get the leave confirmation is OPEN (tracker, "Carried out
+    of the screen-focus arc": "workspace/edit and checkout hold input").
+
 ---
 
 ## CREATE EVENT — CURBSIDE + SHARED FORM PATTERNS (LOCKED 2026-07-15)
@@ -638,8 +685,8 @@ order a host meets it:
    beneath the map on every consumer surface.
 
 **Still open for this area (all tracked, none blocking):** real Stripe, real
-image uploads, WYSIWYG description editor, wizard exit affordance, geocode
-confirmation, published events in Workspace.
+image uploads, WYSIWYG description editor, geocode confirmation, published
+events in Workspace. (Wizard exit affordance: done, `f8ab34c` + `b917475`.)
 
 ### Workspace creation happens at PUBLISH, not at entry (LOCKED 2026-07-29)
 
