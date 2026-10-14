@@ -40,6 +40,7 @@ import { SubHeader } from '../../components/SubHeader';
 import { DateField, TimeField, format12h } from '../../components/pickers';
 import { useAuth } from '../../lib/auth';
 import { geocode, toWktPoint } from '../../lib/geocode';
+import { backOr, popTo } from '../../lib/navigation';
 import { supabase } from '../../lib/supabase';
 import {
   CURBSIDE_MAX_DAYS,
@@ -187,7 +188,7 @@ function ConversionScreen() {
           <GradientButton onPress={() => router.push('/create/event')}>
             See Event listings — from $5
           </GradientButton>
-          <SecondaryButton onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/me'))}>
+          <SecondaryButton onPress={() => backOr('me')}>
             Maybe later
           </SecondaryButton>
         </View>
@@ -222,7 +223,7 @@ export default function CurbsideForm() {
   // the quota / loading early returns, so the hook order never changes.
   const edited = useEdited({ photo, title, desc, address, date, endDate, timeOn, time, anonPost });
   const [confirmLeave, setConfirmLeave] = useState(false);
-  const leaveNow = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/me'));
+  const leaveNow = () => backOr('me');
 
   // Signed-in territory. READ-ONLY setup: this no longer creates a workspace —
   // opening the form must not make anyone a host (that happens at "Post it").
@@ -325,7 +326,9 @@ export default function CurbsideForm() {
         throw new Error(insertError.message);
       }
       // Publish means live — land on the feed, focus refetch shows the post.
-      router.replace('/(tabs)');
+      // popTo, not replace: from this root-Stack screen a replace mounted a
+      // second (tabs) navigator over the first (see lib/navigation.ts).
+      popTo('explore');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

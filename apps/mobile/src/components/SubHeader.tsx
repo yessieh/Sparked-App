@@ -8,10 +8,10 @@
 // belongs in components/, not in whichever route happened to define it first.
 
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { backOr } from '../lib/navigation';
 import { brand, useTheme } from '../theme';
 
 export function SubHeader({ crumb }: { crumb: string }) {
@@ -19,7 +19,7 @@ export function SubHeader({ crumb }: { crumb: string }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 24, paddingTop: 16, paddingBottom: 12 }}>
       <Pressable
-        onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/me'))}
+        onPress={() => backOr('me')}
         accessibilityLabel="Back"
         style={{
           width: 36,

@@ -8,7 +8,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -32,6 +32,7 @@ import {
   signInWithGoogle,
   useAuth,
 } from '../lib/auth';
+import { backOr } from '../lib/navigation';
 import { supabase } from '../lib/supabase';
 import { brand, useTheme } from '../theme';
 
@@ -39,10 +40,7 @@ type Mode = 'signup' | 'login' | 'forgot';
 
 /** Pop back to wherever auth was invoked from; fall back to the Me tab when
  * this screen is the whole history (direct load / post-reload). */
-const dismiss = () => {
-  if (router.canGoBack()) router.back();
-  else router.replace('/(tabs)/me');
-};
+const dismiss = () => backOr('me');
 
 export default function AuthScreen() {
   const theme = useTheme();

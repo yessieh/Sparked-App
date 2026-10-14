@@ -19,6 +19,7 @@ import EmptyState from '../../../components/EmptyState';
 import EventDetailView, { type EventDetailData } from '../../../components/EventDetailView';
 import { useAuth } from '../../../lib/auth';
 import { useEngagement } from '../../../lib/engagement';
+import { backOr } from '../../../lib/navigation';
 import { useOrigin } from '../../../lib/origin';
 import { supabase } from '../../../lib/supabase';
 import { vendorFromRow, type Vendor, type VendorRow } from '../../../lib/vendors';
@@ -202,10 +203,7 @@ export default function EventDetailScreen() {
     }, 1550);
   };
 
-  const back = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace('/(tabs)');
-  };
+  const back = () => backOr('explore');
 
   if (state === 'error' && !stale) {
     return (

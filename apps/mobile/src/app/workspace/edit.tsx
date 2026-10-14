@@ -25,7 +25,7 @@
 // that was never offered.
 
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -40,6 +40,7 @@ import {
 
 import { FormField, GradientButton, GradientFill, SecondaryButton } from '../../components/AuthControls';
 import { SubHeader } from '../../components/SubHeader';
+import { backOr } from '../../lib/navigation';
 import { socialUrl, type SocialPlatform } from '../../lib/socialLinks';
 import {
   SOCIAL_FIELDS,
@@ -176,8 +177,7 @@ export default function EditWorkspaceProfile() {
       });
       // Back to Workspace, which refetches its workspace read on focus so the
       // renamed header is correct on arrival.
-      if (router.canGoBack()) router.back();
-      else router.replace('/workspace');
+      backOr('workspace');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setSaving(false);
@@ -387,7 +387,7 @@ export default function EditWorkspaceProfile() {
             Save profile
           </GradientButton>
           <SecondaryButton
-            onPress={() => (router.canGoBack() ? router.back() : router.replace('/workspace'))}
+            onPress={() => backOr('workspace')}
             disabled={saving}
           >
             Cancel

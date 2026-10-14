@@ -5,13 +5,13 @@
 // user sets a new password via updateUser.
 
 import * as Linking from 'expo-linking';
-import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Platform, ScrollView, Text } from 'react-native';
 
 import { FormField, GradientButton } from '../components/AuthControls';
 import SparkedLogo from '../components/SparkedLogo';
 import { createSessionFromUrl, useAuth } from '../lib/auth';
+import { popTo } from '../lib/navigation';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../theme';
 
@@ -38,7 +38,9 @@ export default function ResetPassword() {
     if (err) setError(err.message);
     else {
       setDone(true);
-      setTimeout(() => router.replace('/(tabs)/me'), 1200);
+      // popTo, not replace: opened over (tabs), a replace mounted a second
+      // (tabs) navigator (see lib/navigation.ts).
+      setTimeout(() => popTo('me'), 1200);
     }
   };
 

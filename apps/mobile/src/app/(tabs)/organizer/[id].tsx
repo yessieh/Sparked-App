@@ -35,6 +35,7 @@ import { GradientFill } from '../../../components/AuthControls';
 import EventStub, { type FeedEvent } from '../../../components/EventStub';
 import { useAuth } from '../../../lib/auth';
 import { useEngagement } from '../../../lib/engagement';
+import { backOr } from '../../../lib/navigation';
 import { socialUrl, type SocialPlatform } from '../../../lib/socialLinks';
 import { supabase } from '../../../lib/supabase';
 import { SOCIAL_FIELDS, useMyWorkspace } from '../../../lib/workspace';
@@ -473,7 +474,7 @@ export default function OrganizerProfileScreen() {
     />
   );
 
-  const back = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)'));
+  const back = () => backOr('explore');
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>

@@ -52,6 +52,7 @@ import { DateField, TimeField, format12h } from '../../components/pickers';
 import { useAuth } from '../../lib/auth';
 import { geocode, toWktPoint } from '../../lib/geocode';
 import { canonicalize, isBlocked, suggestMatches, titleCase } from '../../lib/moderation';
+import { backOr } from '../../lib/navigation';
 import {
   DEFAULT_VENDOR_TYPE,
   VENDOR_TYPES,
@@ -1108,7 +1109,7 @@ export default function EventWizard() {
   const back = () => {
     if (step === 0) {
       // "Cancel" on Basics leaves the wizard — the same ask as the header.
-      requestLeave(() => (router.canGoBack() ? router.back() : router.replace('/create')));
+      requestLeave(() => backOr('create'));
     } else {
       setStep((s) => s - 1);
     }
@@ -1250,7 +1251,7 @@ export default function EventWizard() {
       {/* Leave = escape hatch, navigating exactly as SubHeader's chip did —
           after asking, if anything was entered. The footer button is the
           step-back control. */}
-      <FormExitHeader onLeave={() => requestLeave(() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/me')))} />
+      <FormExitHeader onLeave={() => requestLeave(() => backOr('me'))} />
       <LeaveConfirm
         visible={pendingLeave !== null}
         title="Leave this event?"

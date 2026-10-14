@@ -353,7 +353,12 @@ and verified in Cursor/Claude Code.
       element hidden from assistive tech, the shape this arc removed elsewhere.
 - [ ] **Back from `published` untested under `backBehavior="history"`.** *Why:*
       reachable only by a real publish, so no run has covered it since
-      `9376036`.
+      `9376036`. **Likely also on a duplicate `(tabs)`:** checkout →
+      `replace('/published')` is a root-Stack replace with `(tabs)` beneath,
+      the shape that mounted a second `(tabs)` navigator in the per-tab
+      stacks arc's prompt-1 console probe (2026-10-14, against `d2de327`:
+      `replace('/(tabs)/me')` from `settings/*`). Verify in the restructure
+      prompt.
 - [ ] **Secondary-button border token fails WCAG 1.4.11:** `borderStrong`
       measured 1.90:1 dark / 1.28:1 light against the page (need 3:1),
       app-wide. *Why:* every secondary button's boundary is below the

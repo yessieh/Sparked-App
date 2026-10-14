@@ -40,6 +40,7 @@ import {
 import { GradientButton } from '../../components/AuthControls';
 import EventStub, { type FeedEvent } from '../../components/EventStub';
 import { hasEnded } from '../../lib/eventTime';
+import { backOr } from '../../lib/navigation';
 import { supabase } from '../../lib/supabase';
 import {
   archiveEvent,
@@ -783,8 +784,7 @@ function WorkspaceDetail({
         title={workspace.name}
         onBack={() => {
           if (onBackToPicker) onBackToPicker();
-          else if (router.canGoBack()) router.back();
-          else router.replace('/(tabs)/me');
+          else backOr('me');
         }}
       />
       <ScrollView
@@ -1220,7 +1220,7 @@ export default function WorkspaceScreen() {
       ? (workspaces.find((w) => w.id === selectedId) ?? null)
       : workspaces[0];
 
-  const back = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/me'));
+  const back = () => backOr('me');
 
   if (selected) {
     return (

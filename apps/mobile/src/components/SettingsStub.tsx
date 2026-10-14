@@ -5,10 +5,10 @@
 // different app while they wait.
 
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { backOr } from '../lib/navigation';
 import { brand, useTheme } from '../theme';
 
 export default function SettingsStub({ title }: { title: string }) {
@@ -27,7 +27,7 @@ export default function SettingsStub({ title }: { title: string }) {
         }}
       >
         <Pressable
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/me'))}
+          onPress={() => backOr('me')}
           accessibilityLabel="Back"
           style={{
             width: 36,
