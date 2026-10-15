@@ -39,32 +39,32 @@ import {
   View,
 } from 'react-native';
 
-import { GradientButton, SecondaryButton } from '../../components/AuthControls';
-import DateControl, { formatWindowLabel } from '../../components/DateControl';
-import EmptyState from '../../components/EmptyState';
-import EventStub, { type FeedEvent } from '../../components/EventStub';
-import ExploreSearch, { SearchTrigger } from '../../components/ExploreSearch';
-import InterestPills from '../../components/InterestPills';
-import LocationControl from '../../components/LocationControl';
-import Pill from '../../components/Pill';
-import SparkedLogo from '../../components/SparkedLogo';
-import ViewSwitcher, { type ViewMode } from '../../components/ViewSwitcher';
-import { useAuth } from '../../lib/auth';
-import { useEngagement } from '../../lib/engagement';
-import { useCategories } from '../../lib/categories';
+import { GradientButton, SecondaryButton } from '../../../components/AuthControls';
+import DateControl, { formatWindowLabel } from '../../../components/DateControl';
+import EmptyState from '../../../components/EmptyState';
+import EventStub, { type FeedEvent } from '../../../components/EventStub';
+import ExploreSearch, { SearchTrigger } from '../../../components/ExploreSearch';
+import InterestPills from '../../../components/InterestPills';
+import LocationControl from '../../../components/LocationControl';
+import Pill from '../../../components/Pill';
+import SparkedLogo from '../../../components/SparkedLogo';
+import ViewSwitcher, { type ViewMode } from '../../../components/ViewSwitcher';
+import { useAuth } from '../../../lib/auth';
+import { useEngagement } from '../../../lib/engagement';
+import { useCategories } from '../../../lib/categories';
 import {
   applyBlocks,
   blockedByLabel,
   buildFilterCounts,
   canAutoJoinCurbside,
   type SearchFilter,
-} from '../../lib/eventFilters';
-import { useInterests } from '../../lib/interests';
-import { dayLabel, localDayKey } from '../../lib/eventTime';
-import { MAX_RADIUS, useOrigin } from '../../lib/origin';
-import { supabase } from '../../lib/supabase';
-import { brand, tracking, trackingEm, useTheme } from '../../theme';
-import { laneFor } from '../../theme/categoryColors';
+} from '../../../lib/eventFilters';
+import { useInterests } from '../../../lib/interests';
+import { dayLabel, localDayKey } from '../../../lib/eventTime';
+import { MAX_RADIUS, useOrigin } from '../../../lib/origin';
+import { supabase } from '../../../lib/supabase';
+import { brand, tracking, trackingEm, useTheme } from '../../../theme';
+import { laneFor } from '../../../theme/categoryColors';
 
 /**
  * The empty-feed escape hatch — a SHORTCUT now, no longer the only control.

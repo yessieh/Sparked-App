@@ -11,10 +11,10 @@ import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
-import { SubHeader } from '../../components/SubHeader';
-import { useAuth } from '../../lib/auth';
-import { supabase } from '../../lib/supabase';
-import { brand, useTheme } from '../../theme';
+import { SubHeader } from '../../../components/SubHeader';
+import { useAuth } from '../../../lib/auth';
+import { supabase } from '../../../lib/supabase';
+import { brand, useTheme } from '../../../theme';
 
 interface LaneProps {
   onPress: () => void;

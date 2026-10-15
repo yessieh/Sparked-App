@@ -20,20 +20,21 @@ import {
   GradientButton,
   GradientFill,
   SecondaryButton,
-} from '../../components/AuthControls';
-import { Perforation } from '../../components/EventStub';
-import SparkedLogo from '../../components/SparkedLogo';
-import { useAuth } from '../../lib/auth';
-import { useEngagement } from '../../lib/engagement';
-import { eventCountdown } from '../../lib/eventTime';
-import { supabase } from '../../lib/supabase';
+} from '../../../components/AuthControls';
+import { Perforation } from '../../../components/EventStub';
+import SparkedLogo from '../../../components/SparkedLogo';
+import { useAuth } from '../../../lib/auth';
+import { useEngagement } from '../../../lib/engagement';
+import { eventCountdown } from '../../../lib/eventTime';
+import { useGoToMain } from '../../../lib/navigation';
+import { supabase } from '../../../lib/supabase';
 import {
   useMyWorkspace,
   useWorkspaceStats,
   type Workspace,
   type WorkspaceStats,
-} from '../../lib/workspace';
-import { brand, useTheme } from '../../theme';
+} from '../../../lib/workspace';
+import { brand, useTheme } from '../../../theme';
 
 type Theme = ReturnType<typeof useTheme>;
 
@@ -534,6 +535,7 @@ const SETTINGS_ROWS = [
 
 function SignedInMe() {
   const theme = useTheme();
+  const goToMain = useGoToMain();
   const { session, signOut } = useAuth();
   // The engagement provider holds the user's saved/going IDS but no event
   // rows, so the preview needs titles + timestamps from somewhere: one events
@@ -811,8 +813,8 @@ function SignedInMe() {
           theme={theme}
           event={nextSaved}
           loading={nextSavedLoading}
-          onPress={() => router.navigate('/(tabs)/saved')}
-          onExplore={() => router.navigate('/(tabs)')}
+          onPress={() => goToMain('saved')}
+          onExplore={() => goToMain('explore')}
         />
       </View>
 

@@ -31,16 +31,16 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 
-import { GradientFill } from '../../../components/AuthControls';
-import EventStub, { type FeedEvent } from '../../../components/EventStub';
-import { useAuth } from '../../../lib/auth';
-import { useEngagement } from '../../../lib/engagement';
-import { backOr } from '../../../lib/navigation';
-import { socialUrl, type SocialPlatform } from '../../../lib/socialLinks';
-import { supabase } from '../../../lib/supabase';
-import { SOCIAL_FIELDS, useMyWorkspace } from '../../../lib/workspace';
-import { brand, useTheme } from '../../../theme';
-import { laneFor } from '../../../theme/categoryColors';
+import { GradientFill } from '../../../../components/AuthControls';
+import EventStub, { type FeedEvent } from '../../../../components/EventStub';
+import { useAuth } from '../../../../lib/auth';
+import { useEngagement } from '../../../../lib/engagement';
+import { backOr } from '../../../../lib/navigation';
+import { socialUrl, type SocialPlatform } from '../../../../lib/socialLinks';
+import { supabase } from '../../../../lib/supabase';
+import { SOCIAL_FIELDS, useMyWorkspace } from '../../../../lib/workspace';
+import { brand, useTheme } from '../../../../theme';
+import { laneFor } from '../../../../theme/categoryColors';
 
 type Theme = ReturnType<typeof useTheme>;
 

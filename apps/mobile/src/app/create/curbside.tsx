@@ -40,7 +40,7 @@ import { SubHeader } from '../../components/SubHeader';
 import { DateField, TimeField, format12h } from '../../components/pickers';
 import { useAuth } from '../../lib/auth';
 import { geocode, toWktPoint } from '../../lib/geocode';
-import { backOr, popTo } from '../../lib/navigation';
+import { backOr, useGoToMain } from '../../lib/navigation';
 import { supabase } from '../../lib/supabase';
 import {
   CURBSIDE_MAX_DAYS,
@@ -200,6 +200,7 @@ function ConversionScreen() {
 export default function CurbsideForm() {
   const theme = useTheme();
   const { session, loading } = useAuth();
+  const goToMain = useGoToMain();
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [used, setUsed] = useState<number | null>(null);
   const [setupError, setSetupError] = useState<string | null>(null);
@@ -326,15 +327,15 @@ export default function CurbsideForm() {
         throw new Error(insertError.message);
       }
       // Publish means live — land on the feed, focus refetch shows the post.
-      // popTo, not replace: from this root-Stack screen a replace mounted a
+      // goToMain, not replace: from this root-Stack screen a replace mounted a
       // second (tabs) navigator over the first (see lib/navigation.ts).
-      popTo('explore');
+      goToMain('explore');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
-  }, [session, workspaceId, canPost, address, date, endDate, timeOn, time, title, desc, anonPost]);
+  }, [session, workspaceId, canPost, address, date, endDate, timeOn, time, title, desc, anonPost, goToMain]);
 
   if (setupError) {
     return (

@@ -1,6 +1,6 @@
 // "You're live" — the publish success screen (design-reference ConfirmScreen).
 //
-// Lives INSIDE the (tabs) group (registered href:null in _layout, so it has no
+// Lives INSIDE the (tabs) group (in the Explore and Me Stacks, so it has no
 // tab button) on purpose: the tab bar is hidden through the focused create
 // flow — wizard + checkout — and RESTORED here, the moment the listing goes
 // live, and on every screen after (ruling, publish-walk round 2). The mock
@@ -12,12 +12,14 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import { Text, View } from 'react-native';
 
-import { GradientButton, GradientFill, SecondaryButton } from '../../components/AuthControls';
-import { brand, useTheme } from '../../theme';
+import { GradientButton, GradientFill, SecondaryButton } from '../../../components/AuthControls';
+import { useGoToMain } from '../../../lib/navigation';
+import { brand, useTheme } from '../../../theme';
 
 export default function PublishedScreen() {
   const theme = useTheme();
   const { eventId } = useLocalSearchParams<{ eventId: string }>();
+  const goToMain = useGoToMain();
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.bg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
@@ -49,7 +51,7 @@ export default function PublishedScreen() {
         <GradientButton onPress={() => eventId && router.push({ pathname: '/event/[id]', params: { id: eventId } })}>
           View your listing
         </GradientButton>
-        <SecondaryButton onPress={() => router.replace('/(tabs)')}>Back to the feed</SecondaryButton>
+        <SecondaryButton onPress={() => goToMain('explore')}>Back to the feed</SecondaryButton>
       </View>
     </View>
   );

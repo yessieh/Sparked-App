@@ -11,13 +11,14 @@ import { Platform, ScrollView, Text } from 'react-native';
 import { FormField, GradientButton } from '../components/AuthControls';
 import SparkedLogo from '../components/SparkedLogo';
 import { createSessionFromUrl, useAuth } from '../lib/auth';
-import { popTo } from '../lib/navigation';
+import { useGoToMain } from '../lib/navigation';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../theme';
 
 export default function ResetPassword() {
   const theme = useTheme();
   const { session, loading } = useAuth();
+  const goToMain = useGoToMain();
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,9 +39,9 @@ export default function ResetPassword() {
     if (err) setError(err.message);
     else {
       setDone(true);
-      // popTo, not replace: opened over (tabs), a replace mounted a second
+      // goToMain, not replace: opened over (tabs), a replace mounted a second
       // (tabs) navigator (see lib/navigation.ts).
-      setTimeout(() => popTo('me'), 1200);
+      setTimeout(() => goToMain('me'), 1200);
     }
   };
 

@@ -14,16 +14,16 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Platform, Text, View } from 'react-native';
 
-import { SecondaryButton } from '../../../components/AuthControls';
-import EmptyState from '../../../components/EmptyState';
-import EventDetailView, { type EventDetailData } from '../../../components/EventDetailView';
-import { useAuth } from '../../../lib/auth';
-import { useEngagement } from '../../../lib/engagement';
-import { backOr } from '../../../lib/navigation';
-import { useOrigin } from '../../../lib/origin';
-import { supabase } from '../../../lib/supabase';
-import { vendorFromRow, type Vendor, type VendorRow } from '../../../lib/vendors';
-import { brand, useTheme } from '../../../theme';
+import { SecondaryButton } from '../../../../components/AuthControls';
+import EmptyState from '../../../../components/EmptyState';
+import EventDetailView, { type EventDetailData } from '../../../../components/EventDetailView';
+import { useAuth } from '../../../../lib/auth';
+import { useEngagement } from '../../../../lib/engagement';
+import { backOr, useGoToMain } from '../../../../lib/navigation';
+import { useOrigin } from '../../../../lib/origin';
+import { supabase } from '../../../../lib/supabase';
+import { vendorFromRow, type Vendor, type VendorRow } from '../../../../lib/vendors';
+import { brand, useTheme } from '../../../../theme';
 
 /** Shape check only — never a claim that the row exists. A malformed id can be
  *  answered without a round trip, and routing it to the same neutral state as
@@ -47,6 +47,7 @@ export default function EventDetailScreen() {
   const theme = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { session } = useAuth();
+  const goToMain = useGoToMain();
   const { savedIds, goingIds, toggleSave, toggleRsvp, refresh, rsvpDelta } = useEngagement();
   // The SAME origin Explore measures from — one shared value is what keeps the
   // feed's distance and this screen's distance line agreeing, which is the job
@@ -237,10 +238,11 @@ export default function EventDetailScreen() {
           body="The link may have expired, or it may not be public. Nothing else to go on — try Explore for what's happening near you."
         >
           <SecondaryButton
-            // replace, not back(): the label names Explore, so the action has
-            // to be Explore regardless of where the dead link was opened from,
-            // and the unreachable event should not stay in history behind it.
-            onPress={() => router.replace('/(tabs)')}
+            // Explore's main page, not back(): the label names Explore, so the
+            // action has to be Explore regardless of where the dead link was
+            // opened from, and the unreachable event should not stay in its
+            // trail.
+            onPress={() => goToMain('explore')}
             style={{ minHeight: 44, alignSelf: 'stretch', maxWidth: 300 }}
           >
             Back to Explore

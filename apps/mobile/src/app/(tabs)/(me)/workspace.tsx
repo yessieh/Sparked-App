@@ -37,11 +37,11 @@ import {
   useWindowDimensions,
 } from 'react-native';
 
-import { GradientButton } from '../../components/AuthControls';
-import EventStub, { type FeedEvent } from '../../components/EventStub';
-import { hasEnded } from '../../lib/eventTime';
-import { backOr } from '../../lib/navigation';
-import { supabase } from '../../lib/supabase';
+import { GradientButton } from '../../../components/AuthControls';
+import EventStub, { type FeedEvent } from '../../../components/EventStub';
+import { hasEnded } from '../../../lib/eventTime';
+import { backOr, useGoToMain } from '../../../lib/navigation';
+import { supabase } from '../../../lib/supabase';
 import {
   archiveEvent,
   deleteEvent,
@@ -51,9 +51,9 @@ import {
   useMyWorkspace,
   useWorkspaceStats,
   type Workspace,
-} from '../../lib/workspace';
-import { brand, breakpoints, useTheme, withAlpha } from '../../theme';
-import { laneFor } from '../../theme/categoryColors';
+} from '../../../lib/workspace';
+import { brand, breakpoints, useTheme, withAlpha } from '../../../theme';
+import { laneFor } from '../../../theme/categoryColors';
 
 type Theme = ReturnType<typeof useTheme>;
 
@@ -481,6 +481,7 @@ function WorkspaceDetail({
   onBackToPicker: (() => void) | null;
 }) {
   const theme = useTheme();
+  const goToMain = useGoToMain();
   const { width } = useWindowDimensions();
   const isDesktop = width >= breakpoints.desktop;
 
@@ -620,7 +621,7 @@ function WorkspaceDetail({
       // Me refetches its workspace read on focus, so it shows the dashed
       // invitation again on arrival. replace(), not push() — the workspace this
       // stack was showing no longer exists to go back to.
-      router.replace('/(tabs)/me');
+      goToMain('me');
     } catch (e) {
       setDeleteError(e instanceof Error ? e.message : String(e));
       setDeleting(false);

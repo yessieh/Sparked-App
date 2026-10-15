@@ -11,16 +11,16 @@ import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
-import { GradientButton } from '../../components/AuthControls';
-import EventStub, { type FeedEvent } from '../../components/EventStub';
-import Pill from '../../components/Pill';
-import SparkedLogo from '../../components/SparkedLogo';
-import { useAuth } from '../../lib/auth';
-import { useEngagement } from '../../lib/engagement';
-import { hasEnded, savedBucket, type SavedBucket } from '../../lib/eventTime';
-import { supabase } from '../../lib/supabase';
-import { brand, useTheme } from '../../theme';
-import { laneFor } from '../../theme/categoryColors';
+import { GradientButton } from '../../../components/AuthControls';
+import EventStub, { type FeedEvent } from '../../../components/EventStub';
+import Pill from '../../../components/Pill';
+import SparkedLogo from '../../../components/SparkedLogo';
+import { useAuth } from '../../../lib/auth';
+import { useEngagement } from '../../../lib/engagement';
+import { hasEnded, savedBucket, type SavedBucket } from '../../../lib/eventTime';
+import { supabase } from '../../../lib/supabase';
+import { brand, useTheme } from '../../../theme';
+import { laneFor } from '../../../theme/categoryColors';
 
 const BUCKET_LABELS: Record<SavedBucket, string> = {
   tonight: 'Tonight',

@@ -16,12 +16,10 @@ export default function TabsLayout() {
       // `inert` subtree so Tab and screen readers stop walking it. Screens
       // stay mounted — see components/ScreenFocus.tsx.
       screenLayout={({ children }) => <ScreenFocus>{children}</ScreenFocus>}
-      // In-app Back returns to the screen the user came from. The library
-      // default, 'firstRoute' (react-navigation/routers/TabRouter.js:96 in
-      // expo-router 57.0.4), sent Back from every href:null route — Event,
-      // Organizer, Workspace, the create fork — to Explore. 'history'
-      // de-duplicates (TabRouter.js:63-65): revisiting a route drops its
-      // earlier entry, and event/[id] is ONE route reused with new params.
+      // Back inside a tab walks that tab's Stack. When a tab's Stack is at its
+      // main page, 'history' sends Back to the previously used TAB; the
+      // library default, 'firstRoute' (react-navigation/routers/TabRouter.js:96
+      // in expo-router 57.0.4), would send it to Explore.
       backBehavior="history"
       screenOptions={{
         headerShown: false,
@@ -38,8 +36,13 @@ export default function TabsLayout() {
         },
       }}
     >
+      {/* Each tab is a Stack (components/TabStack.tsx) — the screens that used
+          to sit here with href:null (published, workspace, the create fork,
+          event/[id], organizer/[id]) now live inside the tab Stacks, so the
+          bar lists exactly these three. Group segments never reach the URL:
+          /event/<id>, /workspace, /create stay as they were. */}
       <Tabs.Screen
-        name="index"
+        name="(explore)"
         options={{
           title: 'Explore',
           tabBarIcon: ({ color, size }) => (
@@ -48,7 +51,7 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="saved"
+        name="(saved)"
         options={{
           title: 'Saved',
           tabBarIcon: ({ color, size }) => (
@@ -57,7 +60,7 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="me"
+        name="(me)"
         options={{
           title: 'Me',
           tabBarIcon: ({ color, size }) => (
@@ -65,37 +68,16 @@ export default function TabsLayout() {
           ),
         }}
       />
-      {/* Publish success ("You're live"). Inside the tab group so the tab bar
-          is restored the moment the listing goes live, but href:null keeps it
-          off the tab bar itself — it's reached only by the checkout redirect. */}
-      <Tabs.Screen name="published" options={{ href: null }} />
-      {/* Workspace — the host surface, reached from the Me hub's stats card.
-          Same href:null treatment, for the reason the create-fork ruling gives:
-          chrome goes away only once there is INPUT TO LOSE. Workspace is a
-          destination, not a flow — a host who lands here by mistake should be
-          able to leave the way they came, so it keeps the tab bar. The Curbside
-          form and every wizard step still hide it. */}
-      <Tabs.Screen name="workspace" options={{ href: null }} />
-      {/* The create ENTRY FORK ("What are you posting?"). Same href:null
-          treatment, same reason: the ruling is chrome-less once there is INPUT
-          TO LOSE, and the fork is a browsing decision with nothing entered — a
-          user who opened it by mistake should not have the back button as their
-          only exit.
-          ONLY the fork lives here. create/curbside, create/event and
-          create/checkout stay in the root Stack and stay chrome-less, because
-          they hold unsaved input and a stray tab tap losing a half-filled event
-          is worse than one extra back-tap. */}
-      <Tabs.Screen name="create" options={{ href: null }} />
-      {/* Public CONTENT pages — an event's ticket and an organizer's profile.
-          Both are deep-link and share targets, so a first-time visitor can
-          arrive here cold with no history behind them; without the bar their
-          only control was Back, which goes nowhere. The chrome rule is about
-          unsaved INPUT, not depth, and these have none.
-          Slashed names because neither directory has a _layout.tsx, so Expo
-          Router flattens them into this navigator rather than nesting one —
-          the same way the root Stack has always addressed them. */}
-      <Tabs.Screen name="event/[id]" options={{ href: null }} />
-      <Tabs.Screen name="organizer/[id]" options={{ href: null }} />
+      {/* Why each moved screen keeps the tab bar (the chrome rule: chrome goes
+          away only once there is INPUT TO LOSE) — unchanged by the move:
+          - published ("You're live"): the bar returns the moment the listing
+            goes live; reached only by the checkout redirect.
+          - workspace: a destination, not a flow.
+          - the create ENTRY FORK: a browsing decision with nothing entered.
+            create/curbside, create/event and create/checkout stay in the root
+            Stack, chrome-less, because they hold unsaved input.
+          - event/[id], organizer/[id]: public content and deep-link targets; a
+            cold arrival needs a way into the app, not a Back to nowhere. */}
     </Tabs>
   );
 }
