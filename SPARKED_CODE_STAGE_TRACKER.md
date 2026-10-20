@@ -328,17 +328,16 @@ and verified in Cursor/Claude Code.
 
 #### Carried out of the screen-focus arc (2026-09-28..10-14)
 
-- [ ] **PER-TAB STACKS arc.** Jas's spec: "Back walks the trail step by step;
-      going to a main page (Explore/Saved/Me) clears it." *Why:* fixes Back
-      two levels deep skipping to Explore, and Chrome ← disagreeing with in-app
-      Back after Event A → Organizer → Event B — both because `event/[id]` is
-      one tabs route (`docs/STACK_FACTS.md`, TabRouter `'history'` entry).
-      **OPEN QUESTION for that arc:** re-tapping a tab shows (a) its main page
-      or (b) the screen left open — Claude recommended (a).
-- [ ] **Interests & blocks (and `settings/*`) hide the tab bar** despite having
-      no unsaved input. *Why:* contradicts the chrome rule (chrome goes away
-      only when there is input to lose); a route move — fold into per-tab
-      stacks.
+- [x] **PER-TAB STACKS arc — CLOSED 2026-10-20, `35db3e9` (prompt 1),
+      `8f4ac39` (prompt 2), `8f08034` (prompt 3), `a1500f3` (prompts 5-6).**
+      One Stack per tab; Back walks the tab's trail (Event A → Organizer →
+      Event B → Back × 3 = Organizer → Event A → Explore). The open question
+      was ruled **(b)**: a tab reopens where it was left, re-tapping the
+      active tab returns to its main page. Locked in SPARKED_STATE.md → PER-TAB
+      STACKS; focus in `docs/ACCESSIBILITY.md` Entry 15.
+- [x] **Interests & blocks (and `settings/*`) hide the tab bar — CLOSED
+      2026-10-20, `8f08034`.** All five moved into the tab Stacks (Interests
+      shared by Me and Explore); URLs unchanged.
 - [ ] **EDIT & DRAFTS arc** — editing for upcoming events, plus a "Save draft"
       button beside Back/Continue on the wizard AND Curbside, with drafts
       listed in Workspace. *Why:* a host cannot fix a published event or park
@@ -358,7 +357,11 @@ and verified in Cursor/Claude Code.
       the shape that mounted a second `(tabs)` navigator in the per-tab
       stacks arc's prompt-1 console probe (2026-10-14, against `d2de327`:
       `replace('/(tabs)/me')` from `settings/*`). Verify in the restructure
-      prompt.
+      prompt. **CONFIRMED 2026-10-15 (per-tab prompt 2, console probe — K
+      row, unchanged): checkout → `published` still mounts a second `(tabs)`,**
+      with `published` in Explore's Stack and nothing beneath it; "Back to
+      the feed" then leaves `[published, index]` over the old `(tabs)`. Still
+      open.
 - [ ] **Secondary-button border token fails WCAG 1.4.11:** `borderStrong`
       measured 1.90:1 dark / 1.28:1 light against the page (need 3:1),
       app-wide. *Why:* every secondary button's boundary is below the
@@ -375,10 +378,13 @@ and verified in Cursor/Claude Code.
 - [ ] **Event Detail's floating Back / Save chips are LAST in the Tab order**
       though first visually (WCAG 2.4.3). *Why:* a keyboard user meets the
       screen's top-left controls after everything else.
-- [ ] **Chrome ← back to Explore REMOUNTS Explore** — pre-existing, confirmed
-      on `8c870fe` before any focus code. *Why:* Explore's session state
-      (filters, date window, search) is likely lost on that path — verify,
-      then fold into per-tab stacks.
+- [x] **Chrome ← back to Explore REMOUNTS Explore — CLOSED 2026-10-20,
+      `a1500f3` (web).** Narrower than recorded: only Chrome ← to the
+      COLD-LOAD history entry remounted, and it rebuilt the whole tab
+      navigator, not just Explore. Cause: that entry held the keyless
+      URL-parsed state (`docs/STACK_FACTS.md`, "first history entry").
+      Fixed by `ColdEntryHistoryFix` (`app/_layout.tsx`); expo/expo#50317,
+      #45588.
 - [ ] **`workspace/edit` has no heading** (by ruling) — deferred to the
       SubHeader arc. *Why:* heading navigation finds nothing there; focus
       falls back to the screen container.
@@ -398,6 +404,9 @@ and verified in Cursor/Claude Code.
       `settings/interests`).
       *Why:* below the 44×44 target and unnamed as a control, on every
       sub-screen at once.
+      **Same defect in `SettingsStub`'s own back chip (added 2026-10-20)** —
+      the four stub settings screens (Notifications, Privacy, Appearance,
+      Help): announced as "clickable", no `role`. Fix with the SubHeader chip.
 - [ ] **Category loader has no error signal.** `lib/categories.ts`
       `useCategories` returns `[]` on a failed read, indistinguishable from
       loading, so a consumer waiting on categories shows its placeholder
@@ -418,6 +427,37 @@ and verified in Cursor/Claude Code.
       announce"). Also owed from Entry 13: whether search's panel row
       announces expanded/collapsed, and that the all-blocked sentence is read
       once. *Why:* none of this can be checked without a real screen reader.
+
+#### Carried out of the per-tab stacks arc (2026-10-14..20)
+
+- [ ] **POLISH BATCH (next, Jas-approved).**
+      - Interests ✓ / − / ✕ get fixed meanings on every tab; each tile shows
+        the two buckets it is NOT in, with accessible names stating the
+        destination.
+      - "Edit blocks" opens the "Not for me" tab.
+      - Saved's empty state gets a secondary "Explore events near you" link to
+        the Explore feed.
+      - The create fork's title label "List an event" reads like a link —
+        rename it to name the screen (wording is Jas's call); Back stays plain
+        Back.
+      *Why:* small, user-facing fixes found while driving this arc, batched so
+      they ship together.
+- [ ] **Me tab link depends on `(me)/me.tsx` sorting FIRST in its group** —
+      don't add a file directly in `(me)/` that sorts ahead of it. *Why:* the
+      tab's href falls back to the group's first screen by file order
+      (`docs/STACK_FACTS.md`; documented in `(me)/_layout.tsx`).
+- [ ] **Dead links persist in a tab's trail under (b)** — a not-found event
+      opened from Saved stays in Saved's trail after "Back to Explore".
+      *Why:* reopening Saved shows the dead page again.
+- [ ] **expo-router upgrade procedure:** re-run the cold-entry ← probe
+      (cold `/` → navigate → Chrome ← to the first entry: route keys and DOM
+      nodes unchanged), then bump the 57.0.x pin in `ColdEntryHistoryFix`.
+      *Why:* the dev-only version warning stands in for a direct check of the
+      history entry, which would mean reading expo-router internals.
+- [ ] **Intermittent NVDA Enter failure — watch item.** Enter on an Explore
+      card title (and once a Me settings row) did nothing in some sessions
+      with a freshly started NVDA. *Why:* cause unknown; capture procedure in
+      `docs/ACCESSIBILITY.md` Entry 15.
 
 ---
 

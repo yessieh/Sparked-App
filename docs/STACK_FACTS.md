@@ -371,3 +371,156 @@ tab left open, though the file on disk was correct; a hard refresh cleared it.
 controller keeps its teardown on `globalThis` and calls the previous one first;
 verified with two real Fast Refreshes: the old style tag removed, a new one
 added, one controller, no error. Dev only — production loads the module once.
+
+---
+
+*The entries below were established in the per-tab stacks arc
+(`35db3e9..a1500f3`, 2026-10-14 → 2026-10-20). Paths are under
+`node_modules/expo-router/build/`, expo-router 57.0.4.*
+
+## A shared route's cold link goes to the FIRST group in config order
+
+**Read and measured, 2026-10-15.** One file in an array group
+(`(explore,saved,me)/event/[id].tsx`) becomes one route per group, and a URL
+like `/event/<id>` matches all of them. The sorter ranks them
+(`fork/getStateFromPath-forks.js`):
+1. **Group similarity to the CURRENT segments** (:267-279). In-app pushes pass
+   the current segments (`getLinkingConfig.js:90-91`), so a push opens the
+   copy in the tab you are in.
+2. On a cold link there are no current segments, so: **`isInitial`** (the
+   route is its navigator's anchor), then **part count**, then **original
+   config order** (:347-367).
+3. **Group segments are not parts** (:75-86), so no extra group folder can
+   change the count.
+
+Measured: cold `/event/<id>`, `/organizer/<id>`, `/published` and
+`/settings/interests` all opened in `(explore)`, the first group.
+
+**Consequence.** The only per-route lever is `isInitial`, and the source marks
+it unfinished ("TODO: We don't differentiate between the default initialRoute
+and group specific default routes", :347-360). Rely on config order, not on
+`isInitial` (SPARKED_STATE → PER-TAB STACKS, the cold `/settings/interests`
+edge).
+
+---
+
+## A tab's link is built from its group route's PARAMS, falling back to the group's first screen by FILE ORDER
+
+**Read and measured, 2026-10-15.** The tab bar builds each tab's `href` with
+`buildHref(route.name, route.params)`
+(`react-navigation/bottom-tabs/views/BottomTabBar.js:288`), i.e.
+`getPathFromState` over the group route with NO nested state
+(`react-navigation/native/useLinkBuilder.js:53-96`). That path falls back to
+`params.screen`, else `index`, else **the group's first screen**
+(`fork/getPathFromState.js:153-185`). The anchor / `initialRouteName` is never
+read. A group's screens are its DIRECT files in `require.context` key order,
+then its subdirectories (`getRoutesCore.js:481-494`), and the linking config
+keeps that order (`getReactNavigationConfig.js:69-71`).
+
+Measured: with the shared folder named `(explore,me)`, the Me tab's link read
+`/create` — the anchor was already `'me'`. Renamed `(me,explore)`, `)` sorts
+before `,`, so `(me)/me.tsx` came first: `/me`.
+
+**Consequence.** A file added directly in `(me)/` that sorts before `me.tsx`
+changes the Me tab's link. `initialParams={{ screen }}` is not a fix: tab
+presses rebuild the params object every time
+(`react-navigation/routers/createParamsFromAction.js:4-11`), so the tab's
+Stack would push a second main page.
+
+---
+
+## Deep-link params are copied onto the anchor AND the ancestor routes
+
+**Read and measured, 2026-10-15.** When a deep link builds an anchored Stack,
+the anchor gets the link's params:
+`{ name: initialRoute, params: route.params }`
+(`fork/getStateFromPath.js:474`, :488). Measured on cold `/event/<id>`: the
+`(tabs)` route, the `(explore)` group route and the anchored `index` all
+carried `{ id }`. Back then landed on `/?id=<id>`, and the Explore tab's link
+read `/?id=<id>` (the link is built from the group route's params, entry
+above). Dropping the anchors does not stop the ancestor copy.
+
+**Consequence.** `components/TabStack.tsx` strips them: main pages keep no
+params, and group routes keep only the keys used to address a nested screen.
+
+---
+
+## The Tabs router treats REPLACE as a jump and has NO `POP_TO` — `dismissTo` across tabs is silently dropped
+
+**Read and measured, 2026-10-14.** expo-router's Tabs navigator state has
+`type: 'tab'`, not `'expo-tab'`, so the action-type rewrite in
+`global-state/getNavigationAction.js:51-55` does not apply. Its router
+handles `REPLACE` as a `JUMP_TO` that drops the previous history entry
+(`react-navigation/routers/TabRouter.js:325-345`), and has no `POP_TO` case.
+Measured: `router.dismissTo('/(tabs)')` from a cold `/event/<id>` changed
+nothing and logged no error; `router.replace('/(tabs)')` worked.
+
+---
+
+## A jump INTO a tab's Stack arrives as a NAVIGATE without `pop` — it pushes a duplicate main page
+
+**Read, 2026-10-14; measured, 2026-10-15.** A jump to another tab carries the
+target screen as `params.screen`
+(`global-state/stateUtils.js:10-30`). The tab's Stack turns that into
+`CommonActions.navigate({ …, pop: route.params.pop })`
+(`react-navigation/core/useNavigationBuilder.js:415-433`), and expo-router
+never sets `pop`. A NAVIGATE without `pop` to a screen that is not on top
+pushes a new copy (`react-navigation/routers/StackRouter.js:186-195`, kept by
+expo-router's override, `layouts/StackClient.js:84-104`).
+
+**Consequence.** Landing on a tab's main page must pop that tab's Stack FIRST
+(`POP_TO_TOP` aimed at its key), then jump — `useGoToMain` in
+`lib/navigation.ts`.
+
+---
+
+## `replace` / `navigate` to `(tabs)` from a root-Stack screen mounts a SECOND `(tabs)`
+
+**Measured by console probe, 2026-10-14 (against `d2de327`).** With
+`settings/*` pushed over `(tabs)` in the root Stack,
+`router.replace('/(tabs)/me')` and `router.navigate('/(tabs)')` each left two
+`(tabs)` routes in the root Stack (`#XOFn` over `#nCCx`; `#dYkh` over
+`#jVsK`). `router.dismissTo` is `POP_TO` (`global-state/router.js:77-78`): it
+pops back to the existing `(tabs)` (same key), and with nothing beneath it,
+replaces the current screen (`react-navigation/routers/StackRouter.js:334-376`).
+
+Still live: checkout → `replace('/published')` is this shape and mounts a
+second `(tabs)` (measured 2026-10-15; tracker).
+
+---
+
+## The first history entry holds the keyless URL-parsed state
+
+**Read and measured, 2026-10-20.** expo-router's `store.state` starts as the
+state parsed from the URL (`global-state/useStore.js:65`) and is handed to
+`NavigationContainer` as `initialState` (`ExpoRoot.js:135`). React Navigation
+does not fire `onStateChange` on first mount
+(`react-navigation/core/BaseNavigationContainer.js:305-306`), so
+`store.state` stays that parse. `useLinking` writes the first history entry
+from it (`fork/useLinking.js:268-287`). Measured on a cold `/`: record 0's
+state WAS `store.state` (same object), every route `NOKEY`, Explore branch
+only. A browser traversal to that entry resets with it
+(`fork/useLinking.js:161-165`), and rehydration gives every keyless route a
+new key (`react-navigation/routers/StackRouter.js:81`), so every screen
+remounts.
+
+Any state change after mount makes `onStateChange` rewrite the current entry
+with the keyed state (`fork/useLinking.js:359`, :365). That is why cold
+`/event/<id>` was already immune (`TabStack`'s param strip is such a change),
+and it is how `ColdEntryHistoryFix` (`app/_layout.tsx`) fixes the rest.
+Upstream: expo/expo#50317 (Sep 27 comment), #45588.
+
+---
+
+## Generated typed routes can be stale, so `tsc` can pass falsely
+
+**Observed, 2026-10-20.** With `experiments.typedRoutes`, the dev server
+regenerates `.expo/types/router.d.ts` from the route tree. After the per-tab
+restructure, prompts 2 and 3 reported `tsc` clean; on 2026-10-20, with the
+types regenerated, `tsc` failed at that same HEAD (`8f08034`) —
+`lib/navigation.ts` still passed `'/(tabs)'`, no longer a typed route.
+Runtime was unaffected (the group path still resolved).
+
+**Consequence.** A `tsc` result after a route move counts only once the
+dev server has regenerated the types against the current tree (CLAUDE.md →
+"Name the verification baseline").

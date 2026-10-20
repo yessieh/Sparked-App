@@ -18,6 +18,9 @@ friction is real.
 What this does NOT change: commit or push only when actually asked. The rule
 governs WHERE a requested commit goes, not whether an unrequested one happens.
 
+A requested commit contains only the job it was asked for — no bundled
+follow-ups (a1500f3 combined two jobs into one commit).
+
 # Verification budget
 
 Machine-verify logic and state (typecheck, DOM/state checks, API probes). Never attempt visual verification of animations or motion via browser screenshots; list those for human feel-pass instead.
@@ -39,6 +42,8 @@ When reporting any verification, name what it was checked against and what that 
 Where staleness is possible, add an independent positive check that the expected content is present — grep for a known-new marker, or compare against a count supplied by the reviewer — rather than relying on the comparison alone.
 
 Same failure mode as **Migrations are immutable once applied** above: `supabase migration list` compares version numbers and reports all-green while file contents and the live schema disagree.
+
+A tsc result counts only after typed routes are regenerated against the current route tree; prompts 2-3 of the per-tab arc reported a stale clean.
 
 # Decision protocol
 

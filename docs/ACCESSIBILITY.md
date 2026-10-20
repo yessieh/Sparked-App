@@ -3230,3 +3230,98 @@ untouched — no file under `supabase/` changed in `ac14fac..243d146`.
 signed out, 2026-09-28 → 2026-10-14. `npx tsc --noEmit` exits 0;
 `npx expo lint` **63** (was 64; `b917475` removed one `no-unused-expressions`
 warning by turning a bare ternary into an arrow body).
+
+---
+
+# Entry 15 — 2026-10-20 — Per-tab Stacks — focus regression
+
+**The arc:** `(tabs)` became three Stacks — Explore, Saved, Me — so Back walks
+the trail inside the tab you are in (`35db3e9..a1500f3`; SPARKED_STATE.md →
+NAVIGATION & ENGAGEMENT SURFACES → PER-TAB STACKS). Every screen moved
+navigator, so every focus rule from Entry 14 had to be re-proven. No focus
+rule changed.
+
+## What the restructure put at risk, and how it held
+
+- **A Stack without `ScreenFocus` loses all focus handling, silently.** The
+  controller looks up the container of the LEAF route it navigated to; a
+  screen with no wrapper has none, and `settle()` gives up after 30 frames.
+  Every tab Stack gets the wrapper from one place —
+  `components/TabStack.tsx`'s `screenLayout`.
+- **Screens covered inside a tab's Stack** get `display:none` from the Stack
+  AND `inert` from their own wrapper. "Outside" (tabbable elements inside
+  hidden screens) stayed **0** on every row driven in prompts 2, 3 and 5,
+  including screens covered inside a Stack.
+- **Re-tapping the active tab** now pops its Stack (a `POP_TO_TOP`, a Back
+  action to the controller); focus still stays on the tab, because the
+  "focus is inside `role=tablist`" check runs first.
+
+## Machine-driven rows (signed out, `localhost:8081`)
+
+- Content navigation → the new screen's level-1 heading (event, organizer,
+  each settings screen).
+- Back → the element that opened the screen (Event A → Organizer → Event B →
+  Back × 3 restored the organizer link, then the card).
+- Tab press, click AND Enter → focus stays on the tab; re-tap → main page.
+- Cold load and cold deep links → focus does not move.
+- Cross-tab "main page" jumps (`useGoToMain`) → the target's heading.
+
+## Human verification — Jas, NVDA + keyboard (as reported, 2026-10-20)
+
+- Focus into events and back: lands on the heading, returns to the opener.
+- The tab bar keeps focus on the tab.
+- One level-1 heading per screen (NVDA `H`).
+- Settings screens: heading on arrival, Back returns to the Me row; the
+  Interests tile-move focus (Entry 12) still lands on the next tile.
+- The event wizard's step headings and Leave flow.
+- Cold links.
+- Hidden screens unreachable by Tab and by the reading cursor.
+
+## INTERMITTENT: Enter on a link sometimes did nothing under NVDA
+
+**Observed by Jas:** Enter on an Explore card title — and once on a Me
+settings row — failed to open the screen in some sessions with a freshly
+started NVDA, and passed in other sessions. Not reproduced on demand; no
+cause established. It is recorded, not diagnosed: the leading hypothesis
+(NVDA in BROWSE mode intercepting Enter before the page sees a key event) is
+UNVERIFIED.
+
+**Data point — Jas, 2026-10-20:** a session of a few hours in the Sparked web
+app, NVDA freshly relaunched; **Space** on the focused card did nothing.
+
+**Capture procedure for next time:**
+1. Note the NVDA mode when it fails — browse or focus (toggle with
+   **Insert+Space**). Insert+Space plays NVDA's mode-change sound rather
+   than speaking the mode by default. To hear it named, NVDA menu →
+   Preferences → Settings → Browse Mode → uncheck "Audio indication of focus
+   and browse modes".
+2. Try **Space** on the same element, then Enter again after toggling the
+   mode.
+3. Note how long the NVDA session had been running, and whether it was
+   started before or after the page loaded.
+4. Note the element (card title, settings row) and the URL.
+
+Tracker: "Intermittent NVDA Enter failure" (watch item).
+
+## What this entry does NOT establish
+
+- **Nothing about native iOS / Android.** The Stacks exist on native too, but
+  every focus behaviour here is web-only, and the cold-entry fix
+  (`ColdEntryHistoryFix`) is web-only by code. A native pass is on the
+  tracker's real-device item.
+- **The intermittent NVDA failure above** — neither its cause nor its
+  frequency.
+- **Checkout → `published`** was not driven live (a real publish writes
+  data); it still mounts a second `(tabs)` — tracker.
+
+## Privilege gate — N/A, stated
+
+Every commit in this arc is client-only: no SQL, no migration, no schema
+object, nothing reachable from PostgREST. No file under `supabase/` changed in
+`35db3e9..a1500f3`.
+
+**Baseline:** `main` @ `a1500f3`, driven on the Expo web dev server at
+`localhost:8081` (in-app browser, 1024-wide and 390-wide), signed out by
+machine and signed in by Jas, 2026-10-14 → 2026-10-20. `npx tsc --noEmit`
+exits 0 with typed routes regenerated against the current route tree;
+`npx expo lint` 63.

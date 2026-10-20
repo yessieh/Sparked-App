@@ -431,9 +431,10 @@ Entry 14. Web only — native is unchanged.
   prominent visible text at the top of the screen. No invented heading text,
   no visually hidden headings, no visual change from marking one.
 - **`(tabs)` `backBehavior = "history"`.** In-app Back returns to the
-  previous screen, not Explore. Known limit: two levels deep inside a reused
-  route (Event A → Organizer → Event B) the second Back reaches Explore — the
-  per-tab stacks arc.
+  previous screen, not Explore. The two-deep limit (Event A → Organizer →
+  Event B, second Back reached Explore) is **RESOLVED by per-tab Stacks**
+  (`8f4ac39`, see PER-TAB STACKS below): Back now walks the tab's own Stack,
+  and `history` only decides where Back goes from a tab's main page.
 - **Create forms (event wizard, Curbside form) — the top-left exit is an
   ESCAPE HATCH, not step-back.**
   - One borderless button: mirrored exit icon + the word "leave"; accessible
@@ -452,6 +453,54 @@ Entry 14. Web only — native is unchanged.
     (a profile form) and checkout (payment details) DO hold input, and
     whether they get the leave confirmation is OPEN (tracker, "Carried out
     of the screen-focus arc": "workspace/edit and checkout hold input").
+
+### PER-TAB STACKS (LOCKED 2026-10-20)
+
+Per-tab stacks arc, `35db3e9..a1500f3`; focus evidence in
+`docs/ACCESSIBILITY.md` Entry 15, library facts in `docs/STACK_FACTS.md`
+(entries dated 2026-10-20).
+
+- **Structure — Option 1.** One Stack per tab (Explore, Saved, Me) under
+  `(tabs)`, each built by `components/TabStack.tsx`; screens that belong to
+  more than one tab are SHARED through expo-router array groups
+  (`(explore,saved,me)/`, `(me,explore)/`). Group segments never reach a URL,
+  so **public URLs are unchanged** — `/event/<id>`, `/organizer/<id>`,
+  `/workspace`, `/create`, `/published`, `/saved`, `/me`, `/settings/<name>`.
+- **(b) — a tab reopens where it was left; re-tapping the ACTIVE tab returns
+  to its main page** (the library default; no custom re-tap code).
+- **Links open inside the tab you are in.**
+  - `event/[id]`, `organizer/[id]` — shared by all three tabs.
+  - The create fork and `published` — shared by Me and Explore.
+  - Interests & blocks — shared by Me and Explore (Me's row opens it in Me,
+    Explore's "Edit blocks" in Explore).
+  - Notifications, Privacy, Appearance, Help — Me only. Settings keep the
+    tab bar: the chrome rule hides it only where there is unsaved input.
+  - Workspace — Me only.
+  - Create forms, checkout, auth, `reset-password` and `workspace/edit` stay
+    chrome-less in the root Stack.
+- **Cold links.** Content (`/event`, `/organizer`, `/published`) opens in
+  EXPLORE with the feed underneath; settings open in ME with Me underneath
+  (each tab's `_layout.tsx` declares its `anchor`). **Accepted edge: a cold
+  `/settings/interests` opens in Explore** (feed underneath, Back → `/`). The
+  shared-route tie falls to config order, where Explore is first; the only
+  fix found relied on the router's `isInitial` tie-break, which the library
+  source itself marks unfinished (TODO), plus an extra navigator — tried and
+  reverted.
+- **Jumps to a tab's main page go ONLY through `lib/navigation.ts`** —
+  `backOr(to)` for "Back, else land on X" and `useGoToMain()` for "this tab's
+  main page, nothing duplicated". Never a raw `replace` / `navigate` to a tab
+  root: inside a tab's Stack those push a duplicate main page, and from a
+  root-Stack screen they mount a second `(tabs)` navigator.
+- **The Me tab's link depends on file order** — `(me)/me.tsx` must sort first
+  among the files directly in `(me)/` (`(me)/_layout.tsx` documents why).
+- **Deep-link params are cleared from main pages and tab routes** in
+  `TabStack` (a cold link otherwise left `/?id=…` on Explore's URL and tab).
+- **Chrome ← cold-entry fix (web only).** `ColdEntryHistoryFix` in
+  `app/_layout.tsx` dispatches one no-op `replaceParams` after mount so the
+  first history entry carries route keys and Chrome ← to it no longer
+  rebuilds every screen (expo/expo#50317, #45588). Pinned to expo-router
+  57.0.x by a dev-only warning; remove when upstream fixes the first history
+  record.
 
 ---
 
