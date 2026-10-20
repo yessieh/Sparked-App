@@ -10,7 +10,7 @@ import {
 } from '@expo-google-fonts/montserrat';
 import { useFonts } from 'expo-font';
 import * as Linking from 'expo-linking';
-import { Stack } from 'expo-router';
+import { Stack, useNavigationContainerRef } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
@@ -36,6 +36,49 @@ function AuthDeepLinkHandler() {
       });
     }
   }, [url]);
+  return null;
+}
+
+// Web only: Chrome ← to the FIRST history entry rebuilt every screen,
+// losing every tab's session state. expo-router 57 writes that entry from
+// the state it parsed from the URL, which carries no route keys
+// (build/fork/useLinking.js:268-287); traversing back to it rehydrates
+// every route with a new key. Any state change after mount makes it rewrite
+// the entry with the keyed live state (useLinking.js:359, :365) — so ONE
+// no-op replaceParams once the container is ready. Public API only.
+// Upstream: expo/expo#50317, expo/expo#45588. REMOVE WHEN UPSTREAM FIXES THE
+// FIRST HISTORY RECORD. Diagnosed and measured in the per-tab stacks arc,
+// prompts 4-5 (2026-10-20, against 8f08034).
+function ColdEntryHistoryFix() {
+  const nav = useNavigationContainerRef();
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    if (__DEV__) {
+      // Stands in for a direct check of the history entry, which would mean
+      // reading expo-router internals: any upgrade announces itself here.
+      const { version } = require('expo-router/package.json') as { version: string };
+      if (!version.startsWith('57.0.')) {
+        console.warn(
+          `Cold-entry ← fix verified on expo-router 57.0.x (installed ${version}) — re-run the cold-entry probe and bump this pin.`,
+        );
+      }
+    }
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const nudge = () => {
+      if (!nav.isReady()) {
+        if (++tries < 100) timer = setTimeout(nudge, 16);
+        return;
+      }
+      const root = nav.getRootState();
+      const route = root.routes[root.index];
+      // Its OWN params object: nothing changes, nothing re-navigates — the
+      // state change is the whole point.
+      nav.dispatch({ type: 'REPLACE_PARAMS', payload: { params: route.params }, source: route.key, target: root.key } as never);
+    };
+    nudge();
+    return () => clearTimeout(timer);
+  }, [nav]);
   return null;
 }
 
@@ -109,6 +152,7 @@ export default function RootLayout() {
                 the same reason the retired TEST_ORIGIN was a shared constant. */}
             <OriginProvider>
               <AuthDeepLinkHandler />
+              {Platform.OS === 'web' && <ColdEntryHistoryFix />}
               <ThemedStack />
             </OriginProvider>
           </InterestsProvider>

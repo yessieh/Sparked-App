@@ -1703,6 +1703,12 @@ migration lands between, the NAME is the anchor, not the number.
       "Blocked · <Interest>" chip still carries the state in words, and the
       filter's off/on states differ only by label ("Blocked" / "Showing
       blocked").
+      **Per-tab stacks adds (2026-10-20): native check of the cold-entry
+      nudge gate.** `ColdEntryHistoryFix` (`app/_layout.tsx`) is web-only by
+      code — rendered only when `Platform.OS === 'web'`, body gated again.
+      Cold launch, tap through the tabs, open an event, native Back:
+      behaviour identical, no new console output. Not driven: no Expo Go
+      session was connected.
 - [ ] **Gallery counter ↔ bookmark collision check at ALL scroll offsets.**
       Event Detail floats the back/bookmark chips ABSOLUTELY over the hero
       gallery, which also carries its own "1/3" counter and dot indicators.

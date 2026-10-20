@@ -23,9 +23,12 @@
 import { router, useNavigationContainerRef } from 'expo-router';
 import { useCallback } from 'react';
 
+// Public URLs, not group paths: since the per-tab Stacks, '/(tabs)' and
+// '/(tabs)/me' are no longer typed routes (expo-router's generated
+// .expo/types/router.d.ts), though they still resolved at runtime.
 const LANDINGS = {
-  explore: '/(tabs)',
-  me: '/(tabs)/me',
+  explore: '/',
+  me: '/me',
   workspace: '/workspace',
   create: '/create',
 } as const;
