@@ -44,8 +44,8 @@ function ThemedStack() {
   return (
     <Stack
       // Same wrapper as the (tabs) navigator: inert when not focused, and
-      // focus-on-navigation for every root-Stack screen (settings/*,
-      // create/*, auth, reset-password, workspace/edit). Web only — see
+      // focus-on-navigation for every root-Stack screen (create/*, auth,
+      // reset-password, workspace/edit). Web only — see
       // components/ScreenFocus.tsx.
       screenLayout={({ children }) => <ScreenFocus>{children}</ScreenFocus>}
       screenOptions={{
@@ -73,12 +73,9 @@ function ThemedStack() {
       <Stack.Screen name="create/curbside" />
       <Stack.Screen name="create/event" />
       <Stack.Screen name="create/checkout" />
-      {/* Settings — reached from the Me hub rows (no gear). Stubs this stage. */}
-      <Stack.Screen name="settings/interests" />
-      <Stack.Screen name="settings/notifications" />
-      <Stack.Screen name="settings/privacy" />
-      <Stack.Screen name="settings/appearance" />
-      <Stack.Screen name="settings/help" />
+      {/* Settings moved into (tabs) — Me's Stack, Interests shared with
+          Explore — so they keep the tab bar: they hold no unsaved input.
+          Declared there by folder, not here. */}
       <Stack.Screen name="reset-password" />
     </Stack>
   );

@@ -44,12 +44,12 @@ import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
-import { GradientButton, SecondaryButton } from '../../components/AuthControls';
-import { SubHeader } from '../../components/SubHeader';
-import { useAuth } from '../../lib/auth';
-import { useCategories, type Category } from '../../lib/categories';
-import { useInterests, type Stance } from '../../lib/interests';
-import { brand, useTheme } from '../../theme';
+import { GradientButton, SecondaryButton } from '../../../../components/AuthControls';
+import { SubHeader } from '../../../../components/SubHeader';
+import { useAuth } from '../../../../lib/auth';
+import { useCategories, type Category } from '../../../../lib/categories';
+import { useInterests, type Stance } from '../../../../lib/interests';
+import { brand, useTheme } from '../../../../theme';
 
 /** WCAG 2.5.5, set explicitly on both axes (docs/ACCESSIBILITY.md Entry 3). */
 const TARGET = 44;
