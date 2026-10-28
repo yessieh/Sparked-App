@@ -735,6 +735,29 @@ and verified in Cursor/Claude Code.
       a signup flow that cannot verify an address is a compliance problem, not
       just a deliverability one.
 
+#### Supply-chain security (added 2026-10-28)
+
+- [x] **Security check 2026-10-28: clean** — no worm indicators (no Bun, no
+      planted hooks, no malicious lockfile versions, no secrets in repo or
+      history); recorded in the install-hygiene commit
+      (`apps/mobile/.npmrc` `ignore-scripts=true`, `engines` / `packageManager`
+      pins, `npm ci`).
+- [ ] **npm audit: 26 findings** (1 critical `shell-quote`, 13 high), **none
+      malware**, mostly the Expo toolchain. Triage with the next Expo SDK
+      upgrade — **never `npm audit fix --force`**. *Why:* forced fixes jump
+      Expo-pinned majors and break the build; the SDK upgrade moves them
+      together.
+- [ ] **Pre-launch security audit: add a lockfile-vs-malware-advisory scan and
+      a key inventory** (which keys exist, where, who holds them). **Rotate keys
+      only after confirming no worm is present.** *Why:* some current npm worms
+      wipe the home directory when a stolen token is revoked, so rotation is
+      the last step, not the first.
+- [ ] **⚠️ VERIFY AT FIRST EAS BUILD: the committed `.npmrc` applies on EAS
+      build servers too** — confirm native builds don't need an install
+      script. *Why:* `ignore-scripts=true` is verified on web only (lint 63,
+      tsc clean, Explore loads, 2026-10-28); a native dependency that relies
+      on a postinstall would fail there first.
+
 ---
 
 ## ARC: Privilege hardening (migrations 1-3 — the arc the Curbside anonymity arc waits on)
