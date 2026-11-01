@@ -26,6 +26,7 @@ import SparkedLogo from '../../../components/SparkedLogo';
 import { useAuth } from '../../../lib/auth';
 import { useEngagement } from '../../../lib/engagement';
 import { eventCountdown } from '../../../lib/eventTime';
+import { enterActivates } from '../../../lib/linkKeyboard';
 import { useGoToMain } from '../../../lib/navigation';
 import { supabase } from '../../../lib/supabase';
 import {
@@ -423,6 +424,7 @@ function SavedPreviewCard({ theme, event, loading, onPress, onExplore }: {
 
         <Pressable
           onPress={onExplore}
+          {...enterActivates(onExplore)}
           accessibilityRole="link"
           accessibilityLabel="Explore events near you"
           style={({ pressed }) => ({

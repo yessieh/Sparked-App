@@ -35,6 +35,7 @@ import { GradientFill } from '../../../../components/AuthControls';
 import EventStub, { type FeedEvent } from '../../../../components/EventStub';
 import { useAuth } from '../../../../lib/auth';
 import { useEngagement } from '../../../../lib/engagement';
+import { enterActivates } from '../../../../lib/linkKeyboard';
 import { backOr } from '../../../../lib/navigation';
 import { socialUrl, type SocialPlatform } from '../../../../lib/socialLinks';
 import { supabase } from '../../../../lib/supabase';
@@ -174,6 +175,7 @@ function IconLink({
   return (
     <Pressable
       onPress={() => url && Linking.openURL(url)}
+      {...enterActivates(active ? () => url && Linking.openURL(url) : null)}
       disabled={!active}
       accessibilityRole="link"
       accessibilityState={{ disabled: !active }}
@@ -538,6 +540,7 @@ export default function OrganizerProfileScreen() {
             onPress={() =>
               router.push({ pathname: '/workspace/edit', params: { id } })
             }
+            {...enterActivates(() => router.push({ pathname: '/workspace/edit', params: { id } }))}
             accessibilityRole="link"
             accessibilityLabel="Edit public profile"
             hitSlop={4}

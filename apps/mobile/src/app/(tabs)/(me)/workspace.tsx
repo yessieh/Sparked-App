@@ -40,6 +40,7 @@ import {
 import { GradientButton } from '../../../components/AuthControls';
 import EventStub, { type FeedEvent } from '../../../components/EventStub';
 import { hasEnded } from '../../../lib/eventTime';
+import { enterActivates } from '../../../lib/linkKeyboard';
 import { backOr, useGoToMain } from '../../../lib/navigation';
 import { supabase } from '../../../lib/supabase';
 import {
@@ -832,6 +833,7 @@ function WorkspaceDetail({
           onPress={() =>
             router.push({ pathname: '/organizer/[id]', params: { id: workspaceId } })
           }
+          {...enterActivates(() => router.push({ pathname: '/organizer/[id]', params: { id: workspaceId } }))}
           accessibilityRole="link"
           accessibilityLabel="View public profile"
           style={({ pressed }) => ({

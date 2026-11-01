@@ -21,6 +21,7 @@ import Svg, { Path, Rect } from 'react-native-svg';
 
 import { useReducedMotion } from '../lib/useReducedMotion';
 import { eventCountdown, eventDateLabel, eventTimeLabel } from '../lib/eventTime';
+import { enterActivates } from '../lib/linkKeyboard';
 import { brand, useTheme } from '../theme';
 import { categoryColor, laneFor, laneStripeColor } from '../theme/categoryColors';
 import { GradientButton, GradientFill, SecondaryButton } from './AuthControls';
@@ -541,6 +542,12 @@ export default function EventDetailView({
                         params: { id: event.workspace_id as string },
                       })
                     }
+                    {...enterActivates(() =>
+                      router.push({
+                        pathname: '/organizer/[id]',
+                        params: { id: event.workspace_id as string },
+                      }),
+                    )}
                     accessibilityRole="link"
                     accessibilityLabel={`View ${event.organizer_name}'s profile`}
                     style={({ pressed }) => ({

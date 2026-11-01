@@ -18,6 +18,7 @@ import SparkedLogo from '../../../components/SparkedLogo';
 import { useAuth } from '../../../lib/auth';
 import { useEngagement } from '../../../lib/engagement';
 import { hasEnded, savedBucket, type SavedBucket } from '../../../lib/eventTime';
+import { enterActivates } from '../../../lib/linkKeyboard';
 import { useGoToMain } from '../../../lib/navigation';
 import { supabase } from '../../../lib/supabase';
 import { brand, useTheme } from '../../../theme';
@@ -394,25 +395,12 @@ export default function Saved() {
           {/* All only (ruled by Jas, polish batch 2026-11-01). Me's Saved-card
               link exactly — words, type, colour, role, 44 tall — copied from
               (me)/me.tsx:424-449, centred here because the box is centred.
-              ENTER IS WIRED BY HAND: rnw's PressResponder treats role="link"
-              as a native element and skips onPress on key-up, expecting a
-              real <a href> (react-native-web 0.21.2, dist/modules/
-              usePressEvents/PressResponder.js:215-219) — this renders a
-              <div role="link">, so without onKeyDown it is inert to Enter
-              (measured 2026-11-01; Me's link has the same defect). Enter
-              only, EventStub's titleLinkProps precedent; untyped spread
-              because RN 0.86 does not type onKeyDown. */}
+              Enter is wired by enterActivates — rnw skips onPress on Enter
+              for role="link" (lib/linkKeyboard.ts). */}
           {filter === 'all' && (
             <Pressable
               onPress={() => goToMain('explore')}
-              {...{
-                onKeyDown: (e: { key?: string; preventDefault?: () => void }) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault?.();
-                    goToMain('explore');
-                  }
-                },
-              }}
+              {...enterActivates(() => goToMain('explore'))}
               accessibilityRole="link"
               accessibilityLabel="Explore events near you"
               style={({ pressed }) => ({

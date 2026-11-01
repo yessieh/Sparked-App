@@ -103,6 +103,7 @@ import {
   type SearchFilter,
 } from '../lib/eventFilters';
 import { hasEnded } from '../lib/eventTime';
+import { enterActivates } from '../lib/linkKeyboard';
 import type { Place } from '../lib/origin';
 import { highlightParts, matchLabels, overflowCap } from '../lib/searchMatch';
 import { supabase } from '../lib/supabase';
@@ -1244,6 +1245,7 @@ function BlockedMatches({
               screen — role="link" — not a promoted action. */}
           <Pressable
             onPress={onEditBlocks}
+            {...enterActivates(onEditBlocks)}
             role="link"
             aria-label="Edit blocks in Settings"
             style={{ alignSelf: 'flex-start', minHeight: TARGET, minWidth: TARGET, justifyContent: 'center' }}
