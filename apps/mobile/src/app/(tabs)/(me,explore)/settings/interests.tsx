@@ -22,12 +22,15 @@
 //   • Every button is 44×44, not the reference's 26×26 (WCAG 2.5.5, the house
 //     rule at components/Pill.tsx:53-55).
 //
-// INTERACTION — DIRECT MOVES (PROVISIONAL). Every tile is the category name
-// plus two buttons, one per OTHER bucket; each destination has ONE symbol:
-//     ✓  → I'm into      −  → Not for me      ✕  → Undecided
+// INTERACTION — DIRECT MOVES. Every tile is the category name plus two
+// buttons, one per OTHER bucket; each destination has ONE symbol, the same on
+// every tab, always in the order ✓ − ✕ (LOCKED by Jas, polish batch 2026-10-28;
+// it was − → Not for me and ✕ → Undecided, the reverse of what they suggest):
+//     ✓  → I'm into      −  → Undecided      ✕  → Not for me
+//     Undecided tile:   ✓  ✕
 //     I'm into tile:    −  ✕
-//     Undecided tile:   ✓  −
-//     Not for me tile:  ✓  ✕
+//     Not for me tile:  ✓  −
+// Every button is named "Move <Category> to <bucket>".
 // The tile body is not a control. I'm into ↔ Not for me is the provider's
 // UPDATE path (0034: `update (stance)`). Response behaviour VERIFIED
 // 2026-09-25 by fetch-wrapper capture in the browser: PATCH 200 returns the
@@ -81,24 +84,20 @@ const STANCE_OF: Record<Bucket, Stance | null> = { into: 'into', undecided: null
 /** ONE symbol per destination, everywhere on the screen. */
 const ICON_TO: Record<Bucket, 'checkmark' | 'remove' | 'close'> = {
   into: 'checkmark',
-  blocked: 'remove',
-  undecided: 'close',
+  undecided: 'remove',
+  blocked: 'close',
 };
 
-/** Each tile's two buttons, in order — the two buckets it is NOT in. */
+/** Each tile's two buttons, in order — the two buckets it is NOT in, always
+ *  in ✓ − ✕ order. */
 const DESTINATIONS: Record<Bucket, [Bucket, Bucket]> = {
-  into: ['blocked', 'undecided'],
   undecided: ['into', 'blocked'],
+  into: ['undecided', 'blocked'],
   blocked: ['into', 'undecided'],
 };
 
-/** The button's accessible name: the category AND the result. */
-const actionLabel = (label: string, to: Bucket): string =>
-  to === 'into'
-    ? `Add ${label} to I’m into`
-    : to === 'blocked'
-      ? `Block ${label}`
-      : `Move ${label} to Undecided`;
+/** The button's accessible name: the category AND the bucket it moves to. */
+const actionLabel = (label: string, to: Bucket): string => `Move ${label} to ${BUCKET_NAME[to]}`;
 
 /** DOM ids for the tabs pattern's aria-controls / aria-labelledby. */
 const tabId = (b: Bucket) => `interests-tab-${b}`;
