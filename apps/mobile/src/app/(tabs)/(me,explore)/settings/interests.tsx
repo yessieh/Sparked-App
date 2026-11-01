@@ -7,7 +7,8 @@
 //
 // WHERE THIS DIVERGES FROM THE REFERENCE, AND WHY (locked rules win):
 //   • TABS, not three stacked sections (PROVISIONAL): Undecided · I'm into ·
-//     Not for me, Undecided selected on every open, every tile shown — no peek
+//     Not for me, Undecided selected on open (unless ?tab asks for another
+//     bucket — "Edit blocks" opens Not for me), every tile shown — no peek
 //     caps, no "Show more". The selected tab is NOT gradient: a tab is
 //     navigation, not an action, and the spark gradient is reserved for
 //     actionable elements (theme/colors.ts:44-48). It takes an underline.
@@ -43,7 +44,7 @@
 // even when the message repeats. Both in docs/ACCESSIBILITY.md Entry 12.
 
 import { Ionicons } from '@expo/vector-icons';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
@@ -61,7 +62,8 @@ const CRUMB = 'Settings · Interests & blocks';
 
 type Bucket = Stance | 'undecided';
 
-/** Tab order, left to right. Undecided first and selected on every open. */
+/** Tab order, left to right. Undecided first, and selected on open unless
+ *  the link's ?tab names another bucket. */
 const TABS: Bucket[] = ['undecided', 'into', 'blocked'];
 
 /** Bucket names as the tabs and the announcements say them. */
@@ -333,8 +335,15 @@ function SignedInInterests() {
     }, [refresh]),
   );
 
-  /** The selected tab. Plain component state: Undecided on every open. */
-  const [tab, setTab] = useState<Bucket>('undecided');
+  /** The selected tab. Plain component state: Undecided on every open, unless
+   *  the link asked for a bucket — ExploreSearch's "Edit blocks" opens
+   *  `?tab=blocked`. Read ONCE, at mount: switching tabs afterwards does not
+   *  rewrite the address (accepted, polish batch 2026-10-28). Anything that
+   *  is not a bucket id falls back to Undecided. */
+  const { tab: requestedTab } = useLocalSearchParams<{ tab?: string }>();
+  const [tab, setTab] = useState<Bucket>(() =>
+    TABS.includes(requestedTab as Bucket) ? (requestedTab as Bucket) : 'undecided',
+  );
 
   // --- The live region -----------------------------------------------------
   // The NODE is mounted unconditionally below and only its child changes

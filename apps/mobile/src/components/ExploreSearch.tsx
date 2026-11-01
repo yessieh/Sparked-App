@@ -1083,7 +1083,9 @@ export default function ExploreSearch({
                 renderEvent={renderEvent}
                 onEditBlocks={() => {
                   onClose();
-                  router.push('/settings/interests');
+                  // Opens on the "Not for me" tab (polish batch, ruled
+                  // 2026-10-28): Interests reads ?tab once when it opens.
+                  router.push({ pathname: '/settings/interests', params: { tab: 'blocked' } });
                 }}
               />
             )}
