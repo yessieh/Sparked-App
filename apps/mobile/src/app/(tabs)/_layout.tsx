@@ -23,6 +23,13 @@ export default function TabsLayout() {
       backBehavior="history"
       screenOptions={{
         headerShown: false,
+        // Tapping a tab always lands on its MAIN page: leaving a tab pops its
+        // Stack back to the main page (react-navigation/bottom-tabs/views/
+        // BottomTabView.js:90-100). The main page itself stays mounted, so its
+        // session state survives. Ruled by Jas 2026-11-01, superseding the
+        // per-tab arc's (b) "a tab reopens where it was left" — Me →
+        // Appearance → Explore → Me reopening Appearance read as broken.
+        popToTopOnBlur: true,
         sceneStyle: { backgroundColor: theme.colors.bg },
         tabBarStyle: {
           backgroundColor: theme.colors.bgDeep,
