@@ -18,6 +18,7 @@ import SparkedLogo from '../../../components/SparkedLogo';
 import { useAuth } from '../../../lib/auth';
 import { useEngagement } from '../../../lib/engagement';
 import { hasEnded, savedBucket, type SavedBucket } from '../../../lib/eventTime';
+import { useGoToMain } from '../../../lib/navigation';
 import { supabase } from '../../../lib/supabase';
 import { brand, useTheme } from '../../../theme';
 import { laneFor } from '../../../theme/categoryColors';
@@ -113,6 +114,7 @@ export default function Saved() {
   const theme = useTheme();
   const { session } = useAuth();
   const { savedIds, goingIds, toggleSave, toggleRsvp, refresh, rsvpDelta } = useEngagement();
+  const goToMain = useGoToMain();
   const [rows, setRows] = useState<SavedEventRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // All is the default — nothing is ever hidden by default (locked ruling).
@@ -389,6 +391,51 @@ export default function Saved() {
               ? "Nothing marked Going yet — tap the check on any event you're attending."
               : 'Tap the bookmark icon on any event to save it.'}
           </Text>
+          {/* All only (ruled by Jas, polish batch 2026-11-01). Me's Saved-card
+              link exactly — words, type, colour, role, 44 tall — copied from
+              (me)/me.tsx:424-449, centred here because the box is centred.
+              ENTER IS WIRED BY HAND: rnw's PressResponder treats role="link"
+              as a native element and skips onPress on key-up, expecting a
+              real <a href> (react-native-web 0.21.2, dist/modules/
+              usePressEvents/PressResponder.js:215-219) — this renders a
+              <div role="link">, so without onKeyDown it is inert to Enter
+              (measured 2026-11-01; Me's link has the same defect). Enter
+              only, EventStub's titleLinkProps precedent; untyped spread
+              because RN 0.86 does not type onKeyDown. */}
+          {filter === 'all' && (
+            <Pressable
+              onPress={() => goToMain('explore')}
+              {...{
+                onKeyDown: (e: { key?: string; preventDefault?: () => void }) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault?.();
+                    goToMain('explore');
+                  }
+                },
+              }}
+              accessibilityRole="link"
+              accessibilityLabel="Explore events near you"
+              style={({ pressed }) => ({
+                alignSelf: 'center',
+                paddingHorizontal: 9,
+                minHeight: 44,
+                justifyContent: 'center',
+                borderRadius: 10,
+                opacity: pressed ? 0.6 : 1,
+              })}
+            >
+              <Text
+                style={{
+                  fontFamily: theme.fonts.bodySemiBold,
+                  fontSize: 12,
+                  fontWeight: '800',
+                  color: brand.brightOrange,
+                }}
+              >
+                Explore events near you →
+              </Text>
+            </Pressable>
+          )}
         </View>
       ) : (
         <View style={{ gap: 26 }}>
