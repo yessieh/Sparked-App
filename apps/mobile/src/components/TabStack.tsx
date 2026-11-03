@@ -69,7 +69,9 @@ export default function TabStack() {
   return (
     <Stack
       screenLayout={({ children, route: screen, navigation: screenNav }) => (
-        <ScreenFocus>
+        // No `inert` on Stack screens: a covered one is already display:none
+        // + aria-hidden (components/ScreenFocus.tsx, the `inert` prop).
+        <ScreenFocus inert={false}>
           <MainPageParams
             name={screen.name}
             routeKey={screen.key}

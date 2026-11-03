@@ -86,11 +86,11 @@ function ThemedStack() {
   const theme = useTheme();
   return (
     <Stack
-      // Same wrapper as the (tabs) navigator: inert when not focused, and
-      // focus-on-navigation for every root-Stack screen (create/*, auth,
-      // reset-password, workspace/edit). Web only — see
-      // components/ScreenFocus.tsx.
-      screenLayout={({ children }) => <ScreenFocus>{children}</ScreenFocus>}
+      // Focus-on-navigation for every root-Stack screen (create/*, auth,
+      // reset-password, workspace/edit). No `inert`: the stack already hides a
+      // covered screen with display:none + aria-hidden — see
+      // components/ScreenFocus.tsx. Web only.
+      screenLayout={({ children }) => <ScreenFocus inert={false}>{children}</ScreenFocus>}
       screenOptions={{
         headerShown: false,
         contentStyle: { backgroundColor: theme.colors.bg },

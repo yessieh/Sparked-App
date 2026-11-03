@@ -1,7 +1,8 @@
 // Per-screen focus wrapper, web only. Two jobs:
 //
-// 1. INERT. A NON-FOCUSED screen renders inside an `inert` subtree, so Tab and
-//    screen readers stop walking it. On web the tabs navigator leaves every
+// 1. INERT — TAB SCREENS ONLY (Stack screens opt out; see the `inert` prop
+//    below). A NON-FOCUSED tab screen renders inside an `inert` subtree, so Tab
+//    and screen readers stop walking it. On web the tabs navigator leaves every
 //    visited screen mounted at display:flex / z-index -1 with only
 //    `aria-hidden` on it — react-navigation's BottomTabView falls back to a
 //    plain View because react-native-screens is disabled off-native, so its
@@ -345,7 +346,27 @@ function install(nav: NavRef) {
 
 const ContainerContext = createContext<React.RefObject<HTMLElement | null> | null>(null);
 
-export default function ScreenFocus({ children }: { children: React.ReactNode }) {
+/**
+ * `inert`: set it only where the navigator leaves an unfocused screen VISIBLE
+ * and reachable — the tabs navigator (display:flex, z-index -1, see header).
+ * Stack screens pass `inert={false}`: react-navigation's web stack already
+ * hides a covered screen with display:none (react-navigation/native-stack/
+ * views/NativeStackView.js:88-93, expo-router 57.0.4) AND aria-hidden="true"
+ * (react-navigation/elements/Screen.js:62). Measured 2026-11-02 with every
+ * `inert` stripped from the page: .focus() on a covered card was refused and
+ * 40 real Tab presses reached 0 elements in the covered screen. Adding inert
+ * on top meant a Back revealed the screen with THREE flips at once (display,
+ * aria-hidden, inert) and the controller focused into it immediately — the
+ * shape suspected of leaving NVDA's browse-mode buffer stale (Enter dead after
+ * Back until NVDA+F5; cf. WICG/inert#120, same sequence in the polyfill era).
+ */
+export default function ScreenFocus({
+  children,
+  inert = true,
+}: {
+  children: React.ReactNode;
+  inert?: boolean;
+}) {
   const focused = useIsFocused();
   const route = useRoute();
   const nav = useNavigationContainerRef();
@@ -377,7 +398,7 @@ export default function ScreenFocus({ children }: { children: React.ReactNode })
   if (Platform.OS !== 'web') return <>{children}</>;
   return (
     <ContainerContext.Provider value={containerRef}>
-      <View ref={setContainer} style={{ flex: 1 }} {...inertProps(!focused)}>
+      <View ref={setContainer} style={{ flex: 1 }} {...inertProps(inert && !focused)}>
         {children}
       </View>
     </ContainerContext.Provider>
