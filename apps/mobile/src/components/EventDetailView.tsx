@@ -20,7 +20,7 @@ import { Animated, Easing, Platform, Pressable, ScrollView, Text, View } from 'r
 import Svg, { Path, Rect } from 'react-native-svg';
 
 import { useReducedMotion } from '../lib/useReducedMotion';
-import { eventCountdown, eventDateLabel, eventTimeLabel } from '../lib/eventTime';
+import { eventCountdown, eventWhen } from '../lib/eventTime';
 import { enterActivates } from '../lib/linkKeyboard';
 import { brand, useTheme } from '../theme';
 import { categoryColor, laneFor, laneStripeColor } from '../theme/categoryColors';
@@ -227,6 +227,7 @@ export default function EventDetailView({
   // maps are Plus-only and Plus is never Curbside. See theme/categoryColors.ts.
   const siteMapTint = categoryColor(cats);
   const cd = eventCountdown(event.starts_at, event.ends_at);
+  const when = eventWhen(event.starts_at, event.ends_at);
   const shots = photos ?? placeholderPhotos(event.id, event.tier_id, stripe);
   const stripeColor = stampAnim.interpolate({
     inputRange: [0, 1],
@@ -294,13 +295,13 @@ export default function EventDetailView({
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
                   <RowIcon kind="cal" color={brand.flameRed} />
                   <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 13.5, color: theme.colors.textMuted }}>
-                    {eventDateLabel(event.starts_at)}
+                    {when.dateRow}
                   </Text>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11 }}>
                   <RowIcon kind="clock" color={brand.flameRed} />
                   <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 13.5, color: theme.colors.textMuted }}>
-                    {eventTimeLabel(event.starts_at, event.ends_at)}
+                    {when.timeRow}
                   </Text>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 11 }}>

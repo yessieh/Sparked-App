@@ -121,14 +121,49 @@ export function eventDateLabel(startsAtISO: string): string {
   });
 }
 
+/** "7:00pm" — device-local. */
+const clockLabel = (d: Date) =>
+  d
+    .toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+    .toLowerCase()
+    .replace(/\s/g, '');
+
 /** "6:00 – 9:00pm" (or "6:00pm" when no end) — device-local. */
 export function eventTimeLabel(startsAtISO: string, endsAtISO?: string | null): string {
-  const fmt = (d: Date) =>
-    d
-      .toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-      .toLowerCase()
-      .replace(/\s/g, '');
   const start = new Date(startsAtISO);
-  if (!endsAtISO) return fmt(start);
-  return `${fmt(start)} – ${fmt(new Date(endsAtISO))}`;
+  if (!endsAtISO) return clockLabel(start);
+  return `${clockLabel(start)} – ${clockLabel(new Date(endsAtISO))}`;
+}
+
+export type EventWhen =
+  /** Under 24 hours, or no end: `line` on cards; `dateRow` + `timeRow` on
+   *  Event Detail's calendar and clock rows. */
+  | { multiDay: false; line: string; dateRow: string; timeRow: string }
+  /** 24 hours or more: the same two lines on cards, Event Detail and the
+   *  wizard's Review. */
+  | { multiDay: true; dateRow: string; timeRow: string };
+
+/**
+ * THE event date display — every surface that shows when an event happens
+ * reads it from here (ruled by Jas 2026-11-03).
+ *
+ * A span of 24 hours or more names BOTH ends with their dates, on two lines —
+ * "Starts Sun, Nov 1 · 7:00pm" / "Ends Mon, Nov 30 · 10:00pm": one stored span
+ * (Nov 1 7:00pm → Nov 30 10:00pm) otherwise read "Sun, Nov 1 · 7:00pm –
+ * 10:00pm", a one-night event. Under 24 hours — overnight included — and no
+ * ends_at keep the one-day format, unchanged.
+ */
+export function eventWhen(startsAtISO: string, endsAtISO?: string | null): EventWhen {
+  const start = new Date(startsAtISO);
+  const end = endsAtISO ? new Date(endsAtISO) : null;
+  if (end && end.getTime() - start.getTime() >= 86_400_000) {
+    return {
+      multiDay: true,
+      dateRow: `Starts ${eventDateLabel(startsAtISO)} · ${clockLabel(start)}`,
+      timeRow: `Ends ${eventDateLabel(endsAtISO as string)} · ${clockLabel(end)}`,
+    };
+  }
+  const date = eventDateLabel(startsAtISO);
+  const time = eventTimeLabel(startsAtISO, endsAtISO);
+  return { multiDay: false, line: `${date} · ${time}`, dateRow: date, timeRow: time };
 }

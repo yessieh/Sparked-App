@@ -50,6 +50,7 @@ import { LeaveConfirm, useEdited } from '../../components/LeaveConfirm';
 import { useFocusHeadingOnChange } from '../../components/ScreenFocus';
 import { DateField, TimeField, format12h } from '../../components/pickers';
 import { useAuth } from '../../lib/auth';
+import { eventWhen } from '../../lib/eventTime';
 import { geocode, toWktPoint } from '../../lib/geocode';
 import { canonicalize, isBlocked, suggestMatches, titleCase } from '../../lib/moderation';
 import { backOr } from '../../lib/navigation';
@@ -1023,6 +1024,7 @@ export default function EventWizard() {
   const catLabel = (id: string) => categories.find((c) => c.id === id)?.label ?? id;
   const startsAt = combine(startDate, startTime);
   const endsAt = combine(endDate, endTime);
+  const when = eventWhen(startsAt, endsAt);
 
   const preview: FeedEvent = useMemo(
     () => ({
@@ -1571,9 +1573,16 @@ export default function EventWizard() {
               <View style={{ marginTop: 22 }}>
                 <SummaryRow label="Title" value={title.trim() || '—'} />
                 <SummaryRow label="Categories" value={cats.length ? cats.map(catLabel).join(', ') : '—'} />
+                {/* 24h+ spans: the same Starts / Ends lines the listing shows
+                    (lib/eventTime.ts eventWhen). Shorter spans keep this row's
+                    own wording. */}
                 <SummaryRow
                   label="When"
-                  value={`${days > 1 ? `${days} days` : 'Single day'} · ${format12h(startTime)}–${format12h(endTime)}`}
+                  value={
+                    when.multiDay
+                      ? `${when.dateRow}\n${when.timeRow}`
+                      : `${days > 1 ? `${days} days` : 'Single day'} · ${format12h(startTime)}–${format12h(endTime)}`
+                  }
                 />
                 <SummaryRow label="Where" value={venueName.trim() || address.trim() || '—'} />
                 <SummaryRow label="Photos" value={`${photos.length} of ${photoCap}`} />

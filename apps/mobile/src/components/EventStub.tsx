@@ -32,7 +32,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
-import { eventCountdown, eventDateLabel, eventTimeLabel } from '../lib/eventTime';
+import { eventCountdown, eventWhen } from '../lib/eventTime';
 import { brand, useTheme } from '../theme';
 import { laneStripeColor, type EventLane } from '../theme/categoryColors';
 
@@ -544,6 +544,32 @@ function titleLinkProps(onTap: (() => void) | undefined): Record<string, unknown
   };
 }
 
+/** The card's date line(s), both variants. A span of 24 hours or more gets
+ *  two fixed lines, Starts / Ends — one wrapping range line cut off the end
+ *  time at 390px (measured 2026-11-03; ruled by Jas the same day). */
+function WhenLines({ startsAt, endsAt }: { startsAt: string; endsAt: string | null }) {
+  const theme = useTheme();
+  const when = eventWhen(startsAt, endsAt);
+  const style = [styles.metaLine, { color: theme.colors.textMuted, fontFamily: theme.fonts.bodyMedium }];
+  if (!when.multiDay) {
+    return (
+      <Text numberOfLines={1} style={style}>
+        {when.line}
+      </Text>
+    );
+  }
+  return (
+    <>
+      <Text numberOfLines={1} style={style}>
+        {when.dateRow}
+      </Text>
+      <Text numberOfLines={1} style={style}>
+        {when.timeRow}
+      </Text>
+    </>
+  );
+}
+
 export default function EventStub({
   event,
   variant = 'photo',
@@ -639,9 +665,7 @@ export default function EventStub({
           >
             {event.title}
           </Text>
-          <Text numberOfLines={1} style={[styles.metaLine, { color: theme.colors.textMuted, fontFamily: theme.fonts.bodyMedium }]}>
-            {eventDateLabel(event.starts_at)} · {eventTimeLabel(event.starts_at, event.ends_at)}
-          </Text>
+          <WhenLines startsAt={event.starts_at} endsAt={event.ends_at} />
           {/* Last-resort label for an anonymous curbside post with no venue.
               "Local host", never "verified" — Sparked verifies nobody. */}
           <Text numberOfLines={1} style={[styles.metaLine, { color: theme.colors.textMuted, fontFamily: theme.fonts.bodyMedium }]}>
@@ -804,9 +828,7 @@ export default function EventStub({
             >
               {event.title}
             </Text>
-            <Text numberOfLines={1} style={[styles.metaLine, { color: theme.colors.textMuted, fontFamily: theme.fonts.bodyMedium }]}>
-              {eventDateLabel(event.starts_at)} · {eventTimeLabel(event.starts_at, event.ends_at)}
-            </Text>
+            <WhenLines startsAt={event.starts_at} endsAt={event.ends_at} />
             <Text numberOfLines={1} style={[styles.metaLine, { color: theme.colors.textMuted, fontFamily: theme.fonts.bodyMedium }]}>
               {event.venue_name ?? event.organizer_name ?? 'Local host'}
               {distanceSuffix(event.distance_miles)}
