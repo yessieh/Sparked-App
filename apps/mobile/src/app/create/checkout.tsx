@@ -36,6 +36,7 @@ import {
   formatUSD,
   priceCents,
 } from '../../lib/pricing';
+import { useOpenOnMain } from '../../lib/navigation';
 import { supabase } from '../../lib/supabase';
 import { brand, useTheme } from '../../theme';
 
@@ -106,6 +107,7 @@ function PayMark({ id }: { id: Method }) {
 export default function CheckoutScreen() {
   const theme = useTheme();
   const { eventId } = useLocalSearchParams<{ eventId: string }>();
+  const openOnMain = useOpenOnMain();
 
   const [order, setOrder] = useState<DraftOrder | null>(null);
   const [prices, setPrices] = useState<TierPrice[]>([]);
@@ -147,10 +149,13 @@ export default function CheckoutScreen() {
     }
     // Leave the tab-less create stack and land on the in-tabs "You're live"
     // screen, so the tab bar is restored the moment the listing goes live
-    // (publish-walk round 2 ruling). replace(), not push(): the finished
-    // checkout must not sit under a Back gesture.
-    router.replace({ pathname: '/published', params: { eventId: order.id } });
-  }, [order, paying]);
+    // (publish-walk round 2 ruling). ALWAYS in the Me tab, on top of Me's main
+    // page (ruled by Jas 2026-11-02): openOnMain pops the root Stack back to
+    // the EXISTING (tabs) — the wizard and checkout go with it — then pushes
+    // published over Me. A replace() from here mounted a second (tabs) with
+    // published as Explore's only screen, which no tab tap could leave.
+    openOnMain('me', { pathname: '/(tabs)/(me)/published', params: { eventId: order.id } });
+  }, [order, paying, openOnMain]);
 
   if (!order) {
     return (

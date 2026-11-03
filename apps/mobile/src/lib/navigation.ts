@@ -20,7 +20,7 @@
 //      (StackRouter.js:334-376). From inside (tabs) navigate, because the Tabs
 //      router has no POP_TO case — dismissTo across tabs did nothing.
 
-import { router, useNavigationContainerRef } from 'expo-router';
+import { router, useNavigationContainerRef, type Href } from 'expo-router';
 import { useCallback } from 'react';
 
 // Public URLs, not group paths: since the per-tab Stacks, '/(tabs)' and
@@ -74,5 +74,33 @@ export function useGoToMain() {
       else router.dismissTo(href);
     },
     [nav],
+  );
+}
+
+/**
+ * Returns openOnMain(tab, href): land on that tab's main page (goToMain — so a
+ * root-Stack caller pops back to the EXISTING (tabs), never a second one),
+ * then push `href` on top of it. The main page sits underneath, so Back and
+ * leaving the tab (popToTopOnBlur) both return to it.
+ *
+ * Name the tab's group in `href` (e.g. '/(tabs)/(me)/published') when the
+ * screen is shared by several tabs: the push resolves a shared route by the
+ * CURRENT segments (expo-router 57.0.4, getLinkingConfig.js:90-91 →
+ * fork/getStateFromPath-forks.js:267-279), and right after a jump those can
+ * still be the caller's, so a bare '/published' could land in Explore.
+ */
+export function useOpenOnMain() {
+  const goToMain = useGoToMain();
+  return useCallback(
+    (tab: MainPage, href: Href) => {
+      goToMain(tab);
+      // withAnchor: if the tab's Stack was never opened this session, a plain
+      // push builds it as [href] ALONE — no main page beneath, the tab's href
+      // reading the pushed screen (measured 2026-11-02). withAnchor loads the
+      // group's anchor (its main page) underneath (expo-router 57.0.4,
+      // global-state/getNavigationAction.js:60-80).
+      router.push(href, { withAnchor: true });
+    },
+    [goToMain],
   );
 }
