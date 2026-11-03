@@ -37,6 +37,7 @@ import {
   priceCents,
 } from '../../lib/pricing';
 import { useOpenOnMain } from '../../lib/navigation';
+import { grantPublishPass } from '../../lib/publishPass';
 import { supabase } from '../../lib/supabase';
 import { brand, useTheme } from '../../theme';
 
@@ -154,6 +155,8 @@ export default function CheckoutScreen() {
     // the EXISTING (tabs) — the wizard and checkout go with it — then pushes
     // published over Me. A replace() from here mounted a second (tabs) with
     // published as Explore's only screen, which no tab tap could leave.
+    // The pass lets published show this once (lib/publishPass.ts).
+    grantPublishPass(order.id);
     openOnMain('me', { pathname: '/(tabs)/(me)/published', params: { eventId: order.id } });
   }, [order, paying, openOnMain]);
 

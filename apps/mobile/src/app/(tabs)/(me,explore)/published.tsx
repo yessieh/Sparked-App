@@ -8,12 +8,13 @@
 // create stack, so the host lands back in the normal tab-bar'd app.
 
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams, useNavigation } from 'expo-router';
-import React, { useEffect } from 'react';
+import { router, useLocalSearchParams, useNavigation, useRoute } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { GradientButton, GradientFill, SecondaryButton } from '../../../components/AuthControls';
 import { useGoToMain } from '../../../lib/navigation';
+import { releasePublishPass, takePublishPass } from '../../../lib/publishPass';
 import { brand, useTheme } from '../../../theme';
 
 export default function PublishedScreen() {
@@ -21,6 +22,33 @@ export default function PublishedScreen() {
   const { eventId } = useLocalSearchParams<{ eventId: string }>();
   const goToMain = useGoToMain();
   const navigation = useNavigation();
+  const { key: routeKey } = useRoute();
+  // Decided in render, so a denied arrival never paints the success content.
+  const [allowed] = useState(() => takePublishPass(routeKey, eventId));
+
+  // No pass — Chrome ←/→, reload, a typed URL, a deep link: not right after a
+  // publish (lib/publishPass.ts). Me's main page instead, REPLACING this
+  // history entry (ruled by Jas 2026-11-03).
+  useEffect(() => {
+    if (allowed) return () => releasePublishPass(routeKey);
+    // A RESET of the tab navigator, not goToMain's jump: the jump PUSHED a
+    // history entry over /published, so every Chrome ← landed back here and
+    // bounced to Me again — Back could never get past it (measured
+    // 2026-11-03). A reset gives the tab navigator a new key, which
+    // expo-router's history sync treats as a replace (expo-router 57.0.4,
+    // build/fork/useLinking.js:21-45 findMatchingState, :357-359). Each tab
+    // starts again on its main page — on every arrival measured here (cold,
+    // reload, Chrome ←/→) the tabs were rebuilt from the URL already.
+    // Deferred a tick: arriving by Chrome ←, a navigation dispatched in this
+    // effect was dropped and the blank screen stayed (measured 2026-11-03).
+    const t = setTimeout(() => {
+      const tabs = navigation.getParent();
+      const routes = tabs?.getState()?.routes.map((r) => ({ name: r.name })) ?? [];
+      const me = routes.findIndex((r) => r.name === '(me)');
+      if (tabs && me !== -1) tabs.dispatch({ type: 'RESET', payload: { index: me, routes } });
+    }, 0);
+    return () => clearTimeout(t);
+  }, [allowed, routeKey, navigation]);
 
   // The push that opened this screen leaves its address on the TAB's group
   // route ({ screen: 'published', … }), and the tab bar builds the tab's href
@@ -36,6 +64,8 @@ export default function PublishedScreen() {
     const t = setTimeout(() => parent?.replaceParams({} as never), 0);
     return () => clearTimeout(t);
   }, [navigation]);
+
+  if (!allowed) return <View style={{ flex: 1, backgroundColor: theme.colors.bg }} />;
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.bg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
