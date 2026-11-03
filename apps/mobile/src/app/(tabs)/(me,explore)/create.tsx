@@ -131,7 +131,7 @@ export default function CreateFork() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
       <ScrollView contentContainerStyle={{ paddingBottom: 40, maxWidth: 640, width: '100%', alignSelf: 'center' }}>
-        <SubHeader crumb="List an event" />
+        <SubHeader crumb="Create · Choose a type" />
         <View
           pointerEvents="none"
           style={{
