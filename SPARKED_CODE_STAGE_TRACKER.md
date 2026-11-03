@@ -212,6 +212,9 @@ and verified in Cursor/Claude Code.
       short-circuits the UPDATE. Move existing fixtures forward; do not insert
       new posts or touch the ledger. That procedure is the authority — this
       item points at it and does not restate it.
+      **ADDED 2026-11-03: the reseed also seeds organizer socials** (on the
+      fixture workspaces, never on events). *Why:* the public profile's
+      website/social buttons have no fixture data to render against.
 - [x] **The header-budget question at 390 wide — CLOSED, ANSWERED, NOT
       PARKED.** Arc D's brief parked "does DateControl push the first card
       below the fold at 390w" because no seeded event could populate a card.
@@ -313,6 +316,10 @@ and verified in Cursor/Claude Code.
       already in place, a person-block is speculative infrastructure — and the
       wrong moment to add a fourth axis to event visibility is before there is
       anyone to hide from.
+- [ ] **"Edit blocks" closes search before opening Interests (LOW PRIORITY).**
+      `ExploreSearch.tsx` calls `onClose()` before navigating, so Back from
+      Interests lands on Explore with search closed, not on the search.
+      Found in `aaa8bca`. *Why:* the user loses the search they were in.
 
 #### Carried out of the Interests & blocks arc (2026-09-22..28)
 
@@ -350,7 +357,14 @@ and verified in Cursor/Claude Code.
       (`components/ExploreSearch.tsx:692-696` as of `243d146`) — `aria-hidden`
       but RNW still gives the Pressable `tabindex="0"`. *Why:* a focusable
       element hidden from assistive tech, the shape this arc removed elsewhere.
-- [ ] **Back from `published` untested under `backBehavior="history"`.** *Why:*
+- [x] **CLOSED 2026-11-03 — `5c704d4` + `a032951`.** Checkout opens
+      `published` in Me over Me's main page inside the EXISTING `(tabs)` (no
+      second navigator; Back → Me's main page; "View your listing" replaces
+      it), and a one-time pass means only a just-completed publish shows it —
+      Chrome ←/→, reload and cold links go to Me's main page. Measured by
+      stand-in repro of checkout's call (no real publish), 2026-11-02/03.
+      SPARKED_STATE.md → POLISH BATCH LOCKS. Original item:
+      **Back from `published` untested under `backBehavior="history"`.** *Why:*
       reachable only by a real publish, so no run has covered it since
       `9376036`. **Likely also on a duplicate `(tabs)`:** checkout →
       `replace('/published')` is a root-Stack replace with `(tabs)` beneath,
@@ -394,7 +408,8 @@ and verified in Cursor/Claude Code.
       confirmation** — decide whether they get the create-form escape-hatch
       treatment (`FormExitHeader` + `LeaveConfirm`). *Why:* the escape-hatch
       rule is "confirm when there is input to lose", and both have input — a
-      profile form and payment details.
+      profile form and payment details. **Confirmed by Jas (polish close-out,
+      2026-11-03): `workspace/edit` discards unsaved input with no warning.**
 - [ ] **SubHeader back chip + crumb.** 36×36 back chip with no `role`; the
       `brightOrange` crumb is 1.85:1 in light mode; `components/SubHeader.tsx`
       is shared by 5 screens (as of `243d146`): the create fork, checkout,
@@ -430,18 +445,24 @@ and verified in Cursor/Claude Code.
 
 #### Carried out of the per-tab stacks arc (2026-10-14..20)
 
-- [ ] **POLISH BATCH (next, Jas-approved).**
-      - Interests ✓ / − / ✕ get fixed meanings on every tab; each tile shows
-        the two buckets it is NOT in, with accessible names stating the
-        destination.
-      - "Edit blocks" opens the "Not for me" tab.
-      - Saved's empty state gets a secondary "Explore events near you" link to
-        the Explore feed.
-      - The create fork's title label "List an event" reads like a link —
-        rename it to name the screen (wording is Jas's call); Back stays plain
-        Back.
-      *Why:* small, user-facing fixes found while driving this arc, batched so
-      they ship together.
+- [x] **POLISH BATCH — CLOSED 2026-11-03.** Commits, in order:
+      - `751ebc7` — Interests ✓ / − / ✕ fixed meanings (✓ I'm into,
+        − Undecided, ✕ Not for me); each tile shows the two buckets it is NOT
+        in; names "Move <Category> to <bucket>".
+      - `aaa8bca` — "Edit blocks" opens the Not for me tab (`?tab=blocked`).
+      - `066cc59` — tab bar opens each tab's main page (`popToTopOnBlur`,
+        supersedes (b)).
+      - `93b6936` — Saved's All empty state: "Explore events near you →".
+      - `f45c4b0` — Enter activates every `role="link"` Pressable
+        (`lib/linkKeyboard.ts`).
+      - `e4d8fac` — `inert` only on tab screens (NVDA stale buffer after
+        Back).
+      - `5c704d4`, `a032951` — `published` opens in Me, once.
+      - `7df6164` — 24h+ spans show Starts / Ends lines.
+      - `9060ec2` — attendee going counts only at ≥ 10.
+      - `0ef0867` — create fork crumb "Create · Choose a type".
+      Locks: SPARKED_STATE.md → PER-TAB STACKS, SCREEN FOCUS, POLISH BATCH
+      LOCKS; evidence: `docs/ACCESSIBILITY.md` Entries 12, 15, 16.
 - [ ] **Me tab link depends on `(me)/me.tsx` sorting FIRST in its group** —
       don't add a file directly in `(me)/` that sorts ahead of it. *Why:* the
       tab's href falls back to the group's first screen by file order
@@ -449,15 +470,44 @@ and verified in Cursor/Claude Code.
 - [ ] **Dead links persist in a tab's trail under (b)** — a not-found event
       opened from Saved stays in Saved's trail after "Back to Explore".
       *Why:* reopening Saved shows the dead page again.
+      **Likely obsolete under `popToTopOnBlur` (`066cc59`), unverified.**
+      Close it on the next sighting or non-sighting.
 - [ ] **expo-router upgrade procedure:** re-run the cold-entry ← probe
       (cold `/` → navigate → Chrome ← to the first entry: route keys and DOM
       nodes unchanged), then bump the 57.0.x pin in `ColdEntryHistoryFix`.
       *Why:* the dev-only version warning stands in for a direct check of the
       history entry, which would mean reading expo-router internals.
-- [ ] **Intermittent NVDA Enter failure — watch item.** Enter on an Explore
-      card title (and once a Me settings row) did nothing in some sessions
-      with a freshly started NVDA. *Why:* cause unknown; capture procedure in
-      `docs/ACCESSIBILITY.md` Entry 15.
+- [x] **Intermittent NVDA Enter failure — CLOSED 2026-11-03, resolved by the
+      inert fix `e4d8fac`** (verified by Jas with NVDA, reported 2026-11-03:
+      Enter worked 3× on the organizer link without a refresh, from 3
+      different feed cards, and after a tab switch; heading navigation never
+      reached the hidden screen). Enter on
+      an Explore card title (and once a Me settings row) did nothing in some
+      sessions with a freshly started NVDA; NVDA's browse buffer going stale
+      after a Stack pop flipped `inert` matches it. `docs/ACCESSIBILITY.md`
+      Entries 15 and 16.
+
+#### Carried out of the polish batch (2026-10-28..11-03)
+
+- [ ] **NVDA after navigation — watch item.** NVDA once ignored Enter on an
+      event's Back after a tab switch, and sometimes needs a refresh after
+      navigating; not reproducible. If it recurs: note the steps, press
+      Insert+F5, retry. *Why:* the stale-buffer fix (`e4d8fac`) may not cover
+      every path, and one more data point decides whether it is a second
+      cause.
+- [ ] **Hoist the duplicated `onPress` at the 4 Polish 4 sites into named
+      handlers** the next time each is touched: `EventDetailView.tsx`
+      (organizer row), `(me)/workspace.tsx` ("View public profile"),
+      `(saved)/saved.tsx` (empty-state link), `organizer/[id].tsx` ("Edit
+      public profile") — each repeats the same inline lambda in `onPress` and
+      `enterActivates(...)`. *Why:* two copies of one action can drift.
+- [ ] **FUTURE: in-app links as real `<a href>`** (expo-router `Link asChild`).
+      *Why:* a real anchor gets Enter, middle-click and "open in new tab" from
+      the browser, and would retire `enterActivates` at those sites.
+- [ ] **Attendee compact cards say "N RSVPs"; use "going".** `EventStub`'s
+      compact consumer line (Saved, Organizer) reads "12 RSVPs" where the photo
+      card and Event Detail say "12 going". *Why:* one attendee concept, two
+      words for it.
 
 ---
 
@@ -570,6 +620,13 @@ and verified in Cursor/Claude Code.
 - [ ] **Real Stripe checkout** — replace the mock Apple Pay / Google Pay / Link
       / Card screen. Payment marks in prototype are hand-drawn approximations;
       production uses real SDK-rendered buttons under brand guidelines.
+      **Two requirements added 2026-11-03 (polish batch):**
+      - **The server must refuse to publish an already-published event.**
+        *Why:* Chrome → can reach stale wizard / checkout pages after a
+        publish (measured with the `a032951` repro); a resubmitted checkout
+        must not charge twice.
+      - **Stale wizard / checkout history entries** stay reachable by Chrome →
+        until then. *Why:* the one-time pass protects only the success screen.
 - [ ] **Vendor/category type plurality collapsing — revisit with real host
       feedback.** Custom types now title-case on save and dedupe
       case-insensitively against the seed list + types already on the event, so
@@ -1393,10 +1450,26 @@ migration lands between, the NAME is the anchor, not the number.
       Entry points: the Event Detail organizer block taps through (gated on
       `workspace_id === null`, never on a client-side re-derivation of
       anonymity), and Workspace gained a secondary "View public profile" row.
-- [ ] **Organizer Profile EDITOR — not built.** The host-facing side: editing
-      name, bio, location, website and socials from inside Workspace. Logo
-      upload is a separate arc and needs Supabase Storage, which does not exist
-      (no bucket, no picker dependency, no upload path anywhere in the app).
+- [x] **Organizer Profile EDITOR — BUILT (corrected 2026-11-03; this item
+      said "not built").** `app/workspace/edit.tsx` (`b7c3813`, migration
+      0024 `update_workspace_profile`; inline validation, edit-on-profile and
+      social-link test buttons `f0caf6e`) edits **name, bio, location,
+      website and socials**, server-capped. Entry: "Edit public profile" ON
+      the public profile itself (`organizer/[id].tsx`), not a Workspace row;
+      save returns to Workspace, whose "View public profile" row is the
+      preview.
+- [ ] **Organizer logo upload — NOT BUILT.** The editor shows the
+      initials fallback with no edit affordance ("image uploads are coming").
+      *Why:* needs Supabase Storage, which does not exist (no bucket, no picker
+      dependency, no upload path anywhere in the app).
+- [ ] **`events.socials` is an orphan column — drop it or document it.**
+      `jsonb not null default '{}'` on `public.events` (core spine), granted
+      to anon (select) and authenticated (select/insert/update) in 0011's
+      column grants — later baselines not re-checked for this note — and read
+      or written by nothing under `apps/mobile/src` (grep, 2026-11-03); socials
+      live on the WORKSPACE only (SPARKED_STATE.md → POLISH BATCH LOCKS).
+      *Why:* a column nobody uses still sits in the grant surface and invites
+      a second source of truth. Dropping it is an SQL arc with the full gate.
 - [ ] **Verify the Workspace "View public profile" row against a signed-in
       host.** It typechecks and routes correctly, but every verification pass so
       far has run signed out, so the row itself is unexercised. Part of the
@@ -1441,7 +1514,7 @@ migration lands between, the NAME is the anchor, not the number.
       identify via User-Agent) — fine for dev/MVP volume. Swap to a paid
       geocoder (Google/Mapbox) before real traffic; the mini-form's `geocode`
       helper is the single swap point.
-- [ ] **Geocode confirmation step in both create flows — PRE-LAUNCH.** Show the
+- [ ] **NEXT ARC (marked 2026-11-03). Geocode confirmation step in both create flows — PRE-LAUNCH.** Show the
       host the RESOLVED location and make them confirm or correct it before
       publish. Today the geocode is silent and trusted: a typo'd or fictional
       address still returns a confident match, and the event publishes pinned
@@ -2109,6 +2182,18 @@ migration lands between, the NAME is the anchor, not the number.
       Copy must not leak why the row is withheld (archived vs. deleted vs. never
       existed are indistinguishable to a stranger by design, and should stay that
       way) — one neutral message covers all three.
+- [ ] **"List an event" on Explore — signed-in only, straight into Create
+      Event.** *Why:* a host browsing the feed has no direct way to post.
+- [ ] **Positive social signals — a "New" badge now; "friends going" later.**
+      *Why:* with counts hidden below 10 (`9060ec2`), a new event has no
+      positive signal at all.
+- [ ] **Daily hours / recurring events.** The form can imply "nightly" while
+      ONE span is stored. Blast radius: the end-instant logic (6 server sites +
+      2 client) plus feed grouping. *Why:* a 30-day market open 7–10pm reads
+      as one continuous event.
+- [ ] **Pricing revisit — Plus is advertised at $49 but charged $15 (1-day)
+      up to $49 (30+ days).** *Why:* the advertised price and the charged
+      price disagree for every Plus event under 30 days.
 
 ---
 

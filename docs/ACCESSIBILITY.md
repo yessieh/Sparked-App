@@ -2657,9 +2657,11 @@ composited to `#1d2a45`):
   its accessible name. Same reasoning as `Pill`'s unselected border (Entry 7).
 - No gradient on any tile (gradient = actionable only, `theme/colors.ts:44-48`);
   the signed-out "Create free account" CTA is the one gradient, as on Saved.
-- **One symbol per destination, everywhere:** ✓ → I'm into, − → Not for me,
-  ✕ → Undecided. Meaning is never carried by colour — every symbol is the same
-  `colors.text`.
+- **One symbol per destination, everywhere:** ✓ → I'm into, − → Undecided,
+  ✕ → Not for me. Meaning is never carried by colour — every symbol is the same
+  `colors.text`. **CORRECTED 2026-10-28, `751ebc7`:** the shipped mapping had
+  − and ✕ reversed (− moved a category to Not for me, ✕ to Undecided); this
+  line and the table under "Roles and names" now describe the fixed state.
 
 ### Tab labels — selected and unselected
 
@@ -2691,14 +2693,18 @@ composited to `#1d2a45`):
 
 **DIRECT MOVES (amended in this arc, before commit — replaces the reference's
 tap-a-chip-to-Undecided).** Every tile in every bucket is the category name
-plus two `Pressable` buttons with `role="button"`, one per OTHER bucket, each
-with an `aria-label` naming the category and the result:
+plus two `Pressable` buttons with `role="button"`, one per OTHER bucket, always
+in ✓ − ✕ order, each with an `aria-label` "Move <Category> to <bucket>" built
+from the same bucket names as the tab labels (no "Block X" / "Add X" wording).
+As of `751ebc7` (verified signed in 2026-10-28: glyphs by Ionicons code point,
+names read from the DOM on all three tabs, every button moved the tile where it
+says):
 
 | Tile in | First button | Second button |
 | ------- | ------------ | ------------- |
-| I'm into | − `"Block Music"` | ✕ `"Move Music to Undecided"` |
-| Undecided | ✓ `"Add Music to I'm into"` | − `"Block Music"` |
-| Not for me | ✓ `"Add Music to I'm into"` | ✕ `"Move Music to Undecided"` |
+| I'm into | − `"Move Music to Undecided"` | ✕ `"Move Music to Not for me"` |
+| Undecided | ✓ `"Move Music to I’m into"` | ✕ `"Move Music to Not for me"` |
+| Not for me | ✓ `"Move Music to I’m into"` | − `"Move Music to Undecided"` |
 
 The tile itself is a plain `View` — only its two buttons are controls, so
 there is no nested-control or double-tab-stop shape (Entry 11's lesson).
@@ -3255,6 +3261,16 @@ rule changed.
 - **Re-tapping the active tab** now pops its Stack (a `POP_TO_TOP`, a Back
   action to the controller); focus still stays on the tab, because the
   "focus is inside `role=tablist`" check runs first.
+- **AMENDED 2026-11-01, `066cc59` — `popToTopOnBlur` replaces ruling (b).**
+  Tapping ANY tab opens its main page; the Stack of the tab you leave is
+  popped to its main page as you leave. Verified signed in, 2026-11-01:
+  Me → Appearance → Explore → Me = Me's main page (same route key); Explore
+  filter + scroll → event → Saved → Explore = the feed with the same `h1`
+  node, scroll and pills kept; Back inside a tab still walks the trail;
+  re-tap of the active tab → main page with focus on the tab; content nav →
+  `h1`, Back → opener, "Outside" 0. Recorded then: a tab switch replaces the
+  history entry of the screen it pops, so Chrome ← from Saved lands on
+  Explore's feed, not the popped event.
 
 ## Machine-driven rows (signed out, `localhost:8081`)
 
@@ -3263,6 +3279,8 @@ rule changed.
 - Back → the element that opened the screen (Event A → Organizer → Event B →
   Back × 3 restored the organizer link, then the card).
 - Tab press, click AND Enter → focus stays on the tab; re-tap → main page.
+  (Under (b) a tab press reopened the tab where it was left; since
+  `066cc59` it always opens the main page — see the amendment above.)
 - Cold load and cold deep links → focus does not move.
 - Cross-tab "main page" jumps (`useGoToMain`) → the target's heading.
 
@@ -3301,7 +3319,13 @@ app, NVDA freshly relaunched; **Space** on the focused card did nothing.
    started before or after the page loaded.
 4. Note the element (card title, settings row) and the URL.
 
-Tracker: "Intermittent NVDA Enter failure" (watch item).
+Tracker: "Intermittent NVDA Enter failure" (watch item). **CLOSED
+2026-11-03 as resolved by the inert fix, `e4d8fac`** (verified by Jas with
+NVDA — Entry 16): NVDA's browse-mode buffer went stale after a Stack pop
+flipped `inert`, which matches "Enter did nothing in some sessions". See
+Entry 16. Card titles were never the `role="link"` Enter defect
+(`f45c4b0`) — they had their own Enter handler since Entry 11. A residual,
+non-reproducible observation stays on the tracker as a new watch item.
 
 ## What this entry does NOT establish
 
@@ -3312,7 +3336,9 @@ Tracker: "Intermittent NVDA Enter failure" (watch item).
 - **The intermittent NVDA failure above** — neither its cause nor its
   frequency.
 - **Checkout → `published`** was not driven live (a real publish writes
-  data); it still mounts a second `(tabs)` — tracker.
+  data); it still mounts a second `(tabs)` — tracker. (Fixed since:
+  `5c704d4` opens it in Me in the existing `(tabs)`, `a032951` makes it
+  one-time — measured by stand-in repro, still no real publish.)
 
 ## Privilege gate — N/A, stated
 
@@ -3325,3 +3351,111 @@ object, nothing reachable from PostgREST. No file under `supabase/` changed in
 machine and signed in by Jas, 2026-10-14 → 2026-10-20. `npx tsc --noEmit`
 exits 0 with typed routes regenerated against the current route tree;
 `npx expo lint` 63.
+
+---
+
+# Entry 16 — 2026-11-03 — Enter on `role="link"`, and NVDA's stale buffer after Back
+
+**The arc:** two keyboard defects found in the polish batch. Both made Enter
+do nothing on a link that looked focusable — one in the page, one in NVDA's
+copy of the page.
+
+## Defect 1 — Enter was inert on every `role="link"` Pressable
+
+**Cause, from source (react-native-web 0.21.2):** on key-up, rnw skips
+`onPress` for an element whose role is `link`, expecting a real `<a href>`
+whose browser default turns Enter into a click
+(`dist/modules/usePressEvents/PressResponder.js:217-221`). A Pressable with
+`role="link"` renders `<div role="link">` with no `href`, so it was focusable
+and inert to Enter. Mouse clicks were unaffected — they reach `onPress`
+through the native click path (`:302-315`), which Enter on a `<div>` never
+produces.
+
+**Found** 2026-11-01 building Saved's "Explore events near you →" link
+(`93b6936`): a faithful copy of Me's link was inert to Enter (measured), and
+so was Me's.
+
+**Fix — `lib/linkKeyboard.ts`, `enterActivates(onPress)` (`f45c4b0`).**
+Returns `{ onKeyDown }` that fires `onPress` on Enter only (links take Enter;
+Space is for buttons); `{}` on native, or when the handler is null (an
+inactive link gets nothing). It cannot double-fire: Enter on a `<div>`
+produces no click. Applied to all 7 `role="link"` Pressables:
+
+| Site | Link |
+| ---- | ---- |
+| `(me)/me.tsx` | "Explore events near you" (Saved preview, empty) |
+| `(saved)/saved.tsx` | "Explore events near you →" (All empty state) |
+| `EventDetailView.tsx` | the organizer row |
+| `organizer/[id].tsx` | website / social links (disabled ones get no handler) |
+| `organizer/[id].tsx` | "Edit public profile" |
+| `(me)/workspace.tsx` | "View public profile" |
+| `ExploreSearch.tsx` | "Edit blocks" |
+
+EventStub's card titles were NOT part of this defect — `titleLinkProps` has
+wired Enter by hand since Entry 11.
+
+**Verified** (2026-11-01, `localhost:8081`): Enter on the event page's
+organizer link opened the organizer once, no duplicate; Saved's new link by
+click and Enter (`93b6936`). The other five sites were not driven live — the
+same one-line spread.
+
+## Defect 2 — NVDA's browse buffer went stale after in-app Back
+
+**Observed by Jas** (NVDA, browse mode, Chrome): Enter on the event page's
+organizer link worked once; after in-app Back, it and every other link went
+dead until a mouse click or **Insert+F5** (NVDA's "refresh the document")
+restored them.
+
+**Cause (the suspected mechanism, consistent with every observation):** on a
+Stack pop the revealed screen changed THREE things at once — `display:none` →
+`flex`, `aria-hidden` true → false, and our `inert` removed — and the focus
+controller focused into it immediately. NVDA's browse-mode buffer did not
+catch up (cf. WICG/inert#120, the same sequence in the polyfill era).
+
+**Proof `inert` was redundant on Stack screens** (2026-11-02, every `inert`
+stripped from the page by script): react-navigation's web stack already hides
+a covered screen with `display:none` (`native-stack/views/NativeStackView.js:
+88-93`) AND `aria-hidden="true"` (`elements/Screen.js:62`). `.focus()` on a
+covered card was refused, and 40 real Tab presses reached 0 elements in the
+covered screen.
+
+**Fix — `inert` only on TAB screens (`e4d8fac`).** `ScreenFocus` gained an
+`inert` prop (default true). The root Stack (`app/_layout.tsx`) and every tab
+Stack (`components/TabStack.tsx`) pass `inert={false}`; the `(tabs)`
+navigator keeps the default, because tab screens stay `display:flex` at
+`z-index:-1` and still need it.
+
+**Verified by machine** (2026-11-02): a covered Stack screen has no `inert`
+but is `aria-hidden` + `display:none`; content navigation → `h1`; Back →
+opener; a tab switch keeps the hidden tab `inert` with focus on the tab;
+"Outside" (tabbable elements in hidden screens) 0 throughout.
+
+**Verified by Jas with NVDA + keyboard** (on `e4d8fac`, reported 2026-11-03):
+- Enter worked 3× on the event page's organizer link with no refresh, on 3
+  different feed cards' events.
+- Enter still worked after a tab switch.
+- Heading navigation never reached a hidden screen.
+
+This resolves the intermittent Enter watch item (Entry 15). One residual
+observation — Enter once ignored on an event's Back after a
+tab switch, and a refresh sometimes needed after navigating — was not
+reproducible and is a tracker watch item.
+
+## What this entry does NOT establish
+
+- **Nothing about native iOS / Android.** `enterActivates` returns `{}` off
+  web, and `ScreenFocus` renders its children unchanged there.
+- **That the stale-buffer mechanism is the root cause** — it is the suspected
+  one, and removing it fixed the behaviour in Jas's NVDA verification; it was
+  never isolated inside NVDA.
+- **Screen readers other than NVDA** (JAWS, Narrator, VoiceOver) were not run.
+
+## Privilege gate — N/A, stated
+
+Both commits are client-only: no SQL, no migration, no schema object, nothing
+reachable from PostgREST. No file under `supabase/` changed in `f45c4b0` or
+`e4d8fac`.
+
+**Baseline:** `main` @ `e4d8fac`, driven on the Expo web dev server at
+`localhost:8081` (in-app browser), signed in, 2026-11-01 → 2026-11-02.
+`npx tsc --noEmit` exits 0 with typed routes regenerated; `npx expo lint` 63.

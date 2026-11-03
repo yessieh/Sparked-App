@@ -188,7 +188,13 @@ Constant across ALL variants:
   gradient when active). All is the DEFAULT — nothing is ever hidden by
   default.
 - **Feed photo cards show social proof:** muted "N going" beside the price
-  line, only when N > 0. A signal, not a shout — never bold, never gradient.
+  line. A signal, not a shout — never bold, never gradient.
+  **AMENDED 2026-11-03 (`9060ec2`) — shown only when N ≥ 10, not N > 0.**
+  Below 10 nothing renders in its place. Applies to every ATTENDEE surface
+  (feed and search cards, Saved and Organizer compact cards, Event Detail);
+  HOST surfaces (Workspace's count chips) stay exact. One constant,
+  `GOING_COUNT_MIN` in `lib/engagement.tsx`. See also "Be the first" under
+  POLISH BATCH LOCKS (rejected).
 - **Card action-button affordance:** bookmark + going buttons show a small
   label chip pre-use — hover on desktop, press on mobile ("Save" /
   "I'm going"; "Saved" / "Going" when active). AMENDED same day: the chip
@@ -198,7 +204,8 @@ Constant across ALL variants:
   sit at the card's clipping edge; center-anchoring cut off wider labels).
   Both buttons render on BOTH variants (Saved is where plans firm up —
   promoting to Going must work there). Going-count is optimistic: it moves
-  with the toggle, never waits for a focus change, vanishes entirely at 0.
+  with the toggle, never waits for a focus change, vanishes entirely below
+  10 (amended from "at 0", `9060ec2`).
 - **Card tap-through → Event Detail: CONFIRMED WANTED from both Explore and
   Saved** — lands with the Event Detail stage, not before.
 
@@ -427,6 +434,17 @@ Entry 14. Web only — native is unchanged.
   - First load, refresh and cold deep links never move focus.
   - A screen with no heading (`workspace/edit`, by ruling) → its main
     content container.
+- **Hidden screens.** **Inactive TAB screens are `inert`** (`ScreenFocus`,
+  default) — the tabs navigator leaves them `display:flex` at `z-index:-1`.
+  **Stack screens are NOT inert** (`inert={false}` from the root Stack and
+  every `TabStack`): react-navigation's web stack already hides a covered
+  screen with `display:none` + `aria-hidden` (`NativeStackView.js:88-93`,
+  `elements/Screen.js:62`). AMENDED 2026-11-02, `e4d8fac` — previously every
+  inactive screen was inert. **Why:** on a Stack pop the revealed screen
+  flipped `display`, `aria-hidden` AND `inert` at once and was focused
+  immediately, and NVDA's browse-mode buffer went stale — Enter on links did
+  nothing until Insert+F5 (or a mouse click) refreshed it. Verified fixed by
+  Jas with NVDA; evidence in `docs/ACCESSIBILITY.md` Entry 16.
 - **Heading rule.** Exactly one level-1 heading per screen = the most
   prominent visible text at the top of the screen. No invented heading text,
   no visually hidden headings, no visual change from marking one.
@@ -466,8 +484,13 @@ Per-tab stacks arc, `35db3e9..a1500f3`; focus evidence in
   (`(explore,saved,me)/`, `(me,explore)/`). Group segments never reach a URL,
   so **public URLs are unchanged** — `/event/<id>`, `/organizer/<id>`,
   `/workspace`, `/create`, `/published`, `/saved`, `/me`, `/settings/<name>`.
-- **(b) — a tab reopens where it was left; re-tapping the ACTIVE tab returns
-  to its main page** (the library default; no custom re-tap code).
+- **Tapping a tab ALWAYS opens its main page — `popToTopOnBlur`
+  (`066cc59`, 2026-11-01; SUPERSEDES the arc's ruling (b), "a tab reopens
+  where it was left").** Screens opened inside a tab are cleared when you
+  leave it; the main pages stay mounted and keep their state (Explore's
+  filters, scroll, date window). Back inside a tab still walks its trail.
+  One option, `(tabs)/_layout.tsx` `screenOptions`. *Why:* Me → Appearance →
+  Explore → Me reopening Appearance read as broken.
 - **Links open inside the tab you are in.**
   - `event/[id]`, `organizer/[id]` — shared by all three tabs.
   - The create fork and `published` — shared by Me and Explore.
@@ -478,8 +501,9 @@ Per-tab stacks arc, `35db3e9..a1500f3`; focus evidence in
   - Workspace — Me only.
   - Create forms, checkout, auth, `reset-password` and `workspace/edit` stay
     chrome-less in the root Stack.
-- **Cold links.** Content (`/event`, `/organizer`, `/published`) opens in
-  EXPLORE with the feed underneath; settings open in ME with Me underneath
+- **Cold links.** Content (`/event`, `/organizer`) opens in
+  EXPLORE with the feed underneath (a cold `/published` goes to Me's main
+  page — see POLISH BATCH LOCKS); settings open in ME with Me underneath
   (each tab's `_layout.tsx` declares its `anchor`). **Accepted edge: a cold
   `/settings/interests` opens in Explore** (feed underneath, Back → `/`). The
   shared-route tie falls to config order, where Explore is first; the only
@@ -501,6 +525,38 @@ Per-tab stacks arc, `35db3e9..a1500f3`; focus evidence in
   rebuilds every screen (expo/expo#50317, #45588). Pinned to expo-router
   57.0.x by a dev-only warning; remove when upstream fixes the first history
   record.
+
+### POLISH BATCH LOCKS (LOCKED 2026-11-03)
+
+Polish batch, `751ebc7..0ef0867`. One entry per ruling.
+
+- **The success screen ("You're live") always opens in ME, once.**
+  - Checkout lands it on top of Me's main page in the EXISTING `(tabs)` —
+    no second navigator; the wizard and checkout are gone (`5c704d4`,
+    `useOpenOnMain` in `lib/navigation.ts`).
+  - It shows only right after a publish: checkout grants a one-time,
+    in-memory pass (`lib/publishPass.ts`). Any other arrival — Chrome ←/→,
+    reload, a typed URL or deep link — goes to Me's main page, replacing
+    that history entry, with no flash of the success content (`a032951`).
+  - "View your listing" REPLACES it, so Back from the listing lands on Me's
+    main page.
+- **Going count — see NAVIGATION & ENGAGEMENT SURFACES** (amended in place:
+  attendee surfaces only at ≥ 10, hosts exact, `9060ec2`).
+- **REJECTED: a "Be the first" placeholder** where the count is hidden. At 0
+  it advertises an empty event.
+- **Spans of 24 hours or more show two stacked lines** — "Starts Sun, Nov 1 ·
+  7:00pm" / "Ends Mon, Nov 30 · 10:00pm" — on cards, Event Detail and the
+  wizard's Review "When" row. Shorter spans (overnight included) and no
+  `ends_at` are unchanged. One formatter, `eventWhen()` in
+  `lib/eventTime.ts` (`7df6164`). *Why:* one stored span read as a one-night
+  event.
+- **The create fork's crumb reads "Create · Choose a type"** (`0ef0867`;
+  was "List an event", which read like a link). The crumb is not a heading;
+  the fork's level-1 heading stays "What are you posting?".
+- **Socials belong to the ORGANIZER PROFILE only, never to events.** A host
+  edits them in `workspace/edit`; the public profile shows them. Events carry
+  none (`events.socials` is an orphan column — tracker). Supersedes the event
+  half of PRICING's "Socials moved from Plus to STANDARD".
 
 ---
 
@@ -852,8 +908,9 @@ events in Workspace. (Wizard exit affordance: done, `f8ab34c` + `b917475`.)
   focus mode; the moment the listing goes live the host is back in the app. It
   is implemented by making "You're live" an `href: null` route INSIDE the
   `(tabs)` group, so the tab bar returns structurally rather than being
-  redrawn. Checkout `router.replace()`s there on success, which also drops the
-  finished create stack out from under the Back gesture.
+  redrawn. ~~Checkout `router.replace()`s there on success~~ — SUPERSEDED
+  2026-11-03: checkout opens it in Me over Me's main page, once (POLISH BATCH
+  LOCKS); the finished create stack is still dropped from under Back.
 - **AMENDED 2026-07-30 — the ENTRY FORK keeps the tab bar; only the forms hide
   it.** The rule is not "the create flow is chrome-less," it is **chrome-less
   once there is input to lose.** The fork ("What are you posting?") is a
@@ -1470,7 +1527,8 @@ Create Event's tier step (per-day model is DEAD everywhere):
   photo/title/description/address/date, "Post it — free", no checkout) or Event (4-step wizard).
   Standard↔Plus switching mid-wizard preserves entered data (fields lock, never clear).
 - **Socials moved from Plus to STANDARD** (the Organizer Profile gives links away free —
-  charging for them on the card would read as a scam). Plus keeps: 10-photo gallery, paid-entry
+  charging for them on the card would read as a scam). **AMENDED 2026-11-03:** socials live
+  on the Organizer Profile only, never on an event — see POLISH BATCH LOCKS. Plus keeps: 10-photo gallery, paid-entry
   display, site map + vendor pins.
 - **PRICING COUPLING — Plus is not sellable before media uploads (LOCKED 2026-09-22).**
   The Plus tier promises "Interactive site map with vendor pins" (the frozen reference's
