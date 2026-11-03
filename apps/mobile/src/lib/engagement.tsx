@@ -21,6 +21,14 @@ import React, {
 import { useAuth } from './auth';
 import { supabase } from './supabase';
 
+/**
+ * Attendee-facing "N going" / "N RSVPs" shows only at this count or more;
+ * below it, nothing renders in its place (ruled by Jas 2026-11-03, amending
+ * "only when N > 0"). Host surfaces — Workspace's count chips, which the
+ * caller opts into with EventStub's `counts` prop — stay exact.
+ */
+export const GOING_COUNT_MIN = 10;
+
 interface EngagementContextValue {
   savedIds: ReadonlySet<string>;
   goingIds: ReadonlySet<string>;

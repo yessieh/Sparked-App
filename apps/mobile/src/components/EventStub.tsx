@@ -32,6 +32,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
+import { GOING_COUNT_MIN } from '../lib/engagement';
 import { eventCountdown, eventWhen } from '../lib/eventTime';
 import { brand, useTheme } from '../theme';
 import { laneStripeColor, type EventLane } from '../theme/categoryColors';
@@ -694,8 +695,9 @@ export default function EventStub({
                 )}
               </>
             ) : (
+              // Consumer line: only from GOING_COUNT_MIN up (lib/engagement.tsx).
               typeof event.rsvp_count === 'number' &&
-              event.rsvp_count > 0 && (
+              event.rsvp_count >= GOING_COUNT_MIN && (
                 <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 11, color: theme.colors.textFaint }}>
                   {event.rsvp_count} {event.rsvp_count === 1 ? 'RSVP' : 'RSVPs'}
                 </Text>
@@ -833,10 +835,11 @@ export default function EventStub({
               {event.venue_name ?? event.organizer_name ?? 'Local host'}
               {distanceSuffix(event.distance_miles)}
             </Text>
-            {/* price + quiet social proof — "N going" only when N > 0 */}
+            {/* price + quiet social proof — "N going" only from GOING_COUNT_MIN
+                up (lib/engagement.tsx) */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <PriceLine cents={event.entry_fee_cents} />
-              {typeof event.rsvp_count === 'number' && event.rsvp_count > 0 && (
+              {typeof event.rsvp_count === 'number' && event.rsvp_count >= GOING_COUNT_MIN && (
                 <Text
                   style={{
                     fontFamily: theme.fonts.bodyMedium,

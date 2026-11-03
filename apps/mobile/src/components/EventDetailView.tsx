@@ -20,6 +20,7 @@ import { Animated, Easing, Platform, Pressable, ScrollView, Text, View } from 'r
 import Svg, { Path, Rect } from 'react-native-svg';
 
 import { useReducedMotion } from '../lib/useReducedMotion';
+import { GOING_COUNT_MIN } from '../lib/engagement';
 import { eventCountdown, eventWhen } from '../lib/eventTime';
 import { enterActivates } from '../lib/linkKeyboard';
 import { brand, useTheme } from '../theme';
@@ -443,7 +444,7 @@ export default function EventDetailView({
                     Going
                   </Text>
                 </View>
-                {goingCount > 0 && (
+                {goingCount >= GOING_COUNT_MIN && (
                   <Text
                     style={{
                       fontFamily: theme.fonts.bodyMedium,
@@ -651,7 +652,8 @@ export default function EventDetailView({
             ) : (
               <GradientButton onPress={fire(onToggleRsvp)}>I'm Going</GradientButton>
             )}
-            {!going && goingCount > 0 && (
+            {/* Only from GOING_COUNT_MIN up (lib/engagement.tsx). */}
+            {!going && goingCount >= GOING_COUNT_MIN && (
               <Text
                 style={{
                   fontFamily: theme.fonts.bodyMedium,
