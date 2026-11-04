@@ -1,0 +1,11 @@
+{
+  "name": "sparked-repo-tools",
+  "private": true,
+  "description": "Repo-root tooling only. Pins the Supabase CLI so `npx supabase` resolves the same version every run (2.109.1; a bare npx fetched 3.0.0 on 2026-11-04).",
+  "devDependencies": {
+    "supabase": "2.109.1"
+  },
+  "engines": {
+    "node": "24.x"
+  }
+}
