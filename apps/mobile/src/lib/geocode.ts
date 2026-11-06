@@ -1,20 +1,15 @@
-// Address → PostGIS point. Nominatim (OpenStreetMap): no key, plain fetch,
-// ~1 req/s usage policy — dev/MVP only; swap for a paid geocoder at scale
-// (tracked). Shared by every create flow so there is ONE geocode interface
-// (Curbside mini-form + paid wizard).
+// Geocoding. Nominatim (OpenStreetMap): no key, plain fetch, ~1 req/s usage
+// policy — dev/MVP only; swap for a paid geocoder at scale (tracked). This
+// file is the single swap-point.
+//
+// The silent `geocode()` (one point, limit=1, no confirmation) was REMOVED
+// 2026-11-06 once its last caller, the Curbside form, moved to the confirm
+// step (components/AddressConfirm.tsx). It is the function that published
+// "123 Rainbow Road" 632 miles away; every create flow now confirms.
 
 export interface GeoPoint {
   lat: number;
   lon: number;
-}
-
-export async function geocode(address: string): Promise<GeoPoint> {
-  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(address)}`;
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (!res.ok) throw new Error(`Address lookup failed (${res.status}) — try again in a moment.`);
-  const hits = (await res.json()) as { lat: string; lon: string }[];
-  if (!hits.length) throw new Error("Couldn't find that address — check it and try again.");
-  return { lat: parseFloat(hits[0].lat), lon: parseFloat(hits[0].lon) };
 }
 
 /** `SRID=4326;POINT(lon lat)` WKT for an events.location insert. */
@@ -25,12 +20,9 @@ export function toWktPoint({ lat, lon }: GeoPoint): string {
 // ---------------------------------------------------------------------------
 // PLACE lookup — the Explore browsing origin (town/state or zip).
 //
-// SEPARATE FROM geocode() ABOVE, DELIBERATELY. That one answers "where is this
-// street address" for a create flow and returns ONE point; this one answers
-// "which place did you mean" and returns CANDIDATES the user chooses between.
-// Same file and same provider, so lib/geocode.ts is still the single swap-point
-// for the tracked paid-geocoder migration — but the create flows' behaviour is
-// untouched by this arc.
+// Answers "which place did you mean" and returns CANDIDATES the user chooses
+// between. Also the create flows' town fallback ("Which town or zip is it
+// near?", AddressConfirm), US-only there via `usOnly`.
 //
 // WHY CANDIDATES AND NOT limit=1: a place query is frequently ambiguous, and
 // the ambiguity does not announce itself. Measured against the live API on
@@ -106,8 +98,8 @@ function toLabel(hit: NominatimHit, detail: string): string {
  */
 // ---------------------------------------------------------------------------
 // ADDRESS candidates — the create flows' confirm step (components/
-// AddressConfirm.tsx). Replaces geocode()'s silent limit=1 for the event
-// wizard; Curbside keeps geocode() until it adopts the same component.
+// AddressConfirm.tsx), used by the event wizard and the Curbside form. Replaced
+// the old silent limit=1 geocode() (removed 2026-11-06).
 //
 // Measured against the live API on 2026-11-04 (format=jsonv2, addressdetails=1,
 // limit=5, countrycodes=us): "18680 S Nogales Hwy, Green Valley, AZ" returns
@@ -175,12 +167,22 @@ export async function geocodeAddresses(
   return out;
 }
 
-export async function geocodePlaces(query: string, limit = 5): Promise<PlaceCandidate[]> {
+export async function geocodePlaces(
+  query: string,
+  limit = 5,
+  /** US only (countrycodes=us). The CREATE flows' "Which town or zip is it
+   *  near?" fallback sets it: an event is pinned to a US town by product scope
+   *  (ruled 2026-11-06). Explore's place picker leaves it off — the ruling
+   *  above stands there unchanged. */
+  usOnly = false,
+): Promise<PlaceCandidate[]> {
   const q = query.trim();
   if (!q) return [];
   const url =
     `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1` +
-    `&limit=${encodeURIComponent(String(limit))}&q=${encodeURIComponent(q)}`;
+    `&limit=${encodeURIComponent(String(limit))}` +
+    (usOnly ? '&countrycodes=us' : '') +
+    `&q=${encodeURIComponent(q)}`;
   const res = await fetch(url, { headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`Location lookup failed (${res.status}) — try again in a moment.`);
   const body: unknown = await res.json();

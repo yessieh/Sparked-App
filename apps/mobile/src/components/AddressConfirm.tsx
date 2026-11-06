@@ -1,5 +1,5 @@
-// Address field + confirm step for the create flows. The event wizard's
-// "When & Where" uses it now; Curbside adopts it in stage 3.
+// Address field + confirm step for the create flows: the event wizard's
+// "When & Where" and the Curbside form.
 //
 // WHY A CONFIRM STEP: the old path geocoded silently and took the first hit.
 // On 2026-07-21 "123 Rainbow Road" published 632 miles from Sahuarita with no
@@ -131,7 +131,8 @@ export default function AddressConfirm({
     setTowns({ kind: 'searching' });
     announce('Looking that up');
     try {
-      const results = await geocodePlaces(q);
+      // US only: an event is pinned to a US town (Explore's picker is not).
+      const results = await geocodePlaces(q, 5, true);
       setTowns(results.length ? { kind: 'results', results } : { kind: 'empty' });
       announce(results.length ? `${results.length} ${results.length === 1 ? 'place matches' : 'places match'}.` : 'No match for that town.');
     } catch (e) {

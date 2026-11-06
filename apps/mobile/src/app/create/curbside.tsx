@@ -33,13 +33,14 @@ import {
   View,
 } from 'react-native';
 
+import AddressConfirm, { type ConfirmedLocation } from '../../components/AddressConfirm';
 import { FormField, GradientButton, SecondaryButton } from '../../components/AuthControls';
 import { FormExitHeader } from '../../components/FormExitHeader';
 import { LeaveConfirm, useEdited } from '../../components/LeaveConfirm';
 import { SubHeader } from '../../components/SubHeader';
 import { DateField, TimeField, format12h } from '../../components/pickers';
 import { useAuth } from '../../lib/auth';
-import { geocode, toWktPoint } from '../../lib/geocode';
+import { toWktPoint } from '../../lib/geocode';
 import { backOr, useGoToMain } from '../../lib/navigation';
 import { supabase } from '../../lib/supabase';
 import {
@@ -209,6 +210,10 @@ export default function CurbsideForm() {
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [address, setAddress] = useState('');
+  /** The point the poster confirmed for `address` (AddressConfirm) — exact or
+   *  a town (approximate). Cleared whenever the address text changes. post()
+   *  writes it as-is: no second geocode. */
+  const [pin, setPin] = useState<ConfirmedLocation | null>(null);
   const [date, setDate] = useState(todayYMD());
   // Optional end date. Equal to `date` means a single-day post — the default,
   // so the casual lane still opens as a one-tap single-day form.
@@ -262,7 +267,7 @@ export default function CurbsideForm() {
   const maxEnd = shiftYMD(date, CURBSIDE_MAX_DAYS - 1);
   const endValid = DATE_RE.test(endDate) && endDate >= date && endDate <= maxEnd;
   const timeValid = !timeOn || TIME_RE.test(time);
-  const canPost = Boolean(title.trim() && address.trim() && dateValid && endValid && timeValid && !busy);
+  const canPost = Boolean(title.trim() && address.trim() && pin && dateValid && endValid && timeValid && !busy);
 
   /** Start moves → drag the end with it, exactly as the wizard's Start bumps
    * its End. Keeps the pair legal without ever silently shortening a span the
@@ -274,11 +279,13 @@ export default function CurbsideForm() {
   };
 
   const post = useCallback(async () => {
-    if (!session || !canPost) return;
+    if (!session || !canPost || !pin) return;
     setBusy(true);
     setError(null);
     try {
-      const point = await geocode(address.trim());
+      // The poster-confirmed point (AddressConfirm) — never a second, silent
+      // geocode that could land somewhere else.
+      const point = { lat: pin.lat, lon: pin.lng };
       const { starts_at, ends_at } = toTimestamps(date, endDate, timeOn ? time : null);
       // THE moment someone becomes a host: create/fetch the workspace, then
       // insert — sequential, same action. Existing hosts fall through to a
@@ -306,6 +313,8 @@ export default function CurbsideForm() {
         ends_at,
         address: address.trim(),
         location: toWktPoint(point),
+        // True when pinned to a town centre (0035).
+        location_approximate: pin.approximate,
         // Display-only anonymity (0009): the row stays attributed to the
         // workspace — quota, moderation, reports unchanged.
         curbside_anonymous: anonPost,
@@ -335,7 +344,7 @@ export default function CurbsideForm() {
     } finally {
       setBusy(false);
     }
-  }, [session, workspaceId, canPost, address, date, endDate, timeOn, time, title, desc, anonPost, goToMain]);
+  }, [session, workspaceId, canPost, pin, address, date, endDate, timeOn, time, title, desc, anonPost, goToMain]);
 
   if (setupError) {
     return (
@@ -428,7 +437,7 @@ export default function CurbsideForm() {
             numberOfLines={3}
             style={{ minHeight: 84, textAlignVertical: 'top' }}
           />
-          <FormField label="Address" value={address} onChangeText={setAddress} placeholder="Street address" autoComplete="street-address" />
+          <AddressConfirm value={address} onChangeText={setAddress} confirmed={pin} onConfirm={setPin} />
           <View style={{ marginBottom: 14 }}>
             <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: theme.fontSizes.caption, color: theme.colors.textMuted, marginBottom: 7 }}>
               Dates
