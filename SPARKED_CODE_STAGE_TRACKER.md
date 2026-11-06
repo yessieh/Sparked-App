@@ -386,6 +386,13 @@ and verified in Cursor/Claude Code.
 - [ ] **Curbside form `FormExitHeader` + `LeaveConfirm` not verified live** —
       the test account is at its Curbside quota, so the form never rendered.
       *Why:* shipped on code inspection only.
+      **ADD (2026-11-06):** the form CAN be rendered for UI checks with a
+      temporary in-page override of the `curbside_posts_used` reply (used for
+      the address arc; the database gate still refuses a real post). **A real
+      post needs a second test account with no Curbside post** — and deleting
+      a post does NOT refund the quota (the 0018 ledger counts consumption, not
+      live rows), so every real test post spends that account's credit for
+      100 days.
 - [ ] **Chrome ← leaves the create forms without the confirmation.** *Why:*
       half-entered input can still be lost by the browser's own Back
       (no `beforeRemove` interception, by scope).
@@ -419,6 +426,10 @@ and verified in Cursor/Claude Code.
       `settings/interests`).
       *Why:* below the 44×44 target and unnamed as a control, on every
       sub-screen at once.
+      **ADD (2026-11-06): the Curbside upgrade screen's crumb** reads "New
+      Curbside post" (`create/curbside.tsx:165`). **Jas's pick: blank** — no
+      crumb, matching Event Detail. *Why:* the crumb repeats what the screen
+      says; decide it with the rest of SubHeader.
       **Same defect in `SettingsStub`'s own back chip (added 2026-10-20)** —
       the four stub settings screens (Notifications, Privacy, Appearance,
       Help): announced as "clickable", no `role`. Fix with the SubHeader chip.
@@ -553,6 +564,11 @@ and verified in Cursor/Claude Code.
       opening `pickers.tsx` twice, and Entry 5's three ruled-not-fixed target
       failures (chevrons 24×26, day cells 77×30, AM/PM 37×21) are in the same
       file and can be decided in the same pass.
+      **ADD (2026-11-04): the TimeField AM/PM toggle runs 56px past the right
+      edge at 390px** (its row's `right` measured 446 against a 390 viewport,
+      wizard "When & Where"). Pre-existing, found while verifying the address
+      arc, not touched. *Why:* clipped controls on the narrowest phones — same
+      file, same arc.
       **THIS ITEM EXISTS BECAUSE THE FENCE HELD.** Arc D's brief said: if
       `pickers.tsx` needs a change, stop and report instead of editing it. The
       build measured, reported, and did not edit. That is the item, not a gap.
@@ -814,6 +830,14 @@ and verified in Cursor/Claude Code.
       script. *Why:* `ignore-scripts=true` is verified on web only (lint 63,
       tsc clean, Explore loads, 2026-10-28); a native dependency that relies
       on a postinstall would fail there first.
+- [ ] **Supabase CLI v3 upgrade — a deliberate task, later.** The CLI is
+      pinned to 2.109.1 at the repo root (`878154b`) after a bare `npx
+      supabase` fetched 3.0.0 on 2026-11-04. v3 labels the dev project
+      (`kzynvvdggooqgtnprhrm`) "production" and refuses an agent-run
+      `db push` without `--yes`. *Why:* a major CLI version applying
+      immutable migrations should be adopted on purpose — read its changelog,
+      dry-run against dev, then bump the pin — never picked up by `npx`
+      mid-arc.
 
 ---
 
@@ -902,6 +926,12 @@ and verified in Cursor/Claude Code.
           created by 0028 WITH the revoke and is clean — so the wrapper is
           looser than the body it fronts, the exact asymmetry 7012350 recorded
           for the feed pair.
+      **UPDATE 2026-11-04 — the `event_detail` HALF IS CLOSED by 0035
+      (`790fa6b`):** its drop + create revoked PUBLIC on both
+      `public.event_detail` and `app.event_detail` and re-granted anon +
+      authenticated explicitly; the post-arc Section 4 diff shows
+      `PUBLIC:EXECUTE` gone. **`app.is_member` REMAINS** — the only
+      `PUBLIC:EXECUTE` left, still open here.
       **WHAT PUBLIC BUYS THAT anon + authenticated DO NOT:** every role in the
       cluster, including any created later, executes both. Small today; the
       class is the point, not the exploit. Four privilege incidents in this
@@ -1512,9 +1542,20 @@ migration lands between, the NAME is the anchor, not the number.
 - [ ] **Geocoder: Nominatim → paid provider at scale.** Curbside address
       geocoding uses OpenStreetMap Nominatim (no key, ~1 req/s usage policy,
       identify via User-Agent) — fine for dev/MVP volume. Swap to a paid
-      geocoder (Google/Mapbox) before real traffic; the mini-form's `geocode`
-      helper is the single swap point.
-- [ ] **NEXT ARC (marked 2026-11-03). Geocode confirmation step in both create flows — PRE-LAUNCH.** Show the
+      geocoder (Google/Mapbox) before real traffic; `lib/geocode.ts` is the
+      single swap point (updated 2026-11-06: the old `geocode()` helper is
+      gone; `geocodeAddresses` and `geocodePlaces` are what swap). **Still
+      open with it:** the requests carry no app identification of our own
+      (browser fetch cannot set User-Agent), which Nominatim's policy asks for.
+- [x] **CLOSED 2026-11-06 — `3fcb1bc` (event wizard) + `bcdf103` (Curbside),
+      on migration 0035 (`790fa6b`).** Both create flows confirm the address
+      through `components/AddressConfirm.tsx`: Find → pick a match (full
+      address + "N mi from <origin> (your Explore location)"), blocked until
+      confirmed, or "Confirm address anyway" → a US town, stored with
+      `events.location_approximate = true`. The silent `geocode()` is removed.
+      Rules: SPARKED_STATE.md → ADDRESS CONFIRMATION; a11y Entry 17.
+      Original item:
+      **Geocode confirmation step in both create flows — PRE-LAUNCH.** Show the
       host the RESOLVED location and make them confirm or correct it before
       publish. Today the geocode is silent and trusted: a typo'd or fictional
       address still returns a confident match, and the event publishes pinned
@@ -1524,6 +1565,15 @@ migration lands between, the NAME is the anchor, not the number.
       no clue why. A host would read that as "publishing is broken." Affects
       the paid wizard and the Curbside mini form equally (one shared
       `lib/geocode.ts`). Pairs naturally with the paid-geocoder swap below.
+- [ ] **NEXT ARC — "(approx.)" on cards.** A town-pinned event shows its
+      distance as exact everywhere but Event Detail. Cards get a muted
+      suffix, e.g. "0.0 mi (approx.)". **Three read paths must return the
+      flag**, each an SQL change with the full gate:
+      `events_within_radius` (the feed AND search), `organizer_profile`, and
+      Saved's direct read of `events` — which needs a deliberate SELECT grant
+      on `location_approximate` (0035 granted none). *Why:* a "0.0 mi" card
+      for an event pinned to a town centre reads as exact, which is the
+      precision claim 0035 exists to qualify.
 - [ ] **Check-in / geofence (ROADMAP).** On-site check-in / proximity arrival
       confirmation for events. Not MVP — parked as a distinct capability that
       builds on the PostGIS point already stored per event.

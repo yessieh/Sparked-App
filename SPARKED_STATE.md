@@ -632,7 +632,47 @@ Polish batch, `751ebc7..0ef0867`. One entry per ruling.
   an anonymous Curbside post has no link and no profile to reach.
 - **Curbside address geocoding = Nominatim** (OpenStreetMap, no key, plain
   fetch) for dev/MVP. Swap to a paid geocoder at scale — tracked. Shared by
-  both create flows via `lib/geocode.ts` — ONE geocode interface.
+  both create flows via `lib/geocode.ts` — ONE geocode interface. **Both
+  flows CONFIRM the address since 2026-11-06** — see ADDRESS CONFIRMATION
+  below.
+
+### ADDRESS CONFIRMATION (LOCKED 2026-11-06)
+
+Address confirmation arc: migration 0035 (`790fa6b`, evidence `27311d0`), the
+event wizard (`3fcb1bc`), the Curbside form (`bcdf103`). One shared component,
+`components/AddressConfirm.tsx`; a11y in `docs/ACCESSIBILITY.md` Entry 17.
+
+- **Find → pick a match.** The host types the address and taps Find; every
+  match is listed with its full address. Nothing is chosen for them.
+  **Continue (wizard "When & Where") / "Post it" (Curbside) stay blocked
+  until the address is confirmed**, exactly or approximately. **Editing the
+  text clears the confirmation.** The confirmed point is what's stored — no
+  second geocode at checkout or post.
+- **No autocomplete** — one request per Find tap, double-tap guarded
+  (Nominatim's usage policy; enforcement is an IP ban on the app).
+- **US-only** (`countrycodes=us`), **biased toward the host's Explore origin**
+  (a ~50 mi viewbox, `bounded=0` — it ranks nearby matches first and excludes
+  nothing).
+- **Distance cue on every match: "N mi from <origin> (your Explore
+  location)".**
+- **Wording: "Pinned to this address"** when the match has a house number;
+  otherwise **"near"** ("Near: …", "Pinned near this address").
+- **The host's typed text is ALWAYS the display address**, stored exactly as
+  typed. Only the point comes from the geocoder.
+- **The old silent `geocode()` (one point, `limit=1`, no confirmation) is
+  REMOVED** (`bcdf103`) — the function that published "123 Rainbow Road" 632
+  miles away on 2026-07-21.
+- **Bypass — "Confirm address anyway."** Under the matches and on no match:
+  "Which town or zip is it near?" → pick a **US** town or zip → the event is
+  pinned to that town's centre and stored with
+  **`events.location_approximate = true`** (0035). Event Detail then reads
+  **"N mi (approximate)"** in the ticket's info row, with a note under the
+  address in Location: "This address isn't on our map yet, so it's pinned to
+  the nearest town. Distance is measured from the town's center." **Cards do
+  not show it yet** — the next arc (tracker).
+- **Explore's place picker is unchanged** — it keeps its own ruling (no
+  country filter). The create flows' town search is US-only by an explicit
+  `usOnly` option on `geocodePlaces`.
 - **Curbside free-tier rules — CHANGED 2026-07-29 (migration 0016).
   ONE free post per rolling 100-day window, spanning up to THREE consecutive
   days.** Supersedes "3 free single-day posts per 100 days" everywhere in this
@@ -790,8 +830,8 @@ order a host meets it:
    beneath the map on every consumer surface.
 
 **Still open for this area (all tracked, none blocking):** real Stripe, real
-image uploads, WYSIWYG description editor, geocode confirmation, published
-events in Workspace. (Wizard exit affordance: done, `f8ab34c` + `b917475`.)
+image uploads, WYSIWYG description editor, ~~geocode confirmation~~ (DONE
+2026-11-06 — ADDRESS CONFIRMATION above), published events in Workspace. (Wizard exit affordance: done, `f8ab34c` + `b917475`.)
 
 ### Workspace creation happens at PUBLISH, not at entry (LOCKED 2026-07-29)
 
@@ -1971,7 +2011,11 @@ none of the four privileges appears in a PostgREST route and no SELECT or
 EXECUTE was touched — but that argument is not what verifies the arc, the run
 is. Section 9 exists because the 0020 → 0021 outage was catalog-clean too.
 **Migrations apply from files via `npx supabase db push --linked`, never
-pasted** — remote history verified matching the repo 2026-08-02, all 22 rows
+pasted.** **The Supabase CLI is PINNED to 2.109.1 at the repo root**
+(`package.json` + lockfile, `878154b`, 2026-11-04): a bare `npx supabase`
+fetched 3.0.0 that day. The root `.npmrc` sets `ignore-scripts=true`, like
+`apps/mobile` (the CLI ships its binary through per-platform packages, no
+install scripts). Remote history verified matching the repo 2026-08-02, all 22 rows
 `local == remote` (0013 had drifted from a dashboard paste and was repaired
 with `migration repair --status applied`). **`migration list` compares VERSION
 NUMBERS, never file contents** — it reported a clean all-green throughout the
@@ -2492,6 +2536,29 @@ rule). **Client write-path premise SETTLED 2026-09-25:** PostgREST PATCH and
 DELETE with `.select()` return the affected rows, and a PATCH matching no row
 returns `[]` — which the provider treats as "stale: re-pull, don't revert"
 (verified by fetch-wrapper capture, signed in, dev; `lib/interests.tsx:26-35`).
+
+0035 `events.location_approximate` — the flag that a pin is a TOWN centre, not
+the address (**APPLIED 2026-11-04**, `20261104000035_location_approximate.sql`,
+committed `790fa6b` on apply; arc evidence `27311d0`). Column `boolean not null
+default false`. **Grant surface: `authenticated` gains INSERT and UPDATE on the
+column only** — the wizard draft insert, its checkout re-entry update, and the
+Curbside insert; **no SELECT for anyone, `anon` gains nothing** (the flag is
+read only through `event_detail`). `events` has no table-level client grant
+that could expose a new column (only `authenticated DELETE`). `app.event_detail`
+and `public.event_detail` were **dropped and recreated** with the column
+appended — an OUT column is a return-type change — bodies otherwise verbatim
+from 0030 / 0028 (hash-verified by the suite). **PUBLIC EXECUTE revoked on
+both** (it had sat on `public.event_detail` since 0023's drop + create);
+explicit EXECUTE to `anon` + `authenticated`. Pre-apply check: the live bodies'
+md5 matched the committed definitions. Applied with the pinned Supabase CLI
+2.109.1; `migration list`: all 35 rows `local == remote`. **Suite
+`scripts/qa-0035-location-approximate.sql`: Section 1 16/16, Section 2 19/19,
+rollback confirmed, 0 rows left** (run 2026-11-04 by Jas). **Post-arc diff**
+`2026-11-04-pre-location-approximate.md` → `2026-11-04-post-location-approximate.md`:
+**exactly as predicted** — Section 1 118 → 120 (the two column grants; post 1A
+= 120), Section 4 `public.event_detail` loses `PUBLIC:EXECUTE`, Section 5 268
+unchanged (5A = 268), every other section identical. The pre-arc file records
+"1A/5A not captured at the time" with its real row counts.
 
 **Auth backend configured (2026-07-09, dashboard only — no app code):**
 email confirmations ON; Google OAuth provider ENABLED (GCP web client,

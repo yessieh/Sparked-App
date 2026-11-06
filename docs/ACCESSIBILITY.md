@@ -3459,3 +3459,86 @@ reachable from PostgREST. No file under `supabase/` changed in `f45c4b0` or
 **Baseline:** `main` @ `e4d8fac`, driven on the Expo web dev server at
 `localhost:8081` (in-app browser), signed in, 2026-11-01 → 2026-11-02.
 `npx tsc --noEmit` exits 0 with typed routes regenerated; `npx expo lint` 63.
+
+---
+
+# Entry 17 — 2026-11-06 — AddressConfirm: the create flows' address confirm step
+
+**The arc:** both create flows — the event wizard's "When & Where" (`3fcb1bc`)
+and the Curbside form (`bcdf103`) — replace the plain address field with
+`components/AddressConfirm.tsx`: Find → a list of matches → tap one to
+confirm, or "Confirm address anyway" → pick a town. Rules in SPARKED_STATE.md
+→ ADDRESS CONFIRMATION. Built from Explore's place picker (`LocationControl`'s
+`PlacePanel`, Entry 3) and Interests' announcer (Entry 12), not re-derived.
+
+## The status region — Entry 2's rule, from the start
+
+ONE `role="status"` `aria-live="polite"` node, **visually hidden** (Interests'
+`srOnly`: absolute, 1×1, overflow hidden, opacity 0), **mounted from the
+component's first render and never re-mounted** — only its child text changes.
+Each message is cleared and set a frame later, so a repeated message is still
+a change. Announced: "Looking that up", "N matches. Pick your event's
+address.", the no-match sentence, "Pinned to <address>", "Address changed. Find
+it again to confirm.", the town prompt and the town pin note.
+
+**Read from the DOM** (2026-11-04, signed in): the region's text followed each
+transition — e.g. "2 matches. Pick your event's address." after Find, "Pinned
+to Walmart Supercenter, 18680, …" after a tap, "Address changed. Find it again
+to confirm." after an edit. On the wizard step the page holds two status
+regions: this one and the time-error region above it (both mounted
+unconditionally).
+
+## Targets — 2.5.5
+
+| Control | How | Measured |
+| ------- | --- | -------- |
+| Find (address and town) | `minHeight` / `minWidth` 44 | **65 × 44**, DOM, 1280 wide |
+| Each match / town row | `minHeight` 44, full-width | 115 tall at 390, 79 at 1280 |
+| Change, Confirm address anyway, Cancel | `minHeight` 44 | set in code |
+
+## Contrast — the card constraint applied, not rediscovered
+
+The results, the confirmed pin and the town panel are CARD surfaces, where
+`textMuted` composites to 4.32:1 and fails 1.4.3 (Entry 2). **Every line on
+them is `colors.text`** (12.62:1 dark card). Event Detail's approximate note
+also uses `colors.text`: `textMuted` is 3.43:1 on the light page (Entry 12).
+
+## Names
+
+Find is "Find this address on the map" / "Find this town". Each match row is
+named "Use <full address>, N mi from <origin> (your Explore location)"
+("Use near …" without a house number); each town row "Pin to <place>, …". The
+town input is labelled "Town or zip code" by `aria-label` and
+`aria-labelledby` (its visible prompt), PlacePanel's double mechanism.
+
+## Human verification — Jas, keyboard (as reported, 2026-11-06)
+
+- The confirm step is keyboard-reachable: **Tab** reaches its controls and
+  **Enter** activates them. (Reported as a whole; which individual controls
+  were driven was not itemised.)
+
+## OWED — not yet confirmed
+
+- **NVDA automatically announcing the result after Find (WCAG 4.1.3, Status
+  Messages).** The region and its text changes are verified in the DOM above;
+  that NVDA actually SPEAKS them without focus moving has NOT been confirmed
+  by Jas. Until it is, 4.1.3 is unverified for this component.
+
+## What this entry does NOT establish
+
+- **Nothing about native iOS / Android** — driven on web only.
+- **Light mode** — contrast above is the dark card; light-mode values follow
+  the tokens (Entry 12's table) but were not rendered.
+- **A real publish** — "Continue to payment" and "Post it" were never pressed
+  (a real draft / a real post); the write path is covered by qa-0035's host
+  insert and update.
+
+## Privilege gate
+
+The UI commits are SQL-free. The one schema change behind them, 0035, ran the
+full gate (SPARKED_STATE.md, the 0035 entry).
+
+**Baseline:** `main` @ `bcdf103`, driven on the Expo web dev server at
+`localhost:8081` (in-app browser, 390 and 1280 wide), signed in,
+2026-11-04 → 2026-11-06. `npx tsc --noEmit` exits 0 with typed routes
+regenerated; lint unchanged on every edited file.
