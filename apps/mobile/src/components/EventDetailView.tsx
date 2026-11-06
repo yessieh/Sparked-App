@@ -63,6 +63,9 @@ export interface EventDetailData {
    * of that rule is a second thing that can drift from the database's.
    */
   workspace_id: string | null;
+  /** True when the event is pinned to a TOWN centre because its address was
+   *  not on the map (0035). Distances from it are approximate. */
+  location_approximate: boolean;
 }
 
 /** Ticket-row icons (prototype _SIcon paths). */
@@ -315,7 +318,7 @@ export default function EventDetailView({
                   >
                     {event.venue_name ?? event.organizer_name ?? event.address ?? ''}
                     {typeof event.distance_miles === 'number'
-                      ? ` · ${event.distance_miles.toFixed(1)} mi`
+                      ? ` · ${event.distance_miles.toFixed(1)} mi${event.location_approximate ? ' (approximate)' : ''}`
                       : ''}
                   </Text>
                 </View>
@@ -497,6 +500,15 @@ export default function EventDetailView({
                     <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 13, lineHeight: 19, color: theme.colors.textMuted, marginTop: 3 }}>
                       {event.address}
                     </Text>
+                    {/* Pinned to a town, not this address (0035). The address
+                        above stays exactly as the host typed it. colors.text:
+                        textMuted fails 1.4.3 in light mode (3.43:1, a11y
+                        Entry 12), and this line is information, not garnish. */}
+                    {event.location_approximate && (
+                      <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 12.5, lineHeight: 18, color: theme.colors.text, marginTop: 6 }}>
+                        {"This address isn't on our map yet, so it's pinned to the nearest town. Distance is measured from the town's center."}
+                      </Text>
+                    )}
                   </View>
                 </View>
               </View>

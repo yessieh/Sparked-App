@@ -104,6 +104,77 @@ function toLabel(hit: NominatimHit, detail: string): string {
  * "bomb". Filtering the geocoder's answers through it would break the feature
  * for the people who live there. The length caps above are the real guard.
  */
+// ---------------------------------------------------------------------------
+// ADDRESS candidates — the create flows' confirm step (components/
+// AddressConfirm.tsx). Replaces geocode()'s silent limit=1 for the event
+// wizard; Curbside keeps geocode() until it adopts the same component.
+//
+// Measured against the live API on 2026-11-04 (format=jsonv2, addressdetails=1,
+// limit=5, countrycodes=us): "18680 S Nogales Hwy, Green Valley, AZ" returns
+// two HOUSE-level hits (place_rank 30, address.house_number "18680" — a
+// Walmart and a Coinstar inside it); "123 Rainbow Road" returns five
+// house-level hits in PA, CT and CA, two of them sharing one display_name.
+// So a hit CAN be the exact door; one without a house number is a street or an
+// area, and the confirm wording says "near" for those (`exact`).
+//
+// countrycodes=us HERE, unlike geocodePlaces: an event address is a US street
+// address by product scope, and a foreign hit is never the right one.
+// viewbox + bounded=0 BIASES toward the host's Explore origin without
+// excluding anything, so a correct match 300 miles away still appears.
+// ---------------------------------------------------------------------------
+
+export interface AddressCandidate {
+  /** Nominatim's full display_name, verbatim — the string the host confirms. */
+  detail: string;
+  lat: number;
+  lng: number;
+  /** True when the hit carries a house number: the pin is the address itself.
+   *  False = a street or area; the UI says "near". */
+  exact: boolean;
+}
+
+/** Half-width of the bias box around the origin, in degrees (~50 mi). */
+const BIAS_DEG = 0.75;
+
+/**
+ * Address candidates for a typed street address, best match first. ONE request
+ * per call — the caller fires it on an explicit Find tap, never per keystroke
+ * (Nominatim's usage policy forbids autocomplete).
+ */
+export async function geocodeAddresses(
+  query: string,
+  near?: { lat: number; lng: number } | null,
+): Promise<AddressCandidate[]> {
+  const q = query.trim();
+  if (!q) return [];
+  let url =
+    `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&countrycodes=us` +
+    `&q=${encodeURIComponent(q)}`;
+  if (near) {
+    // viewbox = left,top,right,bottom (lon,lat,lon,lat).
+    const box = [near.lng - BIAS_DEG, near.lat + BIAS_DEG, near.lng + BIAS_DEG, near.lat - BIAS_DEG];
+    url += `&viewbox=${box.map((n) => n.toFixed(4)).join(',')}&bounded=0`;
+  }
+  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`Address lookup failed (${res.status}) — try again in a moment.`);
+  const body: unknown = await res.json();
+  if (!Array.isArray(body)) return [];
+  const out: AddressCandidate[] = [];
+  const seen = new Set<string>();
+  for (const raw of body as (NominatimHit & { address?: { house_number?: unknown } | null })[]) {
+    const lat = toCoord(raw?.lat, 90);
+    const lng = toCoord(raw?.lon, 180);
+    if (lat === null || lng === null) continue;
+    const detail = typeof raw?.display_name === 'string' ? raw.display_name.slice(0, DETAIL_MAX) : '';
+    // Two hits with one display_name read as the same choice twice — keep the first.
+    if (!detail || seen.has(detail)) continue;
+    seen.add(detail);
+    const house = raw?.address?.house_number;
+    out.push({ detail, lat, lng, exact: typeof house === 'string' && house.trim().length > 0 });
+  }
+  return out;
+}
+
 export async function geocodePlaces(query: string, limit = 5): Promise<PlaceCandidate[]> {
   const q = query.trim();
   if (!q) return [];

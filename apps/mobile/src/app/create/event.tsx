@@ -39,6 +39,7 @@ import {
   View,
 } from 'react-native';
 
+import AddressConfirm, { type ConfirmedLocation } from '../../components/AddressConfirm';
 import { FormField, GradientButton, GradientFill, SecondaryButton } from '../../components/AuthControls';
 import EventDetailView, { type EventDetailData, placeholderPhotos } from '../../components/EventDetailView';
 import EventStub, { type FeedEvent } from '../../components/EventStub';
@@ -51,7 +52,7 @@ import { useFocusHeadingOnChange } from '../../components/ScreenFocus';
 import { DateField, TimeField, format12h } from '../../components/pickers';
 import { useAuth } from '../../lib/auth';
 import { eventWhen } from '../../lib/eventTime';
-import { geocode, toWktPoint } from '../../lib/geocode';
+import { toWktPoint } from '../../lib/geocode';
 import { canonicalize, isBlocked, suggestMatches, titleCase } from '../../lib/moderation';
 import { backOr } from '../../lib/navigation';
 import {
@@ -862,6 +863,10 @@ export default function EventWizard() {
   const [endTime, setEndTime] = useState('22:00');
   const [venueName, setVenueName] = useState('');
   const [address, setAddress] = useState('');
+  /** The point the host confirmed for `address` (AddressConfirm). Null until
+   *  confirmed, and cleared whenever the address text changes. toCheckout
+   *  writes it as-is — no second geocode. */
+  const [pin, setPin] = useState<ConfirmedLocation | null>(null);
   const [photos, setPhotos] = useState<number[]>([]);
   // Plus site-map feature. `siteMap` = the placeholder image is "uploaded"
   // (ephemeral, like photos); `vendors` = the structured rows that persist.
@@ -1069,13 +1074,14 @@ export default function EventWizard() {
       // mid-draft — the one place the chrome rule says leaving is expensive.
       workspace_id: null,
       cancelled_at: null,
+      location_approximate: pin?.approximate ?? false,
     }),
-    [title, desc, workspaceName, tier, startsAt, endsAt, venueName, address, feeCents, cats],
+    [title, desc, workspaceName, tier, startsAt, endsAt, venueName, address, feeCents, cats, pin],
   );
 
   const missing = [
     !title.trim() && 'a title',
-    !address.trim() && 'an address',
+    !(address.trim() && pin) && 'a confirmed address',
   ].filter(Boolean) as string[];
 
   /**
@@ -1124,11 +1130,13 @@ export default function EventWizard() {
    * the 0010 guard trigger would reject us if we tried.
    */
   const toCheckout = useCallback(async () => {
-    if (!session || !canPublish) return;
+    if (!session || !canPublish || !pin) return;
     setBusy(true);
     setError(null);
     try {
-      const point = await geocode(address.trim());
+      // The host-confirmed point (When & Where's AddressConfirm) — never a
+      // second, silent geocode that could land somewhere else.
+      const point = { lat: pin.lat, lon: pin.lng };
       // Become a host HERE, not at wizard entry — the draft row below carries
       // workspace_id, which is set once at insert and immutable afterwards
       // (0011 withholds it from the UPDATE grant), so this is the last moment
@@ -1155,6 +1163,9 @@ export default function EventWizard() {
         venue_name: venueName.trim() || null,
         address: address.trim(),
         location: toWktPoint(point),
+        // True when pinned to a town centre (0035). In `editable`, so the
+        // draft insert AND the re-entry update both write it.
+        location_approximate: pin.approximate,
         entry_fee_cents: feeCents,
       };
 
@@ -1204,14 +1215,16 @@ export default function EventWizard() {
     } finally {
       setBusy(false);
     }
-  }, [session, workspaceId, workspaceName, canPublish, address, title, desc, tier, startsAt, endsAt, venueName, feeCents, draftId, cats, vendors]);
+  }, [session, workspaceId, workspaceName, canPublish, pin, address, title, desc, tier, startsAt, endsAt, venueName, feeCents, draftId, cats, vendors]);
 
   /** Continue is blocked on step 1 while the time pair is invalid, not merely
    *  at Review. The two fields that caused it are on screen HERE and three
    *  steps later they are not; a wizard that lets you walk forward and then
    *  refuses to publish has only wasted the host's time. canPublish carries
    *  the same guard so .insert() stays unreachable either way. */
-  const nextBlocked = step === WHEN_WHERE_STEP && timeInvalid;
+  // Same reasoning for the address: confirmed (exactly or approximately) on
+  // the step that holds it, not discovered missing at Review.
+  const nextBlocked = step === WHEN_WHERE_STEP && (timeInvalid || !pin);
 
   const next = () => {
     if (nextBlocked) return;
@@ -1366,7 +1379,7 @@ export default function EventWizard() {
               </View>
 
               <FormField label="Venue name" value={venueName} onChangeText={setVenueName} placeholder="e.g. The Lola Loft" />
-              <FormField label="Address" value={address} onChangeText={setAddress} placeholder="Street address" autoComplete="street-address" />
+              <AddressConfirm value={address} onChangeText={setAddress} confirmed={pin} onConfirm={setPin} />
             </View>
           )}
 
