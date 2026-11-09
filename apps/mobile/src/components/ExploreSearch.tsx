@@ -27,7 +27,7 @@
 //      on the geography column. A server-side title search would have to build
 //      that index first.
 //   2. `description` NEVER REACHES THIS SCREEN. `events_within_radius` returns
-//      11 columns and description is not among them (only `event_detail` has
+//      12 columns and description is not among them (only `event_detail` has
 //      it). So description search is not merely unimplemented here — it is not
 //      possible client-side at all, at any effort, without a schema change.
 //

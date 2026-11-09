@@ -668,8 +668,15 @@ event wizard (`3fcb1bc`), the Curbside form (`bcdf103`). One shared component,
   **`events.location_approximate = true`** (0035). Event Detail then reads
   **"N mi (approximate)"** in the ticket's info row, with a note under the
   address in Location: "This address isn't on our map yet, so it's pinned to
-  the nearest town. Distance is measured from the town's center." **Cards do
-  not show it yet** — the next arc (tracker).
+  the nearest town. Distance is measured from the town's center."
+- **Cards — "(approx.)" after the distance, ONLY where a card shows a
+  distance** (`da300a3`, on 0036). The location line reads e.g. "Sparked ·
+  0.0 mi (approx.)", in the line's own muted style — no icon, no colour.
+  That is the Explore feed (photo and timeline cards) and Explore search.
+  **Saved and organizer-profile cards show no distance** (neither surface has
+  an origin), **so they show no suffix** — Jas's ruling, 2026-11-09: a bare
+  "(approx.)" would qualify nothing. Their reads carry the flag anyway.
+  Workspace (host listings) does not read it.
 - **Explore's place picker is unchanged** — it keeps its own ruling (no
   country filter). The create flows' town search is US-only by an explicit
   `usOnly` option on `geocodePlaces`.
@@ -2559,6 +2566,31 @@ rollback confirmed, 0 rows left** (run 2026-11-04 by Jas). **Post-arc diff**
 = 120), Section 4 `public.event_detail` loses `PUBLIC:EXECUTE`, Section 5 268
 unchanged (5A = 268), every other section identical. The pre-arc file records
 "1A/5A not captured at the time" with its real row counts.
+
+0036 card read paths return `location_approximate` (**APPLIED 2026-11-06**,
+`20261106000036_approx_cards.sql`, committed `b8c0d89` on apply; arc evidence
+`07fd7b0`; UI `da300a3`). **Feed pair dropped and recreated** —
+`app.events_within_radius` and its `public` wrapper (5-argument form) with
+`location_approximate` appended as the 12th OUT column (a return-type change);
+bodies otherwise verbatim from 0031 PARTs A/B (hash-verified by the suite).
+**`app.organizer_profile` CREATE OR REPLACE**, adding the column to its
+`visible` CTE — the `to_jsonb` objects gain the key, so the **return type is
+unchanged** and its ACL is preserved; `public.organizer_profile` not touched.
+**Grant surface: `authenticated` gains SELECT on `events.location_approximate`**
+— consumed by Saved's direct read of `events` (`saved.tsx`); `anon` gains
+nothing (Saved is signed-in only). This changes 0035's "no SELECT for anyone".
+**No PUBLIC EXECUTE on any of the four functions**; explicit EXECUTE to
+`anon` + `authenticated` on the recreated pair. Pre-apply check: the live
+bodies' md5 matched the committed definitions. Applied with the pinned CLI
+2.109.1; `migration list`: all 36 rows `local == remote`. **Suite
+`scripts/qa-0036-approx-cards.sql`: Section 1 14/14, Section 2 20/20,
+rollback confirmed, 0 rows left** (run 2026-11-06 by Jas) — feed as anon and
+authenticated, profile as anon, Saved's three policy branches plus the host
+branch, anon refused the column (42501) with a control. **Post-arc diff**
+`2026-11-06-pre-approx-cards.md` → `2026-11-06-post-approx-cards.md`: **one
+row added** — Section 1 `public | events | column | location_approximate |
+authenticated | SELECT`; **1A 120 → 121, 5A 268 unchanged**; every other
+section row-identical, Section 4 included.
 
 **Auth backend configured (2026-07-09, dashboard only — no app code):**
 email confirmations ON; Google OAuth provider ENABLED (GCP web client,

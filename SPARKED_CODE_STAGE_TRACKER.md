@@ -1565,7 +1565,15 @@ migration lands between, the NAME is the anchor, not the number.
       no clue why. A host would read that as "publishing is broken." Affects
       the paid wizard and the Curbside mini form equally (one shared
       `lib/geocode.ts`). Pairs naturally with the paid-geocoder swap below.
-- [ ] **NEXT ARC — "(approx.)" on cards.** A town-pinned event shows its
+- [x] **CLOSED 2026-11-09 — migration 0036 (`b8c0d89`, evidence `07fd7b0`)
+      + cards UI (`da300a3`).** "(approx.)" follows the distance on Explore
+      feed and search cards; Saved and organizer-profile cards show no
+      distance, so no suffix (Jas's ruling). Rules: SPARKED_STATE.md →
+      ADDRESS CONFIRMATION; migration entry 0036. **Note:** Saved now holds
+      `authenticated` SELECT on `location_approximate` and reads the flag but
+      never displays it — ready if compact cards ever show a distance there.
+      Original item:
+      **NEXT ARC — "(approx.)" on cards.** A town-pinned event shows its
       distance as exact everywhere but Event Detail. Cards get a muted
       suffix, e.g. "0.0 mi (approx.)". **Three read paths must return the
       flag**, each an SQL change with the full gate:
