@@ -42,6 +42,9 @@ interface SavedEventRow {
   entry_fee_cents: number;
   rsvp_count: number;
   curbside_anonymous: boolean;
+  /** authenticated SELECT granted by 0036 PART E (behaviour-checked by
+   * qa-0036 2m/2n/2p, 2026-11-06). */
+  location_approximate: boolean;
   /** Set once the host withdrew the listing (0019). Read-only to clients; the
    * server decides whether such a row reaches us at all (0022 attendee-history
    * branch), these two only decide how it is filed and rendered. */
@@ -187,7 +190,7 @@ export default function Saved() {
         // tier_id is read ONLY to derive the stripe lane (laneFor) — it is never
         // rendered and never reaches FeedEvent, per the locked consumer-facing
         // rule that keeps tier off the card.
-        'id,title,tier_id,starts_at,ends_at,venue_name,entry_fee_cents,rsvp_count,curbside_anonymous,archived_at,deleted_at,workspaces(name),event_categories(category_id)',
+        'id,title,tier_id,starts_at,ends_at,venue_name,entry_fee_cents,rsvp_count,curbside_anonymous,location_approximate,archived_at,deleted_at,workspaces(name),event_categories(category_id)',
       )
       .in('id', ids)
       .eq('status', 'published')
@@ -236,6 +239,7 @@ export default function Saved() {
         rsvp_count: r.rsvp_count + rsvpDelta(r.id),
         categories: r.event_categories.map((c) => c.category_id),
         lane: laneFor(r.tier_id),
+        location_approximate: r.location_approximate,
       };
       // Ended events split off BEFORE bucketing. savedBucket reads starts_at
       // against two forward-looking windows only, so anything in the past fell

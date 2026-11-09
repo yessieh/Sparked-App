@@ -61,6 +61,13 @@ export interface FeedEvent {
   /** Present on feed RPC rows; absent on Saved-screen fetches (no origin). */
   distance_miles?: number;
   rsvp_count?: number;
+  /**
+   * The host pinned this event to a town, not an exact address (0035). Read
+   * only by the distance suffix: "(approx.)" follows the miles, and is shown
+   * ONLY where the card shows a distance — a bare "(approx.)" with no number
+   * would qualify nothing.
+   */
+  location_approximate?: boolean;
 }
 
 /**
@@ -483,8 +490,9 @@ export function PriceLine({ cents }: { cents: number }) {
  * state two numbers and the on-screen order would stop matching the sort. The
  * expression is the photo variant's original, moved, not rewritten.
  */
-function distanceSuffix(miles: number | undefined): string {
-  return typeof miles === 'number' ? ` · ${miles.toFixed(1)} mi` : '';
+function distanceSuffix(miles: number | undefined, approximate?: boolean): string {
+  if (typeof miles !== 'number') return '';
+  return ` · ${miles.toFixed(1)} mi${approximate ? ' (approx.)' : ''}`;
 }
 
 /**
@@ -671,7 +679,7 @@ export default function EventStub({
               "Local host", never "verified" — Sparked verifies nobody. */}
           <Text numberOfLines={1} style={[styles.metaLine, { color: theme.colors.textMuted, fontFamily: theme.fonts.bodyMedium }]}>
             {event.venue_name ?? event.organizer_name ?? 'Local host'}
-            {showDistance ? distanceSuffix(event.distance_miles) : ''}
+            {showDistance ? distanceSuffix(event.distance_miles, event.location_approximate) : ''}
           </Text>
           {/* Chip row. Host listings replace the consumer RSVP line with two
               count chips, each zero-suppressed independently — a listing with
@@ -833,7 +841,7 @@ export default function EventStub({
             <WhenLines startsAt={event.starts_at} endsAt={event.ends_at} />
             <Text numberOfLines={1} style={[styles.metaLine, { color: theme.colors.textMuted, fontFamily: theme.fonts.bodyMedium }]}>
               {event.venue_name ?? event.organizer_name ?? 'Local host'}
-              {distanceSuffix(event.distance_miles)}
+              {distanceSuffix(event.distance_miles, event.location_approximate)}
             </Text>
             {/* price + quiet social proof — "N going" only from GOING_COUNT_MIN
                 up (lib/engagement.tsx) */}

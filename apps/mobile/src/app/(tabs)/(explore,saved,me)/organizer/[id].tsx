@@ -60,6 +60,8 @@ interface ProfileEvent {
   entry_fee_cents: number;
   rsvp_count: number;
   categories: string[] | null;
+  /** Added to the payload by 0036 PART D. */
+  location_approximate: boolean;
 }
 
 interface OrganizerProfile {
@@ -449,6 +451,7 @@ export default function OrganizerProfileScreen() {
       // The lane is DERIVED here; tier_id itself is still never mapped, which
       // is what the header note above is protecting.
       lane: laneFor(e.tier_id),
+      location_approximate: e.location_approximate,
       // distance_miles deliberately absent: no origin on this surface.
     }),
     [profile?.name, rsvpDelta],
