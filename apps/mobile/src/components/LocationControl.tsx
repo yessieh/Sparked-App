@@ -18,11 +18,13 @@
 // 632 miles off with no error and published there. Even a SINGLE confident hit
 // is confirmed here — that incident was a single confident hit.
 
+import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useRef, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { geocodePlaces, type PlaceCandidate } from '../lib/geocode';
 import { MAX_RADIUS, MIN_RADIUS, useOrigin, type Place } from '../lib/origin';
+import { srOnly, useRecentRemoval } from '../lib/recentRemoval';
 import { brand, useTheme } from '../theme';
 
 /** The reference's inline-edit affordance token. KNOWN LIGHT-MODE FAILURE,
@@ -44,7 +46,7 @@ type Phase = 'idle' | 'radius' | 'place';
 
 export default function LocationControl() {
   const theme = useTheme();
-  const { place, radius, history, loaded, setPlace, setRadius } = useOrigin();
+  const { place, radius, history, loaded, setPlace, setRadius, removeRecent, clearRecent } = useOrigin();
   const [phase, setPhase] = useState<Phase>('idle');
   const [draftRadius, setDraftRadius] = useState('');
 
@@ -172,6 +174,8 @@ export default function LocationControl() {
       {phase === 'place' && (
         <PlacePanel
           history={history}
+          removeRecent={removeRecent}
+          clearRecent={clearRecent}
           onPick={(p) => {
             setPlace(p);
             setPhase('idle');
@@ -202,14 +206,21 @@ type PanelState =
  */
 function PlacePanel({
   history,
+  removeRecent,
+  clearRecent,
   onPick,
   onClose,
 }: {
   history: Place[];
+  removeRecent: (place: Place) => void;
+  clearRecent: () => void;
   onPick: (place: Place) => void;
   onClose: () => void;
 }) {
   const theme = useTheme();
+  const inputRef = useRef<TextInput>(null);
+  // Focus lands on the search field once the last recent place is removed.
+  const removal = useRecentRemoval({ history, removeRecent, clearRecent, fallback: inputRef });
   const [query, setQuery] = useState('');
   const [state, setState] = useState<PanelState>({ kind: 'input' });
   /** In-flight guard. Nominatim's policy is ~1 req/s and enforcement is an IP
@@ -265,7 +276,13 @@ function PlacePanel({
         Town or zip code
       </Text>
 
+      {/* Status for removals — mounted with the panel, never re-mounted. */}
+      <View role="status" aria-live="polite" style={srOnly}>
+        {removal.announcement ? <Text>{removal.announcement}</Text> : null}
+      </View>
+
       <TextInput
+        ref={inputRef}
         autoFocus
         value={query}
         onChangeText={setQuery}
@@ -345,34 +362,54 @@ function PlacePanel({
       {state.kind === 'input' && history.length > 0 && (
         <>
           <Text style={body}>Recent</Text>
+          {/* Each recent place is removable HERE and on the Privacy screen
+              (locked 2026-11-10, superseding the 2026-08-20 "delete lives only
+              in Privacy" note). Removing never changes the current town. The ✕
+              is a SIBLING of the row's Pressable, never nested in it: RN web
+              fires both handlers for a nested press, which would pick the
+              place AND remove it. */}
           {history.map((h) => (
-            <Pressable
-              key={h.label}
-              role="button"
-              accessibilityLabel={`Use ${h.detail}`}
-              // No geocode round trip — these coordinates were confirmed once
-              // already and are stored with the label.
-              onPress={() => onPick(h)}
-              style={({ pressed }) => ({
-                minHeight: TARGET,
-                justifyContent: 'center',
-                paddingVertical: 10,
-                paddingHorizontal: 12,
-                borderRadius: theme.radii.lg - 4,
-                borderWidth: 1,
-                borderColor: theme.colors.cardBorder,
-                backgroundColor: pressed ? theme.colors.surfaceHover : 'transparent',
-              })}
-            >
-              <Text style={body}>{h.label}</Text>
-            </Pressable>
+            <View key={h.label} style={{ flexDirection: 'row', alignItems: 'stretch', gap: 6 }}>
+              <Pressable
+                role="button"
+                accessibilityLabel={`Use ${h.detail}`}
+                // No geocode round trip — these coordinates were confirmed once
+                // already and are stored with the label.
+                onPress={() => onPick(h)}
+                style={({ pressed }) => ({
+                  flex: 1,
+                  minWidth: 0,
+                  minHeight: TARGET,
+                  justifyContent: 'center',
+                  paddingVertical: 10,
+                  paddingHorizontal: 12,
+                  borderRadius: theme.radii.lg - 4,
+                  borderWidth: 1,
+                  borderColor: theme.colors.cardBorder,
+                  backgroundColor: pressed ? theme.colors.surfaceHover : 'transparent',
+                })}
+              >
+                <Text style={body}>{h.label}</Text>
+              </Pressable>
+              <Pressable
+                ref={removal.register(h.label)}
+                role="button"
+                aria-label={`Remove ${h.label} from recent places`}
+                accessibilityLabel={`Remove ${h.label} from recent places`}
+                onPress={() => removal.remove(h)}
+                style={({ pressed }) => ({
+                  width: TARGET,
+                  minHeight: TARGET,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: theme.radii.lg - 4,
+                  backgroundColor: pressed ? theme.colors.surfaceHover : 'transparent',
+                })}
+              >
+                <Ionicons name="close" size={18} color={theme.colors.text} />
+              </Pressable>
+            </View>
           ))}
-          {/* THE HISTORY HAS NO DELETE CONTROL, AND THAT IS A KNOWN GAP.
-              It ships with the Privacy screen (app/settings/privacy.tsx), a
-              7-line stub today, which is a hard dependency for it rather than
-              an optional nicety. Recorded in SPARKED_STATE.md and the tracker
-              so it is visible rather than implied. Do not add a delete here —
-              it belongs on the screen that owns data controls. */}
         </>
       )}
 

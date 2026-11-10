@@ -168,6 +168,15 @@ export interface OriginContextValue {
   loaded: boolean;
   setPlace: (place: Place) => void;
   setRadius: (miles: number) => void;
+  /**
+   * Drop one place from the recent list (matched on label, the dedupe key).
+   * NEVER touches `place` — the feed's current town stays exactly as it was,
+   * even when the removed entry is that town (Jas, locked 2026-11-10).
+   */
+  removeRecent: (place: Place) => void;
+  /** Empty the recent list. Same rule: the current town is untouched. Called on
+   *  sign-out as well as from Privacy's "Clear all". */
+  clearRecent: () => void;
 }
 
 const OriginContext = createContext<OriginContextValue>({
@@ -177,6 +186,8 @@ const OriginContext = createContext<OriginContextValue>({
   loaded: false,
   setPlace: () => {},
   setRadius: () => {},
+  removeRecent: () => {},
+  clearRecent: () => {},
 });
 
 export function OriginProvider({ children }: { children: ReactNode }) {
@@ -227,6 +238,26 @@ export function OriginProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const removeRecent = useCallback((place: Place) => {
+    setState((prev) => {
+      if (!prev) return prev;
+      const history = prev.history.filter((h) => h.label !== place.label);
+      if (history.length === prev.history.length) return prev; // not listed; no write.
+      const next: Stored = { ...prev, history };
+      void persist(next);
+      return next;
+    });
+  }, []);
+
+  const clearRecent = useCallback(() => {
+    setState((prev) => {
+      if (!prev || prev.history.length === 0) return prev;
+      const next: Stored = { ...prev, history: [] };
+      void persist(next);
+      return next;
+    });
+  }, []);
+
   const value = useMemo<OriginContextValue>(
     () => ({
       place: state?.place ?? null,
@@ -235,8 +266,10 @@ export function OriginProvider({ children }: { children: ReactNode }) {
       loaded: state !== null,
       setPlace,
       setRadius,
+      removeRecent,
+      clearRecent,
     }),
-    [state, setPlace, setRadius],
+    [state, setPlace, setRadius, removeRecent, clearRecent],
   );
 
   return React.createElement(OriginContext.Provider, { value }, children);

@@ -28,6 +28,7 @@ import { useEngagement } from '../../../lib/engagement';
 import { eventCountdown } from '../../../lib/eventTime';
 import { enterActivates } from '../../../lib/linkKeyboard';
 import { useGoToMain } from '../../../lib/navigation';
+import { useOrigin } from '../../../lib/origin';
 import { supabase } from '../../../lib/supabase';
 import {
   useMyWorkspace,
@@ -539,6 +540,7 @@ function SignedInMe() {
   const theme = useTheme();
   const goToMain = useGoToMain();
   const { session, signOut } = useAuth();
+  const { clearRecent } = useOrigin();
   // The engagement provider holds the user's saved/going IDS but no event
   // rows, so the preview needs titles + timestamps from somewhere: one events
   // read, below.
@@ -833,7 +835,18 @@ function SignedInMe() {
       </View>
 
       <View style={{ marginTop: 30 }}>
-        <SecondaryButton onPress={() => signOut()}>Sign out</SecondaryButton>
+        {/* Signing out clears recent places (locked 2026-11-10) — history only;
+            the current town stays. Cleared HERE, not in AuthProvider.signOut:
+            OriginProvider sits inside AuthProvider (_layout.tsx), so the auth
+            layer cannot reach it. This is the app's only sign-out control. */}
+        <SecondaryButton
+          onPress={() => {
+            clearRecent();
+            void signOut();
+          }}
+        >
+          Sign out
+        </SecondaryButton>
       </View>
     </ScrollView>
   );
