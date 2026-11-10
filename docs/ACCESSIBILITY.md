@@ -3542,3 +3542,98 @@ full gate (SPARKED_STATE.md, the 0035 entry).
 `localhost:8081` (in-app browser, 390 and 1280 wide), signed in,
 2026-11-04 → 2026-11-06. `npx tsc --noEmit` exits 0 with typed routes
 regenerated; lint unchanged on every edited file.
+
+# Entry 18 — 2026-11-10 — Recent places: remove in the picker and on Privacy
+
+**The arc (`c28d601`):** recent places become removable — a ✕ on each recent
+row in Explore's location picker (`LocationControl`'s `PlacePanel`, Entry 3)
+and a Remove per place plus "Clear all" on the Privacy screen, now a real
+screen. Rules in SPARKED_STATE.md → RECENT PLACES (LOCKED 2026-11-10). Both
+surfaces share ONE focus-and-status implementation, `lib/recentRemoval.ts`,
+built from Interests' focus-after-move (Entry 12) and announcer.
+
+## The ✕ is a SIBLING of the row, never nested
+
+Each recent row is two Pressables side by side: "Use <place>" and the ✕.
+Nesting the ✕ inside the row would make a press on it fire BOTH handlers on
+React Native Web — pick the place and remove it. Read from the DOM: each ✕'s
+previous sibling is its row, and no ✕ sits inside a "Use …" element. A
+keyboard Enter on a ✕ removed the place and left the panel open (no pick).
+
+## Targets — 2.5.5
+
+| Control | How | Measured (DOM) |
+| ------- | --- | -------------- |
+| Picker ✕ | `width` / `minHeight` 44 | **44 × 44** at 390 and 1280 |
+| Privacy Remove | `minWidth` / `minHeight` 44 | **86 × 44** at 390 and 1280 |
+| Privacy Clear all | `minWidth` / `minHeight` 44 | **86 × 44** |
+
+Privacy at 390: `scrollWidth` 390 — no horizontal scroll.
+
+## Names
+
+The ✕ and each Remove are named **"Remove <place> from recent places"**
+(`aria-label` + `accessibilityLabel`). Remove's visible word starts the name
+(2.5.3). Clear all is named by its text.
+
+## Focus after a removal — 2.4.3
+
+A removed row unmounts. After the commit, focus goes to:
+
+1. the **next** row's ✕ / Remove;
+2. if the removed row was the last, the **previous** row's;
+3. if none are left, the surface's fallback — the picker's **search field**
+   ("Town or zip code"), or on Privacy the **"Recent places" heading**
+   (`tabIndex={-1}`: focusable from script, not a Tab stop).
+
+"Clear all" always goes to the fallback. Each case was driven from the
+keyboard (Tab to the control, Enter) and read from `document.activeElement`
+on 2026-11-10: next (Green Valley → Tucson), previous (last row Tucson →
+Sahuarita), empty (→ search field; → "Recent places" heading).
+
+## The status region — Entry 2's rule
+
+ONE `role="status"` `aria-live="polite"` node per surface, visually hidden,
+mounted with the panel / screen and never re-mounted; text cleared then set a
+frame later. Messages: **"Removed <place>"** and **"Cleared recent places"**.
+Read from the DOM after each removal above.
+
+## Headings — Privacy
+
+One level-1 heading, **"Privacy"** (the shared settings header), then a
+level-2 **"Recent places"**. The DOM also holds the Me hub's "Sparked" h1, but
+in a `display:none`, `aria-hidden` subtree (the stack screen underneath) — not
+exposed. The 36 × 36 back chip is the tracked SettingsStub defect, left as is.
+
+## SettingsHeader extraction
+
+`SettingsStub`'s header (back chip, "Settings" eyebrow, h1) is now an exported
+`SettingsHeader`, used by the stub and by Privacy — the markup moved verbatim.
+**Notifications, Appearance and Help checked unchanged** (DOM, 2026-11-10,
+signed out, desktop width, after `c28d601`): each shows "SETTINGS", one
+visible h1 with its title, the 36 × 36 Back chip and "Coming soon".
+
+## Human verification — Jas, NVDA (as reported, 2026-11-10)
+
+- **Removal announced as "Remove <next place>, Removed <place>"** — the newly
+  focused control's name, then the status message: focus moved (2.4.3) and
+  the status was spoken without focus on it (4.1.3).
+- **Privacy:** one h1, then the "Recent places" h2; the hidden Me screen's
+  heading is not reachable.
+
+## What this entry does NOT establish
+
+- **Nothing about native iOS / Android** — driven on web only.
+- **Light mode** — not rendered. Every line on these surfaces is
+  `colors.text` (cards, Entry 2), so the light `textMuted` failure (Entry 12)
+  does not apply, but it was not measured.
+
+## Privilege gate
+
+N/A — SQL-free. Recent places are device-local (`sparked.origin.v1`); no
+schema object, grant or RPC is touched.
+
+**Baseline:** `main` @ `c28d601`, Expo web dev server at `localhost:8081`
+(in-app browser, 390 and 1280 wide), signed out then signed in, 2026-11-10.
+`npx tsc --noEmit` exits 0 with typed routes regenerated; lint unchanged on
+every edited file (same 6 findings as HEAD).

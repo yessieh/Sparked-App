@@ -1640,18 +1640,34 @@ Create Event's tier step (per-day model is DEAD everywhere):
     never leaves the phone, so there is nothing to purge server-side and it
     creates no data-export obligation. Revisit only if cross-device sync
     becomes a requirement.
-  - **Recent-locations history caps at 5.** The delete control ships with the
+  - **Recent-locations history caps at 5.** ~~The delete control ships with the
     Privacy screen build (`apps/mobile/src/app/settings/privacy.tsx`,
     currently a 7-line `SettingsStub`) — the history has no other delete
     path, so that screen is a hard dependency, not an optional nicety. See
-    the tracker.
+    the tracker.~~ **SUPERSEDED 2026-11-10 by RECENT PLACES (LOCKED
+    2026-11-10) below.** Reason: Privacy sits under Me, so a signed-out user —
+    whose history is written just the same — had no delete path at all.
     **BUILT 2026-08-20, AND THE GAP IS NOW LIVE RATHER THAN THEORETICAL.**
     `lib/origin.tsx` writes the history; nothing in the app can clear it.
     Stated plainly because the ordering is backwards and should not be
     smoothed over in the record: user data is being persisted ahead of the
     control that erases it. It shipped anyway on the judgment that the data is
     self-declared town names, device-local, and never transmitted — but that is
-    a reason it is TOLERABLE, not a reason it is fine.
+    a reason it is TOLERABLE, not a reason it is fine. **Gap CLOSED 2026-11-10
+    (`c28d601`)** — see RECENT PLACES below.
+
+  **RECENT PLACES (LOCKED 2026-11-10, Jas; built `c28d601`):**
+  - **Device-local for everyone**, signed in or out (`sparked.origin.v1`, as
+    above). Nothing about the history touches the server.
+  - **Removable in two places:** inline in Explore's location picker (a ✕ on
+    each recent row) and on the Privacy screen (Remove per place, plus Clear
+    all). `lib/origin.tsx` `removeRecent` / `clearRecent`.
+  - **Signing out clears the history** (`me.tsx`'s Sign out — the app's only
+    sign-out control).
+  - **Removing or clearing NEVER changes the current origin** — the town the
+    feed measures from stays put, even when the removed entry IS that town,
+    and sign-out clears the history only.
+  - The 5-entry cap and how places are added are unchanged.
 
   **Implementation notes from the 2026-08-20 build, recorded because they are
   the kind of thing rediscovered expensively:**

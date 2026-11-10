@@ -1296,7 +1296,17 @@ migration lands between, the NAME is the anchor, not the number.
 - [ ] **Privacy wiring:** Location toggle MIRRORS the OS permission (deep-link to
       system settings when OS says no); analytics opt-in enforced; "Download my
       data" export; "Delete account & data" cascade (MVP: solo workspace + its
-      events die with the account). **Also required, added 2026-08-21 per the
+      events die with the account).
+      **RECENT-LOCATIONS CONTROL — DONE 2026-11-10 (`c28d601`).** Per-place
+      removal inline in Explore's picker and on the Privacy screen, plus Clear
+      all; sign-out clears the history; the current town never changes. Rules:
+      SPARKED_STATE.md → RECENT PLACES (LOCKED 2026-11-10); a11y Entry 18.
+      **Still OPEN in this item:** the OS location toggle, analytics opt-in,
+      "Download my data" export, "Delete account & data". The Privacy screen
+      deliberately shows ONLY working controls — none of these appear on it
+      as placeholders; each lands there when it is built.
+      History of the recent-locations part, kept for the record:
+      **Also required, added 2026-08-21 per the
       amended location lock (SPARKED_STATE.md, Refunds & Cancellation section):
       a control to clear the recent-locations history.** History is
       device-local (AsyncStorage, caps at 5 — see GEO/MAPS below) and has no
