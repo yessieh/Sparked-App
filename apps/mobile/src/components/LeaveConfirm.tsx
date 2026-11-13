@@ -158,11 +158,18 @@ export function LeaveConfirm({
         {/* Backdrop: AFTER the sheet in the tree (see the header note), under
             it by zIndex. A sibling, not a wrapper — RN-web clicks bubble to
             parent Pressables, so a wrapping backdrop would dismiss on every
-            tap inside the sheet. Pointer-only and out of the tab order: the
-            keyboard path is Keep editing / Escape. */}
-        <Pressable
-          onPress={onKeepEditing}
-          tabIndex={-1}
+            tap inside the sheet. Pointer-only: the keyboard path is Keep
+            editing / Escape.
+            NOT a Pressable. Placing it last fixed the trap's FORWARD wrap but
+            not Shift+Tab: the reverse wrap calls .focus() on the LAST
+            descendant first (ModalFocusTrap.js:53-61), and tabIndex -1 still
+            takes focus, so Shift+Tab landed on the backdrop (found on
+            Privacy's dialog, 2026-11-12). A View with responder handlers has
+            no tabindex and still closes on tap. */}
+        <View
+          aria-hidden
+          onStartShouldSetResponder={() => true}
+          onResponderRelease={onKeepEditing}
           style={{
             position: 'absolute',
             top: 0,

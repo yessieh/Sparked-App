@@ -315,10 +315,18 @@ function DeleteConfirm({
             Nesting would have made every tap inside the dialog dismiss it on
             web — RN-web clicks bubble to parent Pressables (native's responder
             system doesn't), the same platform split the Me hub's Saved card
-            hit. A sibling has nothing to bubble into. */}
-        <Pressable
-          onPress={busy ? undefined : onCancel}
-          accessibilityLabel="Dismiss"
+            hit. A sibling has nothing to bubble into.
+            And NOT a Pressable: RN-web's focus trap wraps Tab by calling
+            .focus() on the dialog's first / last descendant until one takes
+            it (Modal/ModalFocusTrap.js:33-61), and a Pressable always renders
+            a tabindex, so the trap landed on an invisible "Dismiss" (found on
+            Privacy's dialog, 2026-11-12). A View with responder handlers has
+            no tabindex and still closes on tap; the keyboard path is Esc or
+            Cancel. */}
+        <View
+          aria-hidden
+          onStartShouldSetResponder={() => true}
+          onResponderRelease={busy ? undefined : onCancel}
           style={{
             position: 'absolute',
             top: 0,
