@@ -506,7 +506,9 @@ function WorkspaceDetail({
   // Event action menu — which event (if any) is showing the ⋯ menu.
   const [actionEventId, setActionEventId] = useState<string | null>(null);
   // Delete confirmation — which event (if any) is being deleted.
-  const [eventToDelete, setEventToDelete] = useState<{ id: string; title: string } | null>(null);
+  // `curbside` gates the free-post sentence: only a Curbside post consumed a
+  // credit (0018 ledger), and deleting it never refunds one.
+  const [eventToDelete, setEventToDelete] = useState<{ id: string; title: string; curbside: boolean } | null>(null);
   const [deleteEventLoading, setDeleteEventLoading] = useState(false);
 
   const workspaceId = workspace.id;
@@ -771,7 +773,8 @@ function WorkspaceDetail({
               )}
               <Pressable
                 onPress={() => {
-                  setEventToDelete({ id: e.id, title: e.title });
+                  // lane 'free' ⇔ tier_id 'curbside' (laneFor, the one rule).
+                  setEventToDelete({ id: e.id, title: e.title, curbside: e.lane === 'free' });
                   setActionEventId(null);
                 }}
                 style={{ paddingHorizontal: 12, paddingVertical: 10 }}
@@ -1137,7 +1140,8 @@ function WorkspaceDetail({
                 marginBottom: 24,
               }}
             >
-              This event will be hidden from all views and cannot be recovered. Your consumption credit will remain.
+              This event will be hidden from all views and cannot be recovered.
+              {eventToDelete?.curbside ? " Deleting this won't give back your free Curbside post." : ''}
             </Text>
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <Pressable
