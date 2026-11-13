@@ -38,7 +38,7 @@ import { FormField, GradientButton, SecondaryButton } from '../../components/Aut
 import { FormExitHeader } from '../../components/FormExitHeader';
 import { LeaveConfirm, useEdited } from '../../components/LeaveConfirm';
 import { SubHeader } from '../../components/SubHeader';
-import { DateField, TimeField, format12h } from '../../components/pickers';
+import { DateField, TimeField } from '../../components/pickers';
 import { useAuth } from '../../lib/auth';
 import { toWktPoint } from '../../lib/geocode';
 import { backOr, useGoToMain } from '../../lib/navigation';
@@ -70,24 +70,18 @@ function shiftYMD(ymd: string, days: number): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-/** Local wall-clock dates(+time) → the single UTC starts_at / ends_at pair.
+/** Local wall-clock dates + times → the single UTC starts_at / ends_at pair.
  *
- * - Multi-day (end > start): midnight on the start day → end of the LAST day,
- *   so the post stays live across the whole span. Widest legal case is
- *   71:59:59, inside 0016's 3-day cap.
- * - Single day, all-day: midnight → end of that day (unchanged).
- * - Single day, timed: starts at the given time, ends_at null (unchanged) —
- *   the feed derives its own end for timed posts.
+ * Paid-event model (Jas, 2026-11-13): ONE continuous span, from the start
+ * time on the first day to the end time on the last day. There is no all-day
+ * post and no open end any more. Widest legal case is day 1 00:00 → day 3
+ * 23:59 (71:59), inside 0016's 3-day cap; the picker already holds the end
+ * date to start + 2 days.
  */
-function toTimestamps(date: string, endDate: string, time: string | null) {
-  const multiDay = endDate > date;
-  const starts = new Date(`${date}T${time ?? '00:00'}:00`);
-  const ends = multiDay
-    ? new Date(`${endDate}T23:59:59`)
-    : time
-      ? null
-      : new Date(`${date}T23:59:59`);
-  return { starts_at: starts.toISOString(), ends_at: ends ? ends.toISOString() : null };
+function toTimestamps(date: string, endDate: string, startTime: string, endTime: string) {
+  const starts = new Date(`${date}T${startTime}:00`);
+  const ends = new Date(`${endDate}T${endTime}:00`);
+  return { starts_at: starts.toISOString(), ends_at: ends.toISOString() };
 }
 
 
@@ -218,8 +212,9 @@ export default function CurbsideForm() {
   // Optional end date. Equal to `date` means a single-day post — the default,
   // so the casual lane still opens as a one-tap single-day form.
   const [endDate, setEndDate] = useState(todayYMD());
-  const [timeOn, setTimeOn] = useState(false);
-  const [time, setTime] = useState('18:00');
+  // Same defaults as the paid Event form (Jas, 2026-11-13).
+  const [startTime, setStartTime] = useState('19:00');
+  const [endTime, setEndTime] = useState('22:00');
   const [anonPost, setAnonPost] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -227,7 +222,7 @@ export default function CurbsideForm() {
   // ---- leaving with input asks first (LeaveConfirm) ----
   // Every field the poster can enter, compared to its value at mount. Above
   // the quota / loading early returns, so the hook order never changes.
-  const edited = useEdited({ photo, title, desc, address, date, endDate, timeOn, time, anonPost });
+  const edited = useEdited({ photo, title, desc, address, date, endDate, startTime, endTime, anonPost });
   const [confirmLeave, setConfirmLeave] = useState(false);
   const leaveNow = () => backOr('me');
 
@@ -266,8 +261,24 @@ export default function CurbsideForm() {
   // `max` so out-of-range days render disabled rather than erroring on submit.
   const maxEnd = shiftYMD(date, CURBSIDE_MAX_DAYS - 1);
   const endValid = DATE_RE.test(endDate) && endDate >= date && endDate <= maxEnd;
-  const timeValid = !timeOn || TIME_RE.test(time);
-  const canPost = Boolean(title.trim() && address.trim() && pin && dateValid && endValid && timeValid && !busy);
+  const timeValid = TIME_RE.test(startTime) && TIME_RE.test(endTime);
+  // Same rule and copy as the paid Event form (event.tsx timeInvalid).
+  const timeInvalid = date === endDate && endTime <= startTime;
+  const timeError = timeInvalid
+    ? 'End time needs to be after start time on a single-day event. To run past midnight, move the end date to the next day.'
+    : null;
+  const canPost = Boolean(
+    title.trim() && address.trim() && pin && dateValid && endValid && timeValid && !timeInvalid && !busy,
+  );
+  // event.tsx styles.timeTag, verbatim.
+  const timeTag = {
+    width: 38,
+    fontFamily: theme.fonts.bodySemiBold,
+    fontSize: 10,
+    fontWeight: '900' as const,
+    letterSpacing: 1,
+    color: theme.colors.textFaint,
+  };
 
   /** Start moves → drag the end with it, exactly as the wizard's Start bumps
    * its End. Keeps the pair legal without ever silently shortening a span the
@@ -286,7 +297,7 @@ export default function CurbsideForm() {
       // The poster-confirmed point (AddressConfirm) — never a second, silent
       // geocode that could land somewhere else.
       const point = { lat: pin.lat, lon: pin.lng };
-      const { starts_at, ends_at } = toTimestamps(date, endDate, timeOn ? time : null);
+      const { starts_at, ends_at } = toTimestamps(date, endDate, startTime, endTime);
       // THE moment someone becomes a host: create/fetch the workspace, then
       // insert — sequential, same action. Existing hosts fall through to a
       // plain fetch (getOrCreateWorkspace short-circuits on an existing
@@ -344,7 +355,7 @@ export default function CurbsideForm() {
     } finally {
       setBusy(false);
     }
-  }, [session, workspaceId, canPost, pin, address, date, endDate, timeOn, time, title, desc, anonPost, goToMain]);
+  }, [session, workspaceId, canPost, pin, address, date, endDate, startTime, endTime, title, desc, anonPost, goToMain]);
 
   if (setupError) {
     return (
@@ -455,30 +466,33 @@ export default function CurbsideForm() {
             </Text>
           </View>
 
+          {/* Start / end time — the paid Event form's block (event.tsx
+              "Time · start → end"), same tags, fields, rule and error copy.
+              Replaced the optional start-time toggle (Jas, 2026-11-13). */}
           <View style={{ marginBottom: 14 }}>
             <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: theme.fontSizes.caption, color: theme.colors.textMuted, marginBottom: 7 }}>
-              Start time · optional
+              Time · start → end
             </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <Switch
-                value={timeOn}
-                onValueChange={setTimeOn}
-                trackColor={{ false: 'rgba(255,255,255,0.10)', true: brand.sparkOrange }}
-                thumbColor="#ffffff"
-              />
-              {timeOn ? (
-                <TimeField value={time} onChange={setTime} label="Start time" />
-              ) : (
-                <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: 12.5, color: theme.colors.textFaint }}>
-                  All-day post
-                </Text>
-              )}
+            <View style={{ gap: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={timeTag}>START</Text>
+                <TimeField value={startTime} onChange={setStartTime} label="Start time" />
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={timeTag}>END</Text>
+                <TimeField value={endTime} onChange={setEndTime} label="End time" />
+              </View>
             </View>
-            {timeOn && (
-              <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: theme.fontSizes.caption, color: theme.colors.textFaint, marginTop: 6 }}>
-                Starts {format12h(time)}
-              </Text>
-            )}
+            {/* Mounted unconditionally; only its children swap — a live region
+                mounted together with its text announces nothing
+                (ACCESSIBILITY.md Entries 2–4). */}
+            <View role="status" aria-live="polite" style={{ marginTop: timeError ? 10 : 0 }}>
+              {timeError ? (
+                <Text style={{ fontFamily: theme.fonts.bodyMedium, fontSize: 12, lineHeight: 17, color: theme.colors.danger }}>
+                  {timeError}
+                </Text>
+              ) : null}
+            </View>
           </View>
 
           <View style={{ marginBottom: 14 }}>
