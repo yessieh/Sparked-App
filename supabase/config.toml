@@ -385,6 +385,13 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# Account deletion, stage 2 (stage 1 = migration 0037). verify_jwt ON: the
+# gateway rejects a request with no valid JWT before the function runs; the
+# function then re-verifies the caller's own token with auth.getUser and takes
+# the user id from it, never from the body.
+[functions.delete-account]
+verify_jwt = true
+
 [analytics]
 enabled = true
 port = 54327
