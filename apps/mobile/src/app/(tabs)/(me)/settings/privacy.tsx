@@ -28,6 +28,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
+import { dialogBodyColor } from '../../../../components/dialogSurface';
 import { SettingsHeader } from '../../../../components/SettingsStub';
 import { announceAcrossNavigation } from '../../../../lib/announce';
 import { useAuth } from '../../../../lib/auth';
@@ -305,7 +306,7 @@ function DeleteAccountConfirm({
     fontFamily: theme.fonts.bodyMedium,
     fontSize: 13,
     lineHeight: 20,
-    color: theme.colors.textMuted,
+    color: dialogBodyColor(theme),
   } as const;
 
   return (

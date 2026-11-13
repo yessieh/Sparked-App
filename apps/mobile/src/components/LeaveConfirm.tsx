@@ -28,6 +28,7 @@ import React, { useState } from 'react';
 import { Modal, Pressable, Text, View } from 'react-native';
 
 import { useTheme, withAlpha } from '../theme';
+import { DIALOG_BACKDROP, dialogBodyColor, dialogCardSurface } from './dialogSurface';
 
 /** True once any value differs from what it was on the first render. Values
  *  are compared as JSON, so arrays (categories, photos, vendors) compare by
@@ -60,12 +61,9 @@ export function LeaveConfirm({
             zIndex: 1,
             width: '100%',
             maxWidth: 400,
-            backgroundColor: theme.colors.bgDeep,
-            borderWidth: 1,
-            borderColor: theme.colors.cardBorder,
+            ...dialogCardSurface(theme),
             borderRadius: theme.radii.xxxl,
             padding: 22,
-            boxShadow: theme.shadows.elevated,
           }}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -103,7 +101,7 @@ export function LeaveConfirm({
               fontFamily: theme.fonts.bodyMedium,
               fontSize: 13,
               lineHeight: 20,
-              color: theme.colors.textMuted,
+              color: dialogBodyColor(theme),
               marginTop: 16,
             }}
           >
@@ -176,7 +174,7 @@ export function LeaveConfirm({
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: 'rgba(3,8,20,0.72)',
+            backgroundColor: DIALOG_BACKDROP,
           }}
         />
       </View>

@@ -38,6 +38,7 @@ import {
 } from 'react-native';
 
 import { GradientButton } from '../../../components/AuthControls';
+import { DIALOG_BACKDROP, dialogBodyColor, dialogCardSurface } from '../../../components/dialogSurface';
 import EventStub, { type FeedEvent } from '../../../components/EventStub';
 import { hasEnded } from '../../../lib/eventTime';
 import { enterActivates } from '../../../lib/linkKeyboard';
@@ -333,19 +334,16 @@ function DeleteConfirm({
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: 'rgba(3,8,20,0.72)',
+            backgroundColor: DIALOG_BACKDROP,
           }}
         />
         <View
           style={{
             width: '100%',
             maxWidth: 400,
-            backgroundColor: theme.colors.bgDeep,
-            borderWidth: 1,
-            borderColor: theme.colors.cardBorder,
+            ...dialogCardSurface(theme),
             borderRadius: theme.radii.xxxl,
             padding: 22,
-            boxShadow: theme.shadows.elevated,
           }}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -382,7 +380,7 @@ function DeleteConfirm({
               fontFamily: theme.fonts.bodyMedium,
               fontSize: 13,
               lineHeight: 20,
-              color: theme.colors.textMuted,
+              color: dialogBodyColor(theme),
               marginTop: 16,
             }}
           >
@@ -1099,18 +1097,19 @@ function WorkspaceDetail({
         <View
           style={{
             flex: 1,
-            backgroundColor: 'rgba(0,0,0,0.5)',
+            backgroundColor: DIALOG_BACKDROP,
             justifyContent: 'center',
             alignItems: 'center',
             paddingHorizontal: 16,
           }}
         >
+          {/* Opaque shared surface (components/dialogSurface.ts). This card
+              was `cardBg` — 4% white in dark mode — so the listing showed
+              through it. */}
           <View
             style={{
-              backgroundColor: theme.colors.cardBg,
+              ...dialogCardSurface(theme),
               borderRadius: 12,
-              borderWidth: 1,
-              borderColor: theme.colors.cardBorder,
               padding: 24,
               maxWidth: 360,
               width: '100%',
@@ -1132,7 +1131,9 @@ function WorkspaceDetail({
                 fontFamily: theme.fonts.bodyMedium,
                 fontSize: 13,
                 lineHeight: 19,
-                color: theme.colors.textFaint,
+                // Shared dialog body colour (dialogSurface.ts). Was textFaint:
+                // 2.97:1 on this card in dark mode.
+                color: dialogBodyColor(theme),
                 marginBottom: 24,
               }}
             >
