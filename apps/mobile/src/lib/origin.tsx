@@ -26,6 +26,8 @@ import React, {
   type ReactNode,
 } from 'react';
 
+import { onSessionInvalidated } from './auth';
+
 /** A confirmed place. `lat`/`lng` (not `lon`) to match the RPC's argument
  *  names — lib/geocode.ts speaks `lon` and converts at its boundary. */
 export interface Place {
@@ -257,6 +259,11 @@ export function OriginProvider({ children }: { children: ReactNode }) {
       return next;
     });
   }, []);
+
+  // Server-detected session loss (lib/auth.tsx validateSession) clears recent
+  // places the same way the Sign out button does (me.tsx). Wired here because
+  // this provider sits inside AuthProvider and cannot be called from it.
+  useEffect(() => onSessionInvalidated(clearRecent), [clearRecent]);
 
   const value = useMemo<OriginContextValue>(
     () => ({
