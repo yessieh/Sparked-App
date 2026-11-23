@@ -558,6 +558,20 @@ Polish batch, `751ebc7..0ef0867`. One entry per ruling.
   none (`events.socials` is an orphan column — tracker). Supersedes the event
   half of PRICING's "Socials moved from Plus to STANDARD".
 
+### CONFIRMATION DIALOGS (LOCKED 2026-11-13)
+
+- **One shared surface: `components/dialogSurface.ts`** — `DIALOG_BACKDROP`,
+  `dialogCardSurface` (OPAQUE `bgDeep` card, `cardBorder`, elevation) and
+  `dialogBodyColor` (the body text colour, never `textMuted` / `textFaint`).
+  Used by Workspace's delete-workspace and event-delete dialogs, LeaveConfirm
+  and Privacy's Delete account (`2fb7b7a`). *Why:* the event-delete card was
+  `cardBg` (4% white in dark mode) — see-through — and dialog body text
+  measured 3.74:1 in light mode.
+- **Backdrops can't take focus** (`cbf4300`, Privacy `9d5cbdd`): the tap-to-
+  close backdrop is a responder `View`, never a `Pressable` — RN-web's focus
+  trap would otherwise wrap Tab onto an invisible "Dismiss".
+- Custom `Modal`, never `Alert.alert` (a no-op on react-native-web).
+
 ---
 
 ## CREATE EVENT — CURBSIDE + SHARED FORM PATTERNS (LOCKED 2026-07-15)
@@ -630,6 +644,16 @@ Polish batch, `751ebc7..0ef0867`. One entry per ruling.
   minimized attribution model is Curbside-ONLY. The tap is gated on
   `workspace_id` being non-null, which 0023 nulls for an anonymous poster, so
   an anonymous Curbside post has no link and no profile to reach.
+- **Curbside time fields mirror events (LOCKED 2026-11-13, Jas; `c385f8c`).**
+  The optional start-time toggle is gone; Curbside uses the paid form's
+  "Time · start → end" block (START / END, defaults 7:00 PM – 10:00 PM, the
+  same end-after-start rule and error). **Multi-day = one continuous span**,
+  start time on the first day to end time on the last — as on paid events. No
+  all-day posts. Supersedes the "Starts h:mm am/pm" confirmation line above
+  for Curbside.
+- **The free-post sentence shows on Curbside deletes only** (`58aa7dd`):
+  "Deleting this won't give back your free Curbside post." Standard / Plus
+  event deletes carry no credit sentence.
 - **Curbside address geocoding = Nominatim** (OpenStreetMap, no key, plain
   fetch) for dev/MVP. Swap to a paid geocoder at scale — tracked. Shared by
   both create flows via `lib/geocode.ts` — ONE geocode interface. **Both
@@ -1331,6 +1355,35 @@ amendment.
   keep a departed user's data: the two are different requests and get different
   answers. Retention windows (including the ledger's) go to the pre-launch legal
   consult.
+  **ACCOUNT DELETION (LOCKED 2026-11-12, Jas; BUILT — 0037 `5185156` + `665e4e6`,
+  Edge Function `2ad6d60`, Privacy screen `9d5cbdd`):**
+  - **Immediate, real erasure.** No grace period, no soft delete of the account.
+  - **The guard refuses** if the user OWNS a workspace with ANY other member,
+    any role — error `transfer_ownership_first`; the UI says "You own a
+    workspace with other members. Transfer ownership before deleting your
+    account." Nothing is deleted on a refusal.
+  - Otherwise **every workspace the user owns is hard-deleted with all its
+    events** (every status, soft-deleted included). Attendees lose those events
+    from Saved → Past — accepted, the same ruling as `delete_workspace`
+    (2026-07-30, above). Memberships where the user is NOT owner cascade away
+    with the profile.
+  - **Curbside ledger rows are kept with `user_id` NULL** (0018's SET NULL — the
+    anonymised row keeps doing its one job).
+  - **`workspaces.created_by` is ON DELETE SET NULL** (0037) so it can never
+    block a delete.
+  - **The delete-account Edge Function is the ONLY sanctioned delete path.**
+    NEVER delete users from the Supabase dashboard: that skips the guard, and
+    since 0037 the FK no longer stops it, so a dashboard delete orphans the
+    user's workspaces — live, published, with no members (QA 0037 step 2za).
+  - **Confirmation:** type "delete" in any capitalisation (surrounding spaces
+    ignored; label "Type DELETE to confirm"). On success the app clears recent
+    places, signs out LOCALLY, lands on Explore and announces "Your account has
+    been deleted."
+- **TEAMS-ARC PRINCIPLES (Jas, 2026-11-12 — for the teams arc, NOT built):**
+  only the owner can start an ownership transfer; the recipient must accept;
+  the owner then re-confirms and gets an email; the old owner becomes an admin.
+  Death or incapacity of an owner is a SUPPORT process with legal documents,
+  never a button.
 
 **RESOLVED 2026-07-30 — workspace teardown STAYS a hard cascade.** The shipped
 Workspace "Delete event(s) & Workspace" action hard-deletes its events through
@@ -1668,6 +1721,30 @@ Create Event's tier step (per-day model is DEAD everywhere):
     feed measures from stays put, even when the removed entry IS that town,
     and sign-out clears the history only.
   - The 5-entry cap and how places are added are unchanged.
+
+  **SESSION CHECK (LOCKED 2026-11-13; built `87070be`, `lib/auth.tsx`):**
+  - The stored session is validated with the SERVER (`getUser`) on app start
+    and whenever the app returns to the foreground — at most once per 60 s.
+  - **Sign out only on 401/403** (e.g. `user_not_found` for a deleted user),
+    locally, then clear recent places and announce "You've been signed out."
+    supabase-js already signs out by itself on `session_not_found` and on a
+    dead refresh; the app does not repeat it.
+  - **Network errors, timeouts and 5xx never sign anyone out.**
+
+  **DATA EXPORT (LOCKED 2026-11-16, Jas; built 0038 `9825c40` + `d4403d0`,
+  Privacy screen `dd2ed7c`):**
+  - **One JSON file, instant download, web now** — `sparked-data-YYYY-MM-DD.json`
+    (local date), pretty-printed. Native share sheet = tracked follow-up.
+  - **Contents and exclusions as in 0038's header:** meta, profile, saves,
+    RSVPs, category preferences, memberships, owned workspaces with EVERY
+    event (archived / soft-deleted labelled) plus categories and vendors, and
+    the Curbside ledger. Never another user's identity (no other members, no
+    who-saved/RSVP'd — `rsvp_count` only); `workspaces.created_by` left out.
+  - **Added on the client:** email and sign-in method(s) from the current
+    session (0038 never reads `auth.users`), and recent places, labelled as
+    stored on this device only.
+  - Result shown under the button and announced once: "✓ Your data has
+    downloaded." / "⚠ Couldn't prepare your data. Try again."
 
   **Implementation notes from the 2026-08-20 build, recorded because they are
   the kind of thing rediscovered expensively:**
@@ -2608,6 +2685,45 @@ row added** — Section 1 `public | events | column | location_approximate |
 authenticated | SELECT`; **1A 120 → 121, 5A 268 unchanged**; every other
 section row-identical, Section 4 included.
 
+0037 account deletion, server side (**APPLIED 2026-11-12**,
+`20261112000037_account_deletion.sql`, committed `5185156` on apply; arc
+evidence `665e4e6`). **`workspaces.created_by` nullable + FK ON DELETE SET
+NULL** (it was NOT NULL / NO ACTION from 0001 and blocked deleting any
+workspace creator). **`app.delete_account_workspaces(p_user_id)`** (definer)
++ **`public.delete_account_workspaces(user_id)`** (invoker wrapper): locks the
+user's owned workspaces, raises `transfer_ownership_first` if any has another
+member, else deletes them; returns (workspaces_deleted, events_deleted);
+idempotent. **Grant surface: `service_role` gains EXECUTE on both and USAGE on
+schema `app`** (consumed by the delete-account Edge Function); PUBLIC, anon,
+authenticated get nothing. **DRIFT, recorded in the migration header:** the
+pre-apply check found PART A already live — Jas had run its three ALTER TABLE
+statements in the SQL Editor from the migration text in a report, stopping at
+CREATE FUNCTION. Nothing else had run; the all-FK comparison (18 rows) showed
+no other drift; PART A re-stated the live state on apply. Rule added to
+CLAUDE.md: reports give migration PATHS, and migration code is applied only by
+the CLI. Applied with the pinned CLI 2.109.1; `migration list`: 37 rows
+`local == remote`. **Suite `scripts/qa-0037-account-deletion.sql`: Section 1
+10/10, Section 2 33/33, `0 | 0`** (Jas, 2026-11-12). **Post-arc diff**
+`2026-11-12-pre-account-deletion.md` → `2026-11-12-post-account-deletion.md`:
+**Section 4 +2 rows** (41 → 43); 1A 121 / 5A 268 unchanged; the `app` USAGE
+grant and the FK change are invisible to the audit (QA 1h / 1a–1b are their
+evidence).
+
+0038 data export (**APPLIED 2026-11-23**, `20261116000038_data_export.sql`,
+committed `9825c40` on apply; arc evidence `d4403d0`; Privacy button
+`dd2ed7c`). **`app.export_my_data()`** (definer, no arguments, auth.uid()
+only; NULL uid raises `not_authenticated` 28000) + **`public.export_my_data()`**
+(invoker wrapper) — one jsonb document; contents, column choices and
+exclusions in the migration header. **Grant surface: `authenticated` gains
+EXECUTE on both** (consumed by the Privacy screen's "Download my data"); PUBLIC
+and anon revoked; no schema grant. Pre-apply check: both functions absent.
+Applied with the pinned CLI 2.109.1; `migration list`: 38 rows, 0 mismatches.
+**Suite `scripts/qa-0038-data-export.sql`: Section 1 5/5, Section 2 23/23,
+`0 | 0`** (Jas, 2026-11-23). **Post-arc diff**
+`2026-11-23-pre-data-export.md` → `2026-11-23-post-data-export.md`: **Section 4
++2 rows** (43 → 45); 1A 121 / 5A 268 unchanged; every other section
+row-identical.
+
 **Auth backend configured (2026-07-09, dashboard only — no app code):**
 email confirmations ON; Google OAuth provider ENABLED (GCP web client,
 callback `<project>.supabase.co/auth/v1/callback`; secret lives only in the
@@ -2653,7 +2769,10 @@ migration then.
   mirrors OS permission at Code stage) + Usage analytics toggle (default OFF — GDPR opt-in).
   "Download my data" + "Delete account & data" (confirm dialog). ToS + Privacy Policy cards.
   No "cookies" language (native app). Delete cascade at MVP: solo workspace + its events die
-  with the account; transfer-before-delete = roadmap.
+  with the account; transfer-before-delete = roadmap. **BUILT in code so far (2026-11-23):**
+  recent places, "Download my data" (web) and "Delete account" — see RECENT PLACES, DATA
+  EXPORT and Architecture Decision 8 → ACCOUNT DELETION. The location and analytics toggles
+  and the legal cards are still unbuilt (tracker).
 - **Help & feedback:** FAQ accordion (shared content source w/ landing FAQ) above a
   Suggestion/Issue feedback form (backend = Code stage). "Rate Sparked" row removed — App Store
   rating happens via in-context OS prompt at happy moments (Code stage).
@@ -2676,6 +2795,17 @@ migration then.
 *Reordered 2026-08-19 to the agreed sequence. The previous order led with the
 funnel variants, which are now explicitly a later phase, and buried the
 cold-start empty state at 2 while it was already in flight.*
+
+**ORDER AFTER THE ACCOUNT DELETION + DATA EXPORT ARC (Jas, 2026-11-23) — this
+governs the numbering below where they differ:**
+1. **Daily hours** — per-day hours for ALL events (e.g. a swap meet with shorter
+   Sunday hours). A schema change; its own SQL arc.
+2. **Interests-first feed.**
+3. **Timeline** (item 1.5 below).
+4. **Map** (item 1.6).
+5. **Notifications** (item 3).
+6. **Onboarding** (item 4).
+7. **Landing pages** (item 5).
 
 1. **THE EXPLORE ARC** — the consumer surface, taken in order. Each step is its
    own pass; the map is its own arc at the end because it is the only one that
@@ -2726,7 +2856,8 @@ cold-start empty state at 2 while it was already in flight.*
       `docs/ACCESSIBILITY.md` Entry 8. Two things it could not verify from
       live data and one prerequisite it surfaced are in the tracker under
       EXPLORE FILTERING.
-   5. **Timeline** view — **NEXT.** Two things already agreed and owed when it
+   5. **Timeline** view — ~~**NEXT.**~~ third, after daily hours and the
+      interests-first feed (order above, 2026-11-23). Two things already agreed and owed when it
       ships: (a) a user-chosen sort is not algorithmic re-ranking — **RULING
       NOW MADE, BY ARC F (2026-09-17): Explore itself orders by `starts_at`
       and became the first non-distance-ordered surface; Timeline INHERITS

@@ -25,6 +25,16 @@ follow-ups (a1500f3 combined two jobs into one commit).
 
 Machine-verify logic and state (typecheck, DOM/state checks, API probes). Never attempt visual verification of animations or motion via browser screenshots; list those for human feel-pass instead.
 
+# Migration code: paths in reports, applied only by the CLI
+
+Reports give migration file PATHS, never their full text. Migration code is
+applied only by the CLI, never pasted into the SQL Editor.
+
+*Why:* on 2026-11-12 a report pasted 0037's full text; its three ALTER TABLE
+statements were run by hand in the SQL Editor before apply, and the pre-apply
+check found the drift (recorded in 0037's header). Queries meant to be run by
+hand — pre-apply checks, QA suites — are labelled as such.
+
 # Migrations are immutable once applied
 
 **Never edit a migration file that has already been applied.** A migration runs exactly once; editing its file afterwards changes nothing in the database. The edit looks like a fix, passes review, and ships — while the deployed function or table still has the old definition. Corrections go in a NEW forward migration that `create or replace`s the object.

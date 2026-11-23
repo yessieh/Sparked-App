@@ -383,7 +383,12 @@ and verified in Cursor/Claude Code.
 - [ ] **Wizard step label light-mode contrast 1.85:1** (`brand.brightOrange` on
       `#f4f5f8`). *Why:* the crumb colour it inherited fails 4.5:1 — pair with
       the SubHeader crumb item above.
-- [ ] **Curbside form `FormExitHeader` + `LeaveConfirm` not verified live** —
+- [x] **CLOSED 2026-11-13 — verified live.** On an account with an open free
+      post, the Curbside form rendered; its Leave control opened LeaveConfirm,
+      Tab / Shift+Tab stayed inside, Esc and the backdrop kept editing, and
+      focus returned to Leave (`cbf4300` verification); a real test post
+      ("Posting Curbside - Test") was published the same day. Original item:
+      **Curbside form `FormExitHeader` + `LeaveConfirm` not verified live** —
       the test account is at its Curbside quota, so the form never rendered.
       *Why:* shipped on code inspection only.
       **ADD (2026-11-06):** the form CAN be rendered for UI checks with a
@@ -636,6 +641,13 @@ and verified in Cursor/Claude Code.
 - [ ] **Real Stripe checkout** — replace the mock Apple Pay / Google Pay / Link
       / Card screen. Payment marks in prototype are hand-drawn approximations;
       production uses real SDK-rendered buttons under brand guidelines.
+      **Two decisions added 2026-11-23 (account deletion arc):** (a) decide
+      delete-vs-refund for paid events — account deletion hard-deletes owned
+      events, which must be squared with the 72-hour refund rule once money is
+      real; (b) **keep financial records after account deletion** (charges,
+      refunds, payouts) — the cascade must not take them. *Why:* 0037 and
+      `delete_workspace` (0017) both note that settled payments should block or
+      soft-delete rather than cascade; at MVP there are no financial rows.
       **Two requirements added 2026-11-03 (polish batch):**
       - **The server must refuse to publish an already-published event.**
         *Why:* Chrome → can reach stale wizard / checkout pages after a
@@ -799,7 +811,56 @@ and verified in Cursor/Claude Code.
       4. **The attendee-history exception** — that a listing you saved or RSVP'd
          to may remain in your own history after the host withdraws it.
       Goes to the pre-launch legal consult together with the retention windows.
-- [ ] **"Download my data" export — UNBUILT.** No self-serve export exists.
+      **ADDED 2026-11-23 (account deletion + export arc):** it must also
+      disclose (5) that ledger rows SURVIVE account deletion, anonymised
+      (`user_id` NULL); (6) what "Download my data" contains and that it is
+      self-serve; (7) that deletion is immediate and hard-deletes owned
+      workspaces and their events. Same consult: **check the status of Arizona
+      SB 1815** and whether it applies. *Why:* the policy draft promises
+      export and deletion in words; both now exist and must be described as
+      built.
+- [ ] **LAUNCH BLOCKER — Sign in with Apple** (App Store guideline 4.8).
+      *Why:* the app offers Google sign-in, so iOS review requires an
+      equivalent privacy-preserving login option. Deletion must then also
+      revoke the user's Apple tokens through Apple's REST API.
+- [ ] **Launch prep + legal consult — hashed-email free-post lock.** Keep a
+      hash of the normalised email for 100 days after deletion so delete-and-
+      re-sign-up cannot reset the Curbside free post. Extends the
+      "Hashed-identifier ledger key" item under CURBSIDE, which this raises
+      from low priority to launch prep. *Why:* the Privacy screen made deletion
+      self-serve, so the quota-reset door is now one button away.
+- [ ] **Edge Function CORS — add the production origin at launch.**
+      `supabase/functions/delete-account` allows only `http://localhost:8081`.
+      *Why:* the web app's real origin will be refused until it is listed, and
+      a wildcard is never acceptable on an endpoint that deletes accounts.
+- [ ] **Native share sheet for "Download my data"** (`expo-sharing`), in the
+      device pass. The Privacy section is web-only and hidden on native until
+      then. *Why:* the export downloads a file through the browser; iOS and
+      Android need a share sheet, which needs a new package.
+- [ ] **Google re-sign-up quietly creates a NEW account (low priority).**
+      After deletion, "Continue with Google" with the same email silently
+      makes a fresh empty account (seen 2026-11-12). *Why:* nothing tells the
+      user it is a new account; standard Supabase behaviour, so a copy or
+      onboarding cue at most.
+- [ ] **Daily hours arc — PLANNED NEXT** (SPARKED_STATE.md → OPEN WORK, order
+      of 2026-11-23). Per-day hours for ALL events, e.g. a swap meet with
+      shorter Sunday hours. *Why:* events store one continuous span; a
+      multi-day event with different hours each day cannot be described today.
+      A schema change — its own SQL arc.
+- [ ] **End-to-end test of "transfer ownership first" → the teams arc.** The
+      409 refusal is proven in SQL (QA 0037 steps 2f–2j) but never driven
+      through the Edge Function and the Privacy dialog. *Why:* no account can
+      own a multi-member workspace until the teams arc adds members, so the UI
+      path cannot be reached before then. Teams-arc principles: SPARKED_STATE.md
+      → Architecture Decision 8.
+- [x] **CLOSED 2026-11-23 — "Download my data" (web) and in-app account
+      deletion are BUILT.** Export: 0038 (`9825c40`, evidence `d4403d0`) +
+      Privacy button (`dd2ed7c`). Deletion (App Store 5.1.1(v)): 0037
+      (`5185156`, evidence `665e4e6`) + delete-account Edge Function
+      (`2ad6d60`) + Privacy screen (`9d5cbdd`). Rules: SPARKED_STATE.md → DATA
+      EXPORT and Architecture Decision 8 → ACCOUNT DELETION. Native share sheet
+      for the export is its own item below. Original item:
+      **"Download my data" export — UNBUILT.** No self-serve export exists.
       Needs to cover profile, saves, RSVPs, workspaces, events, the quota
       ledger, and category preferences (interests/blocks). Pairs with the erasure path, which IS specced (real cascade) but
       has no UI either.
@@ -1301,8 +1362,11 @@ migration lands between, the NAME is the anchor, not the number.
       removal inline in Explore's picker and on the Privacy screen, plus Clear
       all; sign-out clears the history; the current town never changes. Rules:
       SPARKED_STATE.md → RECENT PLACES (LOCKED 2026-11-10); a11y Entry 18.
-      **Still OPEN in this item:** the OS location toggle, analytics opt-in,
-      "Download my data" export, "Delete account & data". The Privacy screen
+      **"DOWNLOAD MY DATA" (web) — DONE 2026-11-23 (`dd2ed7c`, on 0038).
+      "DELETE ACCOUNT & DATA" — DONE 2026-11-12 (`9d5cbdd`, on 0037 +
+      `2ad6d60`).** Both on the Privacy screen, signed in only.
+      **Still OPEN in this item:** the OS location toggle and analytics
+      opt-in. ~~"Download my data" export, "Delete account & data".~~ The Privacy screen
       deliberately shows ONLY working controls — none of these appear on it
       as placeholders; each lands there when it is built.
       History of the recent-locations part, kept for the record:
@@ -1341,6 +1405,12 @@ migration lands between, the NAME is the anchor, not the number.
       eyebrow in light mode inherits it; Entries 12 and 13 recorded it and
       parked it here rather than fixing one screen at a time. Fix the TOKEN,
       then re-measure.
+      **UPDATE 2026-11-23: dialogs fixed, the token still open.** The four
+      confirmation dialogs moved their body text to the body colour
+      (`dialogBodyColor`, `2fb7b7a`: 3.74:1 → 14.72:1 light / 15.32:1 dark) —
+      a per-surface fix. The app-wide `textMuted` token is unchanged and still
+      fails in light mode everywhere else. *Why kept open:* the dialog fix
+      routed around the token rather than fixing it.
 - [ ] **Cold-start empty state — FEED HALF DONE 2026-08-19, FUNNELS HALF
       OPEN.** Deliberately left unticked: this item always covered two
       surfaces and only one shipped.
@@ -1557,6 +1627,10 @@ migration lands between, the NAME is the anchor, not the number.
       gone; `geocodeAddresses` and `geocodePlaces` are what swap). **Still
       open with it:** the requests carry no app identification of our own
       (browser fetch cannot set User-Agent), which Nominatim's policy asks for.
+      **Also with the swap (added 2026-11-23): typo-tolerant address search.**
+      *Why:* Nominatim matches literally, so a small typo returns no candidate;
+      paid geocoders fuzzy-match, so do it in the same change rather than
+      building tolerance on a provider that is being replaced.
 - [x] **CLOSED 2026-11-06 — `3fcb1bc` (event wizard) + `bcdf103` (Curbside),
       on migration 0035 (`790fa6b`).** Both create flows confirm the address
       through `components/AddressConfirm.tsx`: Find → pick a match (full

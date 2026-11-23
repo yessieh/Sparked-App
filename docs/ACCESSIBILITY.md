@@ -3637,3 +3637,202 @@ schema object, grant or RPC is touched.
 (in-app browser, 390 and 1280 wide), signed out then signed in, 2026-11-10.
 `npx tsc --noEmit` exits 0 with typed routes regenerated; lint unchanged on
 every edited file (same 6 findings as HEAD).
+
+# Entry 19 — 2026-11-12 — Delete account dialog (Privacy)
+
+**The arc (`9d5cbdd`, on 0037 + the delete-account Edge Function `2ad6d60`):**
+a "Delete account" row at the bottom of Privacy (signed in only) opens a custom
+`Modal` — never `Alert.alert`, a no-op on react-native-web. Rules in
+SPARKED_STATE.md → Architecture Decision 8 → ACCOUNT DELETION.
+
+## Focus — 2.4.3
+
+- **On open, focus moves to the dialog's heading**, "Delete your account?"
+  (an `h2` with `tabIndex={-1}`), by click and by keyboard Enter on the row.
+- **Esc, Cancel and a click on the backdrop close it and return focus to the
+  "Delete account" row.** RN-web's Modal restores focus to the opener itself
+  (`Modal/ModalFocusTrap.js:111-118`); Cancel also refocuses it explicitly.
+- Tab and Shift+Tab stay inside the dialog (Entry 20).
+- Read from `document.activeElement`, 2026-11-12/13, web.
+
+## The typed confirmation
+
+- A visible label, **"Type DELETE to confirm"**, tied to the field by
+  `aria-labelledby` (the label's `nativeID` renders as its `id`). The pane's
+  accessibility-tree tool showed the field with no name; the DOM relation was
+  confirmed directly — recorded as a tool limitation, not verified with a
+  screen reader.
+- The confirm button stays disabled (`aria-disabled`, opacity 0.45) until the
+  text matches. **As built (2026-11-12) the match was exact:** `delete`,
+  `DELET`, `DELETE ` and `DELETEX` stayed disabled; `DELETE` enabled it, and
+  removing a letter disabled it again (DOM). **Revised 2026-11-13 (Jas):** any
+  capitalisation, surrounding spaces ignored — verified by evaluating the rule
+  on 12 inputs, NOT re-checked in the dialog.
+- The confirm button's name is fixed ("Delete account") because its label
+  swaps to a spinner while busy; double-tap guarded.
+
+## Targets — 2.5.5
+
+Cancel, the field and the confirm button: **44 px tall** (DOM). The
+"Delete account" row: **44 px tall**.
+
+## Status
+
+- **Errors** go to a `role="status"` region INSIDE the dialog, mounted with it:
+  `aria-modal` hides everything outside the dialog, the screen's own region
+  included.
+- **Success** ("Your account has been deleted.") is announced AFTER the screen
+  has navigated away, so it uses `lib/announce.ts`: one visually hidden
+  `role="status"` node on `document.body`, created when the module first loads
+  and never removed; cleared, then set a frame later. Native uses
+  `AccessibilityInfo.announceForAccessibility`.
+
+## Human verification — Jas, NVDA (as reported)
+
+- **"Your account has been deleted." was announced** after a real deletion of
+  a test account.
+
+## What this entry does NOT establish
+
+- **The 409 message** ("You own a workspace with other members…") has never
+  rendered live — no account can own a multi-member workspace yet (tracker,
+  teams arc).
+- Native iOS / Android.
+
+## Privilege gate
+
+The UI is SQL-free; the server side is 0037's arc (pre/post baselines
+2026-11-12, QA 0037).
+
+**Baseline:** `main` @ `9d5cbdd`, Expo web dev server at `localhost:8081`,
+in-app browser, 2026-11-12/13.
+
+# Entry 20 — 2026-11-13 — Dialog backdrops can no longer take focus
+
+**The arc (`9d5cbdd` Privacy, `cbf4300` Workspace delete + LeaveConfirm).**
+
+## The defect
+
+RN-web's Modal focus trap wraps Tab by calling `.focus()` on the dialog's
+first (forward) or last (Shift+Tab) descendant until one takes it
+(`Modal/ModalFocusTrap.js:33-61`). **Any element with a `tabindex` takes it —
+even `-1`.** A `Pressable` always renders one, so a tap-to-close `Pressable`
+backdrop received focus on the wrap: an invisible "Dismiss" control.
+
+- Privacy, backdrop first: the forward wrap landed on it. Moving it after the
+  card fixed forward Tab; **Shift+Tab then landed on it** (both measured
+  2026-11-12).
+- Workspace's delete-workspace dialog had it first; LeaveConfirm had it last
+  (forward fixed by an earlier note, Shift+Tab still affected).
+
+## The fix
+
+The backdrop is a plain `View` with responder handlers
+(`onStartShouldSetResponder` / `onResponderRelease`) and `aria-hidden` — no
+`tabindex`, still closes on a tap. Keyboard users close with Esc or Cancel.
+
+## Measured (DOM, `document.activeElement`, 2026-11-12/13)
+
+| Dialog | Opens on | Tab past last → | Shift+Tab past first → |
+| ------ | -------- | --------------- | ---------------------- |
+| Privacy — Delete account | heading | heading | Cancel |
+| Workspace — delete workspace | Cancel | Cancel | Delete everything |
+| LeaveConfirm (Curbside form) | Keep editing | Keep editing | Leave |
+
+In each: Esc and a backdrop click close it, and focus returns to the opener.
+Workspace's event-delete dialog has no tap-to-close backdrop and was not
+affected. No destructive button was pressed.
+
+## Not established
+
+Native iOS / Android; screen-reader behaviour of the wrap.
+
+**Baseline:** `main` @ `cbf4300`, web, 2026-11-13.
+
+# Entry 21 — 2026-11-13 — Confirmation dialog contrast
+
+**The arc (`2fb7b7a`):** one shared surface, `components/dialogSurface.ts`
+(SPARKED_STATE.md → CONFIRMATION DIALOGS).
+
+## Before
+
+- **Event-delete card was see-through**: `cardBg` = `rgba(255,255,255,0.04)` in
+  dark mode, over a `rgba(0,0,0,0.5)` wrapper — the listing showed through.
+- Its body text was `textFaint`: **2.97:1** (dark) on an opaque card.
+- The other dialogs' body text was `textMuted`: **4.71:1 dark, 3.74:1 light** —
+  a 1.4.3 failure in light mode, LeaveConfirm (the reference) included.
+
+## After
+
+All four dialogs (event-delete, delete-workspace, LeaveConfirm, Privacy's
+Delete account) use an OPAQUE `bgDeep` card and the body text colour:
+
+| Mode | Width | Body text on card |
+| ---- | ----- | ----------------- |
+| Dark | 1280 | **15.32:1** (event-delete, delete-workspace) |
+| Light | 390 | **14.72:1** (all four) |
+
+Measured from computed styles (card background opaque, text colour composited)
+on 2026-11-13, after the change: dark at 1280 (the two Workspace dialogs),
+light at 390 (all four). Before the change, both Workspace dialogs were also
+measured opaque at 390 dark (4.71:1 on `textMuted`).
+
+## Not established
+
+The app-wide light-mode `textMuted` failure (Entry 12) is untouched — this
+routes the dialogs around it (tracker, light-mode sweep).
+
+**Baseline:** `main` @ `2fb7b7a`, web, 2026-11-13.
+
+# Entry 22 — 2026-11-23 — "Download my data" status (Privacy)
+
+**The arc (`dd2ed7c`, on 0038):** a "Your data" section (h2) above Delete
+account, signed in, web only. Rules: SPARKED_STATE.md → DATA EXPORT.
+
+- **Button:** a real `<button>`, `tabindex="0"`, **44 px tall**; keyboard Enter
+  starts the download (driven 2026-11-23). Busy state + double-tap guard.
+- **Announced once:** "Your data has downloaded." / "Couldn't prepare your
+  data. Try again." go to the screen's existing `role="status"` region
+  (cleared, then set a frame later).
+- **Shown visibly** under the button as plain text — not a second live region,
+  not a toast. The ✓ / ⚠ prefix is `aria-hidden`. The next tap clears it.
+
+| Message | Dark (on `#14213D`) | Light (on `#f4f5f8`) |
+| ------- | ------------------- | -------------------- |
+| ✓ success, `colors.text` | 14.11:1 | 13.50:1 |
+| ⚠ error, `colors.danger` | 5.77:1 | 5.93:1 |
+
+Computed from the tokens; the DOM's computed colours in dark mode matched
+(`rgb(238, 240, 255)` / `rgb(248, 113, 113)`). Light mode was not rendered.
+
+## Not established
+
+Screen-reader confirmation of either message; native (the section is hidden
+there).
+
+**Baseline:** `main` @ `dd2ed7c`, web, 2026-11-23.
+
+# Entry 23 — 2026-11-13 — Session check: "You've been signed out."
+
+**The arc (`87070be`):** when the server says a stored session's user no longer
+exists, the app signs out locally and announces **"You've been signed out."**
+through `lib/announce.ts` (Entry 19's page-level region — the screen in front
+may be any screen). Rules: SPARKED_STATE.md → SESSION CHECK.
+
+- **Verified in the DOM (2026-11-13):** a throwaway account deleted with its
+  session left stored; a second tab opened, and the announcer node read
+  "You've been signed out.", with the signed-out Me view and recent places
+  cleared. One announcer node on the page.
+- The first tab signed out through supabase-js's own cross-tab sync and did
+  NOT announce.
+
+## Not established
+
+Screen-reader confirmation; native (`AccessibilityInfo` path) not driven.
+
+**Baseline:** `main` @ `87070be`, web, 2026-11-13.
+
+---
+
+**Still owed:** Entry 17 — AddressConfirm's Find result announcement (NVDA),
+unchanged by this arc.
