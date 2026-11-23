@@ -26,13 +26,14 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { dialogBodyColor } from '../../../../components/dialogSurface';
 import { SettingsHeader } from '../../../../components/SettingsStub';
 import { announceAcrossNavigation } from '../../../../lib/announce';
 import { useAuth } from '../../../../lib/auth';
 import { deleteAccount } from '../../../../lib/deleteAccount';
+import { downloadMyData } from '../../../../lib/exportData';
 import { useGoToMain } from '../../../../lib/navigation';
 import { useOrigin } from '../../../../lib/origin';
 import { srOnly, useRecentRemoval } from '../../../../lib/recentRemoval';
@@ -59,6 +60,33 @@ export default function PrivacySettings() {
   const [deleteError, setDeleteError] = useState('');
   const [typed, setTyped] = useState('');
   const inFlight = useRef(false);
+
+  // "Download my data" (0038 + lib/exportData.ts). Web only for now.
+  const [exporting, setExporting] = useState(false);
+  const exportInFlight = useRef(false);
+  // Written into the screen's status region; cleared then set a frame later
+  // so a repeated message is announced again (a11y Entry 2).
+  const [exportStatus, setExportStatus] = useState('');
+  // The same message, shown under the button for sighted users (Jas,
+  // 2026-11-23). Plain text, NOT a second live region — the status region
+  // above already announces it once.
+  const [exportNote, setExportNote] = useState<{ text: string; ok: boolean } | null>(null);
+  const announceExport = (message: string, ok: boolean) => {
+    setExportNote({ text: message, ok });
+    setExportStatus('');
+    requestAnimationFrame(() => setExportStatus(message));
+  };
+  const onDownload = async () => {
+    if (exportInFlight.current || !session) return; // double-tap guard
+    exportInFlight.current = true;
+    setExportNote(null); // the next tap clears the previous result
+    setExportStatus('');
+    setExporting(true);
+    const result = await downloadMyData(session, history);
+    exportInFlight.current = false;
+    setExporting(false);
+    announceExport(result.ok ? 'Your data has downloaded.' : "Couldn't prepare your data. Try again.", result.ok);
+  };
 
   const openConfirm = () => {
     setDeleteError('');
@@ -133,6 +161,7 @@ export default function PrivacySettings() {
       {/* Mounted from first render, never re-mounted (a11y Entry 2). */}
       <View role="status" aria-live="polite" style={srOnly}>
         {removal.announcement ? <Text>{removal.announcement}</Text> : null}
+        {exportStatus ? <Text>{exportStatus}</Text> : null}
       </View>
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 32, gap: 24 }}>
@@ -209,6 +238,44 @@ export default function PrivacySettings() {
             </>
           )}
         </View>
+
+        {/* Your data — signed in, WEB ONLY (the native share sheet is a
+            tracked follow-up). Secondary style: neither destructive nor
+            gradient. */}
+        {session && Platform.OS === 'web' ? (
+          <View style={{ gap: 12 }}>
+            <Text
+              role="heading"
+              aria-level={2}
+              accessibilityRole="header"
+              style={{ fontFamily: theme.fonts.displayBlack, fontWeight: '900', fontSize: 17, color: theme.colors.text }}
+            >
+              Your data
+            </Text>
+            <Text style={body}>Get a copy of your account, saves, RSVPs, interests and events as a file.</Text>
+            <Pressable
+              role="button"
+              accessibilityRole="button"
+              onPress={onDownload}
+              disabled={exporting}
+              aria-busy={exporting}
+              accessibilityState={{ busy: exporting, disabled: exporting }}
+              style={({ pressed }) => [button(pressed), { alignSelf: 'flex-start', flexDirection: 'row', gap: 8 }]}
+            >
+              {exporting ? <ActivityIndicator size="small" color={theme.colors.text} /> : null}
+              <Text style={action}>Download my data</Text>
+            </Pressable>
+            {/* Visible result: plain text, not a toast. The ✓ / ⚠ is
+                decorative (aria-hidden); the words reach screen readers once,
+                through the screen's status region above. */}
+            {exportNote ? (
+              <Text style={[body, { color: exportNote.ok ? theme.colors.text : theme.colors.danger }]}>
+                <Text aria-hidden>{exportNote.ok ? '✓ ' : '⚠ '}</Text>
+                {exportNote.text}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
 
         {/* Delete account — signed in only. Muted destructive, trash icon,
             never gradient (workspace.tsx's delete row). */}
