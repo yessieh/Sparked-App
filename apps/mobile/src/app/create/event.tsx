@@ -41,6 +41,7 @@ import {
 
 import AddressConfirm, { type ConfirmedLocation } from '../../components/AddressConfirm';
 import { FormField, GradientButton, GradientFill, SecondaryButton } from '../../components/AuthControls';
+import { DayHours, HoursChoice } from '../../components/DailyHours';
 import EventDetailView, { type EventDetailData, placeholderPhotos } from '../../components/EventDetailView';
 import EventStub, { type FeedEvent } from '../../components/EventStub';
 import MarkdownText from '../../components/MarkdownText';
@@ -51,6 +52,13 @@ import { LeaveConfirm, useEdited } from '../../components/LeaveConfirm';
 import { useFocusHeadingOnChange } from '../../components/ScreenFocus';
 import { DateField, TimeField, format12h } from '../../components/pickers';
 import { useAuth } from '../../lib/auth';
+import {
+  buildHours,
+  hoursErrorMessage,
+  localYMD,
+  type DayOverrides,
+  type HoursMode,
+} from '../../lib/eventHours';
 import { eventWhen } from '../../lib/eventTime';
 import { toWktPoint } from '../../lib/geocode';
 import { canonicalize, isBlocked, suggestMatches, titleCase } from '../../lib/moderation';
@@ -89,11 +97,6 @@ function todayYMD(): string {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
-/** Local wall-clock date + 24h time → UTC ISO (single source of truth). */
-function combine(ymd: string, hhmm: string): string {
-  return new Date(`${ymd}T${hhmm}:00`).toISOString();
 }
 
 interface Category {
@@ -861,6 +864,9 @@ export default function EventWizard() {
   const [endDate, setEndDate] = useState(todayYMD());
   const [startTime, setStartTime] = useState('19:00');
   const [endTime, setEndTime] = useState('22:00');
+  // Multi-day only: same hours every day (default), or one continuous span.
+  const [hoursMode, setHoursMode] = useState<HoursMode>('daily');
+  const [dayOverrides, setDayOverrides] = useState<DayOverrides>({});
   const [venueName, setVenueName] = useState('');
   const [address, setAddress] = useState('');
   /** The point the host confirmed for `address` (AddressConfirm). Null until
@@ -903,7 +909,7 @@ export default function EventWizard() {
   // Every field the host can enter, compared to its value at mount. Untouched
   // defaults (today, 19:00/22:00, Standard) are the baseline, not "entered".
   const edited = useEdited({
-    title, desc, cats, startDate, endDate, startTime, endTime, venueName,
+    title, desc, cats, startDate, endDate, startTime, endTime, hoursMode, dayOverrides, venueName,
     address, photos, siteMap, vendors, entryFeeOn, entryFee, tier,
   });
   /** The exit waiting on the dialog. Each exit keeps its OWN navigation —
@@ -991,11 +997,30 @@ export default function EventWizard() {
     });
   }, []);
 
+  const hoursInput = useMemo(
+    () => ({ startDate, endDate, startTime, endTime, mode: hoursMode, overrides: dayOverrides }),
+    [startDate, endDate, startTime, endTime, hoursMode, dayOverrides],
+  );
+  // hours, starts_at and ends_at always come from the SAME build: the server
+  // refuses a span that differs from the first opening / last closing (0039).
+  // Review's When row (hoursSummary) is read back from this same `hours`.
+  const {
+    hours,
+    starts_at: startsAt,
+    ends_at: endsAt,
+    problem: hoursProblem,
+    summary: hoursSummary,
+  } = useMemo(() => buildHours(hoursInput), [hoursInput]);
   const days = eventDays(startDate, endDate);
+  // The days the publish fee is charged for: the server's duration band (and
+  // checkout) count the stored span's calendar days, so a last day closing
+  // past midnight counts one more than the dates picked. Quote that number,
+  // so Review never shows a smaller fee than checkout.
+  const feeDays = eventDays(startDate, localYMD(endsAt));
   const feeCents = entryFeeOn ? Math.max(0, Math.round((parseFloat(entryFee) || 0) * 100)) : 0;
   const tierRow = tiers.find((t) => t.id === tier);
   const photoCap = tierRow?.max_photos ?? 3;
-  const publishFeeCents = priceCents(prices, tier, days);
+  const publishFeeCents = priceCents(prices, tier, feeDays);
   const capFor = (id: TierId) => tiers.find((t) => t.id === id)?.max_photos ?? 3;
 
   /**
@@ -1027,8 +1052,6 @@ export default function EventWizard() {
   }, [pendingDowngrade, photos.length, tiers]);
 
   const catLabel = (id: string) => categories.find((c) => c.id === id)?.label ?? id;
-  const startsAt = combine(startDate, startTime);
-  const endsAt = combine(endDate, endTime);
   const when = eventWhen(startsAt, endsAt);
 
   const preview: FeedEvent = useMemo(
@@ -1109,10 +1132,10 @@ export default function EventWizard() {
    */
   const timeInvalid = startDate === endDate && endTime <= startTime;
   const timeError = timeInvalid
-    ? 'End time needs to be after start time on a single-day event. To run past midnight, move the end date to the next day.'
+    ? 'End time needs to be after start time on a single-day event. To run past midnight, move the end date to the next day and choose Open the whole time.'
     : null;
 
-  const canPublish = missing.length === 0 && !timeInvalid && !busy && publishFeeCents !== null;
+  const canPublish = missing.length === 0 && !timeInvalid && !hoursProblem && !busy && publishFeeCents !== null;
 
   const back = () => {
     if (step === 0) {
@@ -1160,6 +1183,9 @@ export default function EventWizard() {
         status: 'pending_payment' as const,
         starts_at: startsAt,
         ends_at: endsAt,
+        // Sent with the span, on insert AND re-entry update: 0039 refuses a
+        // moved span without its hours. null = open the whole time.
+        hours,
         venue_name: venueName.trim() || null,
         address: address.trim(),
         location: toWktPoint(point),
@@ -1173,7 +1199,7 @@ export default function EventWizard() {
       let id = draftId;
       if (id) {
         const { error: updateError } = await supabase.from('events').update(editable).eq('id', id);
-        if (updateError) throw new Error(updateError.message);
+        if (updateError) throw new Error(hoursErrorMessage(updateError.message) ?? updateError.message);
         await supabase.from('event_categories').delete().eq('event_id', id);
       } else {
         const { data, error: insertError } = await supabase
@@ -1181,7 +1207,7 @@ export default function EventWizard() {
           .insert({ workspace_id: ws, ...editable })
           .select('id')
           .single();
-        if (insertError) throw new Error(insertError.message);
+        if (insertError) throw new Error(hoursErrorMessage(insertError.message) ?? insertError.message);
         id = data.id as string;
         setDraftId(id);
       }
@@ -1215,7 +1241,7 @@ export default function EventWizard() {
     } finally {
       setBusy(false);
     }
-  }, [session, workspaceId, workspaceName, canPublish, pin, address, title, desc, tier, startsAt, endsAt, venueName, feeCents, draftId, cats, vendors]);
+  }, [session, workspaceId, workspaceName, canPublish, pin, address, title, desc, tier, startsAt, endsAt, hours, venueName, feeCents, draftId, cats, vendors]);
 
   /** Continue is blocked on step 1 while the time pair is invalid, not merely
    *  at Review. The two fields that caused it are on screen HERE and three
@@ -1224,7 +1250,7 @@ export default function EventWizard() {
    *  the same guard so .insert() stays unreachable either way. */
   // Same reasoning for the address: confirmed (exactly or approximately) on
   // the step that holds it, not discovered missing at Review.
-  const nextBlocked = step === WHEN_WHERE_STEP && (timeInvalid || !pin);
+  const nextBlocked = step === WHEN_WHERE_STEP && (timeInvalid || Boolean(hoursProblem) || !pin);
 
   const next = () => {
     if (nextBlocked) return;
@@ -1340,6 +1366,8 @@ export default function EventWizard() {
                 <DateField value={endDate} label="Ends" min={startDate} onChange={setEndDate} />
               </View>
 
+              <HoursChoice input={hoursInput} onChange={setHoursMode} />
+
               <Text style={styles(theme).fieldLabel}>Time · start → end</Text>
               <View style={{ gap: 8, marginBottom: 14 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -1378,6 +1406,8 @@ export default function EventWizard() {
                 ) : null}
               </View>
 
+              <DayHours input={hoursInput} onChange={setDayOverrides} problem={hoursProblem} />
+
               <FormField label="Venue name" value={venueName} onChangeText={setVenueName} placeholder="e.g. The Lola Loft" />
               <AddressConfirm value={address} onChangeText={setAddress} confirmed={pin} onConfirm={setPin} />
             </View>
@@ -1401,8 +1431,8 @@ export default function EventWizard() {
                     <TierCard
                       key={t.id}
                       tier={t}
-                      price={priceCents(prices, t.id, days)}
-                      days={days}
+                      price={priceCents(prices, t.id, feeDays)}
+                      days={feeDays}
                       selected={tier === t.id}
                       onPress={() => selectTier(t.id)}
                     />
@@ -1592,9 +1622,10 @@ export default function EventWizard() {
                 <SummaryRow
                   label="When"
                   value={
-                    when.multiDay
+                    hoursSummary ??
+                    (when.multiDay
                       ? `${when.dateRow}\n${when.timeRow}`
-                      : `${days > 1 ? `${days} days` : 'Single day'} · ${format12h(startTime)}–${format12h(endTime)}`
+                      : `${days > 1 ? `${days} days` : 'Single day'} · ${format12h(startTime)}–${format12h(endTime)}`)
                   }
                 />
                 <SummaryRow label="Where" value={venueName.trim() || address.trim() || '—'} />
@@ -1605,7 +1636,7 @@ export default function EventWizard() {
                 {/* HOST fee — Review + checkout only, never a consumer surface. */}
                 <SummaryRow
                   label="Publish fee (you pay)"
-                  value={publishFeeCents === null ? '—' : `${bandLabel(days)} · ${formatUSD(publishFeeCents)}`}
+                  value={publishFeeCents === null ? '—' : `${bandLabel(feeDays)} · ${formatUSD(publishFeeCents)}`}
                   strong
                 />
               </View>

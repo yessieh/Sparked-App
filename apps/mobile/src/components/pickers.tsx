@@ -432,6 +432,9 @@ export function TimeField({
         placeholderTextColor={theme.colors.textHint}
         style={{
           flex: 1,
+          // A web input keeps its default width otherwise and pushes AM/PM off
+          // the screen at 390px.
+          minWidth: 0,
           fontFamily: theme.fonts.displayBlack,
           fontWeight: '900',
           fontSize: 17,

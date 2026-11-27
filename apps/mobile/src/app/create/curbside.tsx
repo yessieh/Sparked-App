@@ -21,7 +21,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -35,11 +35,13 @@ import {
 
 import AddressConfirm, { type ConfirmedLocation } from '../../components/AddressConfirm';
 import { FormField, GradientButton, SecondaryButton } from '../../components/AuthControls';
+import { DayHours, HoursChoice } from '../../components/DailyHours';
 import { FormExitHeader } from '../../components/FormExitHeader';
 import { LeaveConfirm, useEdited } from '../../components/LeaveConfirm';
 import { SubHeader } from '../../components/SubHeader';
 import { DateField, TimeField } from '../../components/pickers';
 import { useAuth } from '../../lib/auth';
+import { buildHours, hoursErrorMessage, type DayOverrides, type HoursMode } from '../../lib/eventHours';
 import { toWktPoint } from '../../lib/geocode';
 import { backOr, useGoToMain } from '../../lib/navigation';
 import { supabase } from '../../lib/supabase';
@@ -70,19 +72,9 @@ function shiftYMD(ymd: string, days: number): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-/** Local wall-clock dates + times → the single UTC starts_at / ends_at pair.
- *
- * Paid-event model (Jas, 2026-11-13): ONE continuous span, from the start
- * time on the first day to the end time on the last day. There is no all-day
- * post and no open end any more. Widest legal case is day 1 00:00 → day 3
- * 23:59 (71:59), inside 0016's 3-day cap; the picker already holds the end
- * date to start + 2 days.
- */
-function toTimestamps(date: string, endDate: string, startTime: string, endTime: string) {
-  const starts = new Date(`${date}T${startTime}:00`);
-  const ends = new Date(`${endDate}T${endTime}:00`);
-  return { starts_at: starts.toISOString(), ends_at: ends.toISOString() };
-}
+/** 0016's cap on the stored span. The date picker alone used to keep a post
+ *  inside it; a last day that closes past midnight can now exceed it. */
+const CURBSIDE_MAX_MS = CURBSIDE_MAX_DAYS * 24 * 3_600_000;
 
 
 /** Visual-only single photo slot (real uploads = Code-stage tracker item). */
@@ -215,6 +207,9 @@ export default function CurbsideForm() {
   // Same defaults as the paid Event form (Jas, 2026-11-13).
   const [startTime, setStartTime] = useState('19:00');
   const [endTime, setEndTime] = useState('22:00');
+  // Multi-day only: same hours every day (default), or one continuous span.
+  const [hoursMode, setHoursMode] = useState<HoursMode>('daily');
+  const [dayOverrides, setDayOverrides] = useState<DayOverrides>({});
   const [anonPost, setAnonPost] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -222,7 +217,7 @@ export default function CurbsideForm() {
   // ---- leaving with input asks first (LeaveConfirm) ----
   // Every field the poster can enter, compared to its value at mount. Above
   // the quota / loading early returns, so the hook order never changes.
-  const edited = useEdited({ photo, title, desc, address, date, endDate, startTime, endTime, anonPost });
+  const edited = useEdited({ photo, title, desc, address, date, endDate, startTime, endTime, hoursMode, dayOverrides, anonPost });
   const [confirmLeave, setConfirmLeave] = useState(false);
   const leaveNow = () => backOr('me');
 
@@ -265,10 +260,22 @@ export default function CurbsideForm() {
   // Same rule and copy as the paid Event form (event.tsx timeInvalid).
   const timeInvalid = date === endDate && endTime <= startTime;
   const timeError = timeInvalid
-    ? 'End time needs to be after start time on a single-day event. To run past midnight, move the end date to the next day.'
+    ? 'End time needs to be after start time on a single-day event. To run past midnight, move the end date to the next day and choose Open the whole time.'
     : null;
+  const hoursInput = useMemo(
+    () => ({ startDate: date, endDate, startTime, endTime, mode: hoursMode, overrides: dayOverrides }),
+    [date, endDate, startTime, endTime, hoursMode, dayOverrides],
+  );
+  // hours, starts_at and ends_at always come from the SAME build: the server
+  // refuses a span that differs from the first opening / last closing (0039).
+  const { hours, starts_at, ends_at, problem } = useMemo(() => buildHours(hoursInput), [hoursInput]);
+  const hoursProblem =
+    problem ??
+    (hours && Date.parse(ends_at) - Date.parse(starts_at) > CURBSIDE_MAX_MS
+      ? 'A Curbside post can cover at most 72 hours, from the first opening to the last closing. Set an earlier closing time on the last day, or shorten the dates.'
+      : null);
   const canPost = Boolean(
-    title.trim() && address.trim() && pin && dateValid && endValid && timeValid && !timeInvalid && !busy,
+    title.trim() && address.trim() && pin && dateValid && endValid && timeValid && !timeInvalid && !hoursProblem && !busy,
   );
   // event.tsx styles.timeTag, verbatim.
   const timeTag = {
@@ -297,7 +304,6 @@ export default function CurbsideForm() {
       // The poster-confirmed point (AddressConfirm) — never a second, silent
       // geocode that could land somewhere else.
       const point = { lat: pin.lat, lon: pin.lng };
-      const { starts_at, ends_at } = toTimestamps(date, endDate, startTime, endTime);
       // THE moment someone becomes a host: create/fetch the workspace, then
       // insert — sequential, same action. Existing hosts fall through to a
       // plain fetch (getOrCreateWorkspace short-circuits on an existing
@@ -322,6 +328,8 @@ export default function CurbsideForm() {
         status: 'published',
         starts_at,
         ends_at,
+        // null = open the whole time (and every single-day post).
+        hours,
         address: address.trim(),
         location: toWktPoint(point),
         // True when pinned to a town centre (0035).
@@ -344,7 +352,7 @@ export default function CurbsideForm() {
             `A Curbside post can cover at most ${CURBSIDE_MAX_DAYS} consecutive days. Shorten the end date and try again.`,
           );
         }
-        throw new Error(insertError.message);
+        throw new Error(hoursErrorMessage(insertError.message) ?? insertError.message);
       }
       // Publish means live — land on the feed, focus refetch shows the post.
       // goToMain, not replace: from this root-Stack screen a replace mounted a
@@ -355,7 +363,7 @@ export default function CurbsideForm() {
     } finally {
       setBusy(false);
     }
-  }, [session, workspaceId, canPost, pin, address, date, endDate, startTime, endTime, title, desc, anonPost, goToMain]);
+  }, [session, workspaceId, canPost, pin, address, starts_at, ends_at, hours, title, desc, anonPost, goToMain]);
 
   if (setupError) {
     return (
@@ -470,6 +478,7 @@ export default function CurbsideForm() {
               "Time · start → end"), same tags, fields, rule and error copy.
               Replaced the optional start-time toggle (Jas, 2026-11-13). */}
           <View style={{ marginBottom: 14 }}>
+            <HoursChoice input={hoursInput} onChange={setHoursMode} />
             <Text style={{ fontFamily: theme.fonts.bodySemiBold, fontSize: theme.fontSizes.caption, color: theme.colors.textMuted, marginBottom: 7 }}>
               Time · start → end
             </Text>
@@ -492,6 +501,9 @@ export default function CurbsideForm() {
                   {timeError}
                 </Text>
               ) : null}
+            </View>
+            <View style={{ marginTop: 8 }}>
+              <DayHours input={hoursInput} onChange={setDayOverrides} problem={hoursProblem} />
             </View>
           </View>
 
